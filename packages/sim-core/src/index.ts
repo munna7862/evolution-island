@@ -114,6 +114,7 @@ export {
   isBenchmarkGeneration,
   pickParent,
   rankByFitness,
+  respawnGenomes,
   type EvolutionRunOptions,
   type GenerationStats,
   type HallOfFameEntry,
