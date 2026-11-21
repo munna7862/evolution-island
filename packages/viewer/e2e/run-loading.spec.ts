@@ -32,7 +32,7 @@ test.beforeAll(() => {
     [
       TRAINER_CLI,
       ...['--preset', 'small', '--seeds', '1-2', '--generations', '3', '--save-every', '2'],
-      ...['--out', runsDir, '--quiet'],
+      ...['--out', runsDir, '--workers', '2', '--quiet'],
     ],
     { encoding: 'utf8' },
   );
