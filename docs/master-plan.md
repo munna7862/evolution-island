@@ -133,14 +133,14 @@ Written from scratch in TypeScript (small, fast, no dependency risk).
 - At generation end, per tribe:
   1. Rank creatures by fitness (ties → lower id). Dead creatures keep the fitness they earned.
   2. Top 20% become parents (truncation; tournament selection available in config). Elitism: best 2 copied unchanged.
-  3. Fill the tribe with offspring: crossover of two parents + mutation (Gaussian noise, σ ≈ 0.2, on ~5% of weights; weights clamped to ±4).
+  3. Fill the tribe with offspring: crossover of two parents + mutation (Gaussian noise, σ ≈ 0.2, on ~5% of weights; weights clamped to ±4). The noise is an Irwin–Hall sum of 12 uniforms (only `+`/`−`, §3.3); Box–Muller would need `Math.log`/`cos`.
      - Crossover is **per hidden neuron** (the child takes each hidden neuron's incoming + outgoing weights from one parent), which scrambles fixed-topology nets far less than per-weight crossover. Crossover can be switched off — mutation-only is a valid baseline.
 - **Tribe sizes next generation:** the total creature budget is split between tribes in proportion to **tribe score** (survivors + food gathered + territory), clamped to [`minTribeSize`, `popCap`]. Doing well as a tribe = more members next generation. *(Without this, every tribe would reset to the same size and tribes would never really win or lose.)*
 - **Extinction** (no survivors at generation end):
-  - Normal mode: the tribe returns at `minTribeSize`, bred from this generation's members plus its hall of fame.
+  - Normal mode: the tribe returns at `minTribeSize`, bred from this generation's members plus its hall of fame. If **every** tribe went extinct, sizes are split by tribe score as usual instead, so the total population doesn't shrink.
   - Battle-royale mode: the tribe is eliminated.
 - **Hall of fame:** every N generations each tribe's champion is benchmarked (below), and the tribe keeps its top K by **benchmark score**. Raw fitness from different generations can't be compared, because the opponents keep changing. Used for respawn and "watch the champion".
-- **Benchmark arena:** tribes co-evolve, so raw fitness rises and falls with the arms race and is a poor progress signal. Every N generations, each tribe's champion runs in a **fixed scenario** (fixed seed; alone while foraging-only, later against a frozen reference tribe) and the score is recorded. This is the "is it actually learning?" metric.
+- **Benchmark arena:** tribes co-evolve, so raw fitness rises and falls with the arms race and is a poor progress signal. At generation 1 and every N generations, each tribe's champion runs in a **fixed scenario** (fixed seed; alone while foraging-only, later against a frozen reference tribe) and the score is recorded. This is the "is it actually learning?" metric. *Foraging-only arena (Sprint 3.2):* a fixed-seed map of the run's preset, the champion cloned `startingCreaturesPerTribe` times into tribe 0's start zone, one generation; score = the clones' mean fitness (cloning averages out spawn luck).
 
 ### 2.6 Tribes & competition
 - **Territory:** a tile belongs to the tribe that last visited it, but ownership **fades** after `territoryDecayTicks` without a visit — territory means sustained presence, not a trail of footprints. Territory % = owned walkable tiles ÷ walkable tiles, recalculated every K ticks.
@@ -601,3 +601,10 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - §2.2: density rule restated against walkable tiles with measured values; current density accepted until Sprint 3.4 tuning.
 - §10: shapes, tribe names & colours, one creature per tile and 1× = 10 ticks/sec ticked (all implemented in Phase 2).
 - Golden state hashes for one fixed scenario are pinned in `packages/sim-core/test/golden-hashes.ts` and checked in Node and Chromium; a behaviour change without a `simVersion` bump now fails the tests.
+
+**2026-11-21 — Sprint 3.2 (generations & genetic algorithm)** (`simVersion` 4 → 5)
+- §2.5: Gaussian mutation noise is an Irwin–Hall sum (engine-exact); the foraging-only benchmark arena is defined (champion clones, fixed map, mean fitness), and it also runs at generation 1; if every tribe goes extinct, sizes follow tribe score instead of all dropping to `minTribeSize`.
+- Per-hidden-neuron crossover also flips one coin for the output biases, which belong to no hidden neuron.
+- Creature ids restart at 0 each generation (`(generation, id)` identifies a creature in a run).
+- Generations are driven by an `EvolutionRun` around `World` rather than inside `tick()`; `World.startGeneration` does the reset (food full, creatures respawned in their zones).
+- Default `initialWeightRange` = 2: with ±1, a 4-seed sweep on Small barely learned in 50 generations (sensors hardly moved the outputs); with ±2 the benchmark rose on all 4 seeds.

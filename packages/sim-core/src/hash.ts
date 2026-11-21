@@ -213,6 +213,31 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.sensor.minVisibleFood)
     .writeUint32(config.brain.hiddenNeurons);
 
+  const e = config.evolution;
+  hasher
+    .writeFloat64(e.fitness.ticksAlive)
+    .writeFloat64(e.fitness.foodEaten)
+    .writeFloat64(e.fitness.waterDrunk)
+    .writeFloat64(e.fitness.alliesHelped)
+    .writeFloat64(e.fitness.kills)
+    .writeFloat64(e.maxAlliesHelped)
+    .writeString(e.selection)
+    .writeFloat64(e.parentFraction)
+    .writeUint32(e.tournamentSize)
+    .writeUint32(e.eliteCount)
+    .writeBoolean(e.crossover)
+    .writeFloat64(e.mutationRate)
+    .writeFloat64(e.mutationSigma)
+    .writeFloat64(e.weightClamp)
+    .writeFloat64(e.initialWeightRange)
+    .writeFloat64(e.tribeScore.survivors)
+    .writeFloat64(e.tribeScore.foodGathered)
+    .writeFloat64(e.tribeScore.territory)
+    .writeString(e.extinction)
+    .writeUint32(e.hallOfFameSize)
+    .writeUint32(e.benchmarkInterval)
+    .writeString(e.benchmarkSeed);
+
   return hasher.digest();
 }
 
@@ -261,6 +286,7 @@ export function hashWorld(world: World): string {
     .writeUint32(world.maxAge)
     .writeUint32(world.tickCount)
     .writeUint32(world.generation)
+    .writeUint32(world.generationTick)
     .writeUint32(world.livingCount)
     .writeString(world.map.hash)
     .writeFloat32Array(world.map.food);
@@ -297,7 +323,8 @@ export function hashWorld(world: World): string {
       .writeFloat64(c.stats.waterDrunk)
       .writeUint32(c.stats.kills)
       .writeFloat64(c.stats.alliesHelped)
-      .writeUint32(c.stats.callsMade);
+      .writeUint32(c.stats.callsMade)
+      .writeFloat32Array(c.genome);
   }
 
   return hasher.digest();

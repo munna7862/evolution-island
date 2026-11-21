@@ -98,6 +98,60 @@ export interface BrainConfig {
   readonly hiddenNeurons: number;
 }
 
+/** Per-creature fitness weights (plan §2.5). */
+export interface FitnessWeights {
+  readonly ticksAlive: number;
+  /** Per bite of energy actually gained (not per EAT action). */
+  readonly foodEaten: number;
+  /** Per bite of hydration actually gained (not per DRINK action). */
+  readonly waterDrunk: number;
+  readonly alliesHelped: number;
+  readonly kills: number;
+}
+
+/** Tribe score weights: drive next generation's tribe sizes (plan §2.5, §2.6). */
+export interface TribeScoreWeights {
+  /** Per creature alive at generation end. */
+  readonly survivors: number;
+  /** Per bite of food actually eaten by the tribe. */
+  readonly foodGathered: number;
+  /** Per percentage point of territory (0 until Sprint 4.1). */
+  readonly territory: number;
+}
+
+export type SelectionMode = 'truncation' | 'tournament';
+export type ExtinctionMode = 'respawn' | 'battle-royale';
+
+export interface EvolutionConfig {
+  readonly fitness: FitnessWeights;
+  /** Valid SHAREs counted per creature per generation (plan §2.5). */
+  readonly maxAlliesHelped: number;
+  readonly selection: SelectionMode;
+  /** Truncation: the top fraction of a tribe that may parent offspring. */
+  readonly parentFraction: number;
+  readonly tournamentSize: number;
+  /** Best creatures per tribe copied unchanged into the next generation. */
+  readonly eliteCount: number;
+  /** Per-hidden-neuron crossover; false = mutation-only offspring. */
+  readonly crossover: boolean;
+  /** Chance that each weight of an offspring is mutated. */
+  readonly mutationRate: number;
+  /** Standard deviation of the Gaussian mutation noise. */
+  readonly mutationSigma: number;
+  /** Weights are clamped to [-weightClamp, weightClamp]. */
+  readonly weightClamp: number;
+  /** Generation-1 weights are uniform in [-initialWeightRange, initialWeightRange). */
+  readonly initialWeightRange: number;
+  readonly tribeScore: TribeScoreWeights;
+  readonly extinction: ExtinctionMode;
+  /** Champions kept per tribe, best benchmark score first. */
+  readonly hallOfFameSize: number;
+  /** Benchmark champions at generation 1 and every N generations. */
+  readonly benchmarkInterval: number;
+  /** Seed of the benchmark arena's fixed map. */
+  readonly benchmarkSeed: string;
+}
+
 export interface SimConfig {
   readonly presets: Readonly<Record<MapPresetId, MapPreset>>;
   readonly map: MapGenConfig;
@@ -105,6 +159,7 @@ export interface SimConfig {
   readonly food: FoodConfig;
   readonly sensor: SensorConfig;
   readonly brain: BrainConfig;
+  readonly evolution: EvolutionConfig;
 }
 
 export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
@@ -238,5 +293,23 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   brain: {
     hiddenNeurons: 12,
+  },
+  evolution: {
+    fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },
+    maxAlliesHelped: 10,
+    selection: 'truncation',
+    parentFraction: 0.2,
+    tournamentSize: 3,
+    eliteCount: 2,
+    crossover: true,
+    mutationRate: 0.05,
+    mutationSigma: 0.2,
+    weightClamp: 4,
+    initialWeightRange: 2,
+    tribeScore: { survivors: 1, foodGathered: 1, territory: 0 },
+    extinction: 'respawn',
+    hallOfFameSize: 5,
+    benchmarkInterval: 10,
+    benchmarkSeed: 'benchmark-arena',
   },
 };

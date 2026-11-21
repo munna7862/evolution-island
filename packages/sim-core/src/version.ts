@@ -10,5 +10,7 @@
  *     the random policy draws from its own `policy` RNG stream instead of the tick stream.
  * 4 = Sprint 3.1: brain spec v1 (18 → 12 → 9 softsign MLP, hidden-neuron-major genome layout)
  *     and `brain.hiddenNeurons` in the config hash.
+ * 5 = Sprint 3.2: generations — world reset at generation start (`startGeneration`), creatures
+ *     carry genomes, GA settings in the config hash; genomes and `generationTick` in the world hash.
  */
-export const SIM_VERSION = 4;
+export const SIM_VERSION = 5;

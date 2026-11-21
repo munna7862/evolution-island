@@ -3,6 +3,9 @@ import type { CreatureConfig } from './config.js';
 
 export const NO_MOVE_DIR = -1;
 
+/** Genome of creatures driven by a non-brain policy (e.g. the random policy). */
+export const EMPTY_GENOME: Float32Array = new Float32Array(0);
+
 export interface CreatureStats {
   ticksAlive: number;
   foodEaten: number;
@@ -29,6 +32,8 @@ export interface Creature {
   intent: Action;
   lastAction: Action;
   readonly stats: CreatureStats;
+  /** Brain weights (plan §2.4); `EMPTY_GENOME` when a non-brain policy drives the creature. */
+  readonly genome: Float32Array;
 }
 
 export function createCreature(
@@ -37,6 +42,7 @@ export function createCreature(
   x: number,
   y: number,
   config: CreatureConfig,
+  genome: Float32Array = EMPTY_GENOME,
 ): Creature {
   return {
     id,
@@ -62,6 +68,7 @@ export function createCreature(
       alliesHelped: 0,
       callsMade: 0,
     },
+    genome,
   };
 }
 

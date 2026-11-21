@@ -1,6 +1,6 @@
 import { Action, ACTION_COUNT, applyAction, type ActionWorldContext } from './actions.js';
 import { DEFAULT_CONFIG, type MapPresetId, type SimConfig } from './config.js';
-import { applyMetabolism, createCreature, type Creature } from './creature.js';
+import { applyMetabolism, createCreature, EMPTY_GENOME, type Creature } from './creature.js';
 import { hashWorld } from './hash.js';
 import { floodFillWalkable, generateMap } from './map/generator.js';
 import { isWalkable, type WorldMap } from './map/types.js';
@@ -31,6 +31,12 @@ export interface CreateWorldOptions {
   readonly maxAge?: number;
 }
 
+/** One tribe's creatures for a new generation: one creature per genome, in this order. */
+export interface TribeSpawn {
+  readonly tribeId: number;
+  readonly genomes: readonly Float32Array[];
+}
+
 export class World implements ActionWorldContext {
   readonly seed: Seed;
   readonly preset: MapPresetId;
@@ -44,6 +50,8 @@ export class World implements ActionWorldContext {
 
   tickCount = 0;
   generation = 1;
+  /** Ticks since the current generation started (plan §2.5). */
+  generationTick = 0;
   livingCount = 0;
 
   private readonly policy: DecisionPolicy;
@@ -53,6 +61,8 @@ export class World implements ActionWorldContext {
   private depletedCount = 0;
   private nextCreatureId = 0;
   private gridDirty = true;
+  /** Per tribe: tiles inside its spawn zone reachable from the zone centre (static terrain). */
+  private readonly zoneTiles = new Map<number, Int32Array>();
 
   constructor(options: CreateWorldOptions) {
     this.seed = options.seed;
@@ -182,7 +192,12 @@ export class World implements ActionWorldContext {
     }
   }
 
-  spawnCreature(tribeId: number, x: number, y: number): Creature | null {
+  spawnCreature(
+    tribeId: number,
+    x: number,
+    y: number,
+    genome: Float32Array = EMPTY_GENOME,
+  ): Creature | null {
     if (!this.inBounds(x, y)) {
       return null;
     }
@@ -191,7 +206,14 @@ export class World implements ActionWorldContext {
       return null;
     }
 
-    const creature = createCreature(this.nextCreatureId, tribeId, x, y, this.config.creature);
+    const creature = createCreature(
+      this.nextCreatureId,
+      tribeId,
+      x,
+      y,
+      this.config.creature,
+      genome,
+    );
     this.nextCreatureId++;
     this.occupancy[idx] = creature.id;
     this.creatures.push(creature);
@@ -278,56 +300,128 @@ export class World implements ActionWorldContext {
     }
 
     this.tickCount++;
+    this.generationTick++;
   }
 
   hash(): string {
     return hashWorld(this);
   }
 
+  /**
+   * True once the generation has run `generationLength` ticks or every creature is dead
+   * (plan §2.5). Battle royale's "one tribe left" rule lives in the evolution driver.
+   */
+  isGenerationOver(): boolean {
+    return (
+      this.generationTick >= this.config.presets[this.preset].generationLength ||
+      this.livingCount === 0
+    );
+  }
+
+  /**
+   * World reset at generation start (plan §2.5): food back to full, all creatures removed, then
+   * each tribe's creatures spawned at seeded random tiles of its start zone, one per genome.
+   * Creature ids restart at 0, so `creatures[id]` is always the creature with that id.
+   */
+  startGeneration(generation: number, spawns: readonly TribeSpawn[]): void {
+    if (!Number.isSafeInteger(generation) || generation < 1) {
+      throw new RangeError(`generation must be a positive integer, got ${generation}`);
+    }
+    const ordered = [...spawns].sort((a, b) => a.tribeId - b.tribeId);
+    for (let i = 1; i < ordered.length; i++) {
+      if (ordered[i]!.tribeId === ordered[i - 1]!.tribeId) {
+        throw new RangeError(`Tribe ${ordered[i]!.tribeId} appears twice in the spawn list`);
+      }
+    }
+
+    this.map.food.set(this.map.maxFood);
+    this.isDepleted.fill(0);
+    this.depletedCount = 0;
+    this.occupancy.fill(NO_CREATURE);
+    this.creatures.length = 0;
+    this.livingCount = 0;
+    this.nextCreatureId = 0;
+    this.gridDirty = true;
+    this.generation = generation;
+    this.generationTick = 0;
+
+    for (const spawn of ordered) {
+      this.spawnTribe(spawn.tribeId, spawn.genomes);
+    }
+  }
+
   private spawnInitialTribes(): void {
-    const presetCfg = this.config.presets[this.preset];
-    const targetPerTribe = presetCfg.startingCreaturesPerTribe;
-    const { width, height, biomes } = this.map;
-
+    const count = this.config.presets[this.preset].startingCreaturesPerTribe;
+    const genomes = new Array<Float32Array>(count).fill(EMPTY_GENOME);
     for (const zone of this.map.spawnZones) {
-      const reachable = floodFillWalkable(biomes, width, height, zone.x, zone.y);
-      const rInt = Math.ceil(zone.radius);
-      const r2 = zone.radius * zone.radius;
-      const minX = Math.max(0, zone.x - rInt);
-      const maxX = Math.min(width - 1, zone.x + rInt);
-      const minY = Math.max(0, zone.y - rInt);
-      const maxY = Math.min(height - 1, zone.y + rInt);
+      this.spawnTribe(zone.tribeId, genomes);
+    }
+  }
 
-      const candidates: number[] = [];
-      for (let y = minY; y <= maxY; y++) {
-        const dy = y - zone.y;
-        for (let x = minX; x <= maxX; x++) {
-          const dx = x - zone.x;
-          if (dx * dx + dy * dy > r2) continue;
-          const idx = y * width + x;
-          if (reachable[idx] === 1 && this.occupancy[idx] === NO_CREATURE) {
-            candidates.push(idx);
-          }
+  private getZoneTiles(tribeId: number): Int32Array {
+    const cached = this.zoneTiles.get(tribeId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const zone = this.map.spawnZones.find((z) => z.tribeId === tribeId);
+    if (zone === undefined) {
+      throw new RangeError(`Map has no spawn zone for tribe ${tribeId}`);
+    }
+    const { width, height, biomes } = this.map;
+    const reachable = floodFillWalkable(biomes, width, height, zone.x, zone.y);
+    const rInt = Math.ceil(zone.radius);
+    const r2 = zone.radius * zone.radius;
+    const minX = Math.max(0, zone.x - rInt);
+    const maxX = Math.min(width - 1, zone.x + rInt);
+    const minY = Math.max(0, zone.y - rInt);
+    const maxY = Math.min(height - 1, zone.y + rInt);
+
+    const tiles: number[] = [];
+    for (let y = minY; y <= maxY; y++) {
+      const dy = y - zone.y;
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - zone.x;
+        if (dx * dx + dy * dy > r2) continue;
+        const idx = y * width + x;
+        if (reachable[idx] === 1) {
+          tiles.push(idx);
         }
       }
+    }
+    const built = Int32Array.from(tiles);
+    this.zoneTiles.set(tribeId, built);
+    return built;
+  }
 
-      this.rng.spawn.shuffle(candidates);
-
-      let spawned = 0;
-      for (const idx of candidates) {
-        if (spawned >= targetPerTribe) break;
-        const y = Math.floor(idx / width);
-        const x = idx - y * width;
-        if (this.spawnCreature(zone.tribeId, x, y) !== null) {
-          spawned++;
-        }
+  /** Spawns one creature per genome at shuffled free tiles of the tribe's zone (`rng.spawn`). */
+  private spawnTribe(tribeId: number, genomes: readonly Float32Array[]): void {
+    if (genomes.length === 0) {
+      return;
+    }
+    const width = this.map.width;
+    const candidates: number[] = [];
+    for (const idx of this.getZoneTiles(tribeId)) {
+      if (this.occupancy[idx] === NO_CREATURE) {
+        candidates.push(idx);
       }
+    }
 
-      if (spawned < targetPerTribe) {
-        throw new Error(
-          `Spawn zone for tribe ${zone.tribeId} only fit ${spawned}/${targetPerTribe} creatures`,
-        );
+    this.rng.spawn.shuffle(candidates);
+
+    let spawned = 0;
+    for (const idx of candidates) {
+      if (spawned >= genomes.length) break;
+      const y = Math.floor(idx / width);
+      const x = idx - y * width;
+      if (this.spawnCreature(tribeId, x, y, genomes[spawned]) !== null) {
+        spawned++;
       }
+    }
+
+    if (spawned < genomes.length) {
+      throw new Error(
+        `Spawn zone for tribe ${tribeId} only fit ${spawned}/${genomes.length} creatures`,
+      );
     }
   }
 }
