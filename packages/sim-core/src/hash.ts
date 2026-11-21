@@ -205,7 +205,11 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(c.drinkBiteSize)
     .writeFloat64(c.attackEnergyCost)
     .writeFloat64(c.maxAgeMultiplier)
-    .writeFloat64(config.food.regrowthRate);
+    .writeFloat64(config.food.regrowthRate)
+    .writeFloat64(config.sensor.visionRadius)
+    .writeFloat64(config.sensor.forestVisionMultiplier)
+    .writeFloat64(config.sensor.countNormalization)
+    .writeFloat64(config.sensor.foodNormalization);
 
   return hasher.digest();
 }

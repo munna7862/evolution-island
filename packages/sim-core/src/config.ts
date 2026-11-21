@@ -80,11 +80,19 @@ export interface FoodConfig {
   readonly regrowthRate: number;
 }
 
+export interface SensorConfig {
+  readonly visionRadius: number;
+  readonly forestVisionMultiplier: number;
+  readonly countNormalization: number;
+  readonly foodNormalization: number;
+}
+
 export interface SimConfig {
   readonly presets: Readonly<Record<MapPresetId, MapPreset>>;
   readonly map: MapGenConfig;
   readonly creature: CreatureConfig;
   readonly food: FoodConfig;
+  readonly sensor: SensorConfig;
 }
 
 export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
@@ -208,5 +216,11 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   food: {
     regrowthRate: 0.15,
+  },
+  sensor: {
+    visionRadius: 8,
+    forestVisionMultiplier: 0.5,
+    countNormalization: 5,
+    foodNormalization: 160,
   },
 };
