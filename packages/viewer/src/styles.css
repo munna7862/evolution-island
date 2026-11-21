@@ -173,19 +173,29 @@ body {
   border-top: 1px solid var(--border);
   font-size: 0.76rem;
   color: var(--muted);
-  flex-wrap: wrap;
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .stats,
 .hover-info {
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hover-info {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: center;
 }
 
 .legend {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .legend-item {
