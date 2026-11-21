@@ -103,6 +103,40 @@ export function breedGenomes(
   return next;
 }
 
+/**
+ * Next genomes of a tribe that went extinct (respawn mode, plan §2.5): its best hall-of-fame
+ * genome returns unchanged, and the rest are bred from this generation's members (best fitness
+ * first) like any tribe's. The hall of fame only becomes the parent pool when there are no
+ * members. Putting the whole hall of fame ahead of the members instead let it fill the parent
+ * slots, which froze tribes that never had a survivor yet (Sprint 3.2 review).
+ */
+export function respawnGenomes(
+  spec: BrainSpec,
+  hallOfFame: readonly HallOfFameEntry[],
+  members: readonly Float32Array[],
+  count: number,
+  evolution: EvolutionConfig,
+  rng: RngStream,
+): Float32Array[] {
+  if (members.length === 0) {
+    return breedGenomes(
+      spec,
+      hallOfFame.map((e) => e.genome),
+      count,
+      evolution,
+      rng,
+    );
+  }
+  const champion = hallOfFame[0];
+  if (champion === undefined || count < 1) {
+    return breedGenomes(spec, members, count, evolution, rng);
+  }
+  return [
+    Float32Array.from(champion.genome),
+    ...breedGenomes(spec, members, count - 1, evolution, rng),
+  ];
+}
+
 export type TribeAllocation =
   /** Shares the budget in proportion to its score. */
   | { readonly kind: 'share'; readonly score: number }
@@ -113,10 +147,11 @@ export type TribeAllocation =
 
 /**
  * Splits `budget` creatures between tribes in proportion to their scores (plan §2.5), each share
- * clamped to [min, max]: tribes below min are fixed at min, then tribes above max at max, and the
- * rest re-split until stable; integer sizes by largest remainder (ties → lower index). The total
- * equals the budget whenever the clamps allow it. Non-positive scores count as 0; if every score
- * is 0 the budget is split evenly.
+ * clamped to [min, max]: share_i = clamp(λ·score_i, min, max), with the one scale λ that makes the
+ * shares add up to the budget ("water filling"). Integer sizes by largest remainder (ties → lower
+ * index). The total equals the budget whenever the clamps allow it; otherwise every tribe sits at
+ * the clamp nearest the budget. Non-positive scores count as 0 (such a tribe gets `min`); if no
+ * tribe scored, the budget is split evenly.
  */
 export function allocateTribeSizes(
   tribes: readonly TribeAllocation[],
@@ -125,59 +160,84 @@ export function allocateTribeSizes(
   max: number,
 ): number[] {
   const sizes = tribes.map((t) => (t.kind === 'min' ? min : 0));
-  let free: number[] = [];
+  const free: number[] = [];
   tribes.forEach((t, i) => {
     if (t.kind === 'share') free.push(i);
   });
-  const scoreOf = (i: number): number => {
+  if (free.length === 0) {
+    return sizes;
+  }
+  const rawScore = (i: number): number => {
     const t = tribes[i]!;
     return t.kind === 'share' && t.score > 0 ? t.score : 0;
   };
-  let freeBudget = budget - sizes.reduce((acc, s) => acc + s, 0);
-  let shares = new Map<number, number>();
+  const anyScore = free.some((i) => rawScore(i) > 0);
+  const weightOf = (i: number): number => (anyScore ? rawScore(i) : 1);
+  const freeBudget = budget - sizes.reduce((acc, s) => acc + s, 0);
 
-  while (free.length > 0) {
-    const total = free.reduce((acc, i) => acc + scoreOf(i), 0);
-    shares = new Map(
-      free.map((i) => [
-        i,
-        total > 0 ? (freeBudget * scoreOf(i)) / total : freeBudget / free.length,
-      ]),
-    );
-    let fixed = free.filter((i) => shares.get(i)! < min);
-    let bound = min;
-    if (fixed.length === 0) {
-      fixed = free.filter((i) => shares.get(i)! > max);
-      bound = max;
-    }
-    if (fixed.length === 0) break;
-    for (const i of fixed) {
-      sizes[i] = bound;
-      freeBudget -= bound;
-    }
-    free = free.filter((i) => !fixed.includes(i));
-  }
-
-  if (free.length > 0) {
-    let assigned = 0;
-    for (const i of free) {
-      sizes[i] = Math.floor(shares.get(i)!);
-      assigned += sizes[i];
-    }
-    const byRemainder = [...free].sort((a, b) => {
-      const ra = shares.get(a)! - sizes[a]!;
-      const rb = shares.get(b)! - sizes[b]!;
-      if (ra !== rb) return rb - ra;
-      return a - b;
+  const shares = clampedProportionalShares(free.map(weightOf), freeBudget, min, max);
+  let assigned = 0;
+  free.forEach((i, k) => {
+    sizes[i] = Math.floor(shares[k]!);
+    assigned += sizes[i];
+  });
+  const byRemainder = free
+    .map((i, k) => ({ i, remainder: shares[k]! - sizes[i]! }))
+    .sort((a, b) => {
+      if (a.remainder !== b.remainder) return b.remainder - a.remainder;
+      return a.i - b.i;
     });
-    let left = Math.max(0, Math.round(freeBudget - assigned));
-    for (const i of byRemainder) {
-      if (left === 0) break;
-      sizes[i] = sizes[i]! + 1;
-      left--;
-    }
+  let left = Math.max(0, Math.round(freeBudget - assigned));
+  for (const { i } of byRemainder) {
+    if (left === 0) break;
+    if (sizes[i]! >= max) continue;
+    sizes[i] = sizes[i]! + 1;
+    left--;
   }
   return sizes;
+}
+
+/**
+ * Real-valued shares clamp(λ·w_i, min, max) adding up to `budget` (weights ≥ 0). The sum is a
+ * non-decreasing, piecewise-linear function of λ with breakpoints at min/w_i and max/w_i, so the
+ * right λ lies between two neighbouring breakpoints, where the set of unclamped tribes is fixed
+ * and λ follows from one division. Budgets outside [Σ at λ=0, Σ at λ=∞] give those extremes.
+ */
+function clampedProportionalShares(
+  weights: readonly number[],
+  budget: number,
+  min: number,
+  max: number,
+): number[] {
+  const at = (lambda: number): number[] =>
+    weights.map((w) => Math.max(min, Math.min(max, lambda * w)));
+  const sum = (values: readonly number[]): number => values.reduce((acc, v) => acc + v, 0);
+
+  const breakpoints = [
+    ...new Set(weights.filter((w) => w > 0).flatMap((w) => [min / w, max / w])),
+  ].sort((a, b) => a - b);
+  let low = 0;
+  if (sum(at(low)) >= budget || breakpoints.length === 0) {
+    return at(low);
+  }
+  for (const high of breakpoints) {
+    if (sum(at(high)) < budget) {
+      low = high;
+      continue;
+    }
+    // Between `low` and `high` each tribe is either clamped (same value at both ends) or free.
+    const mid = (low + high) / 2;
+    let clampedTotal = 0;
+    let freeWeight = 0;
+    for (const w of weights) {
+      const share = mid * w;
+      if (share <= min) clampedTotal += min;
+      else if (share >= max) clampedTotal += max;
+      else freeWeight += w;
+    }
+    return freeWeight > 0 ? at((budget - clampedTotal) / freeWeight) : at(high);
+  }
+  return at(low);
 }
 
 export interface HallOfFameEntry {
@@ -430,13 +490,12 @@ export class EvolutionRun {
       if (!r.tribe.alive) continue;
       const size = sizes[this.tribes.indexOf(r.tribe)]!;
       const memberGenomes = r.ranked.map((x) => x.genome);
-      const candidates = r.extinct
-        ? [...r.tribe.hallOfFame.map((e) => e.genome), ...memberGenomes]
-        : memberGenomes;
       r.tribe.size = size;
       spawns.push({
         tribeId: r.tribe.id,
-        genomes: breedGenomes(this.spec, candidates, size, evo, rng),
+        genomes: r.extinct
+          ? respawnGenomes(this.spec, r.tribe.hallOfFame, memberGenomes, size, evo, rng)
+          : breedGenomes(this.spec, memberGenomes, size, evo, rng),
       });
     }
     this.world.startGeneration(generation + 1, spawns);

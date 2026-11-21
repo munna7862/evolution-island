@@ -12,5 +12,8 @@
  *     and `brain.hiddenNeurons` in the config hash.
  * 5 = Sprint 3.2: generations — world reset at generation start (`startGeneration`), creatures
  *     carry genomes, GA settings in the config hash; genomes and `generationTick` in the world hash.
+ * 6 = Sprint 3.2 review: an extinct tribe respawns as its hall-of-fame champion plus offspring of
+ *     its own members (the hall of fame no longer fills the parent pool); tribe sizes use an exact
+ *     clamped proportional split (the whole budget whenever min/popCap allow it).
  */
-export const SIM_VERSION = 5;
+export const SIM_VERSION = 6;

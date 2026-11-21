@@ -152,3 +152,73 @@ isolation, determinism, extinction, all-extinct, battle royale, benchmark arena)
 - One benchmark costs one generation of `startingCreaturesPerTribe` creatures per tribe; on Huge
   every `benchmarkInterval` generations that is 8 × 150 creatures × 4,000 ticks — fine in a worker
   thread, but worth timing.
+
+---
+
+## Review
+
+Independent review after the merge (PR #9), on branch `sprint-3.2-review`. Two real bugs fixed
+(`SIM_VERSION` 5 → 6), the rest checked and left as is.
+
+**Fixed**
+
+1. **Extinct tribes stopped learning.** In respawn mode an extinct tribe bred from
+   `[...hallOfFame, ...members]`. With truncation at 20 % of 30 candidates that is 5 hall-of-fame
+   genomes + 1 member as parents, and both elites are hall-of-fame genomes — while the hall of
+   fame only changes every `benchmarkInterval` generations. Early on nobody outlives a 1,500-tick
+   generation, so "extinct" is the normal state, not a rare collapse: on Small seed 42 tribe 1 was
+   extinct in 50 of 50 generations and its benchmark went 498 → 519 → 509 → 515 (this was the
+   "almost all from tribe 0" in the acceptance margin). Now `respawnGenomes` returns the best
+   hall-of-fame genome unchanged plus offspring of the tribe's own members (normal elites and
+   selection); the hall of fame is the parent pool only when there are no members. Compared on
+   29 Small seeds × 50 generations (shipped rule / members only / champion + members): tribes
+   whose benchmark rose > 1.1× went 29/58 → 37/58 → 37/58, and the worst tribe per seed did best
+   with the champion variant on the 20 fresh seeds (mean ratio 1.14 / 1.15 / 1.18), so the
+   plan's "bred from members plus hall of fame" is kept in that form.
+2. **`allocateTribeSizes` lost part of the budget.** It fixed low tribes at `min`, then the leader
+   at `popCap`, and never gave the low tribes what the cap freed: scores 750/125/125/125 on
+   Medium gave 100/25/25/25 = 175 although 100/34/33/33 fits the clamps (its own doc comment
+   promised the full budget). Now it is an exact water fill — size = clamp(λ·score, min, popCap)
+   with one λ found between neighbouring breakpoints — plus the same largest-remainder rounding.
+   New tests: the two cases above, budgets outside the clamps, and a fast-check property (sizes
+   within the clamps, exact total whenever feasible, higher score → not smaller).
+
+Golden hashes re-recorded for simVersion 6. `brainOutputs` is unchanged (sensors and forward pass
+untouched); the world hashes changed only because they include `SIM_VERSION`; the evolution
+scenario changed because generation 1 on seed 42 ends with every tribe extinct.
+
+Acceptance after the fix (Small, seed 42): mean benchmark 498.5 → 768.0 at generation 50
+(+54 %; tribe 0: 498.7 → 569.3, tribe 1: 497.9 → 966.7). The win moved from tribe 0 to tribe 1:
+on one seed per-tribe progress is still a coin toss, which is why Sprint 3.4's bar is multi-seed.
+
+**Checked, no change**
+
+- `initialWeightRange` = 2: re-swept with the fix on 12 new seeds (Small, 50 generations): tribes
+  > 1.1×: ±1 15/24, ±2 17/24, ±3 18/24. ±2 stays; part of the original "±1 barely learns" was
+  the respawn freeze above. Worth a proper sweep with the trainer in 3.4.
+- Acceptance test (> 1.1× of the mean): deterministic and honest for the plan's criterion, but
+  tied to this config and seed — any 3.4 tuning change will move it. Fine as a regression guard.
+- All-extinct rule (split by score): sound. The remaining population drop — one tribe alone
+  survives on Medium, three extinct tribes at 25 + the leader at the cap of 100 = 175 — follows
+  from the plan's own rules (12–14 of the first 25 generations on Medium seeds 1 and 42); noted in
+  the plan for 4.2.
+- Benchmark arena: deterministic (own world from `benchmarkSeed`, same spawns and shuffle every
+  call, no run stream touched); clones share one read-only genome; ends early when all die.
+- Irwin–Hall noise (12 uniforms − 6, `+`/`−` only), one mutation coin per weight, per-neuron
+  crossover + one coin for the output biases, ids restarting at 0: correct and tested.
+- Determinism: all GA draws from `rng.evolution` in ascending tribe order; ties by id (ranking),
+  by index (remainders), by generation (hall of fame); all sorts are stable `Array.prototype.sort`.
+- Exploit tests exist for every fitness term (`ticksAlive`: STAY-only dies ≤ 600 ticks;
+  `foodEaten`/`waterDrunk`: spam credited only for burned metabolism; `alliesHelped`: cap and
+  SHARE spam; `kills`: ATTACK spam) and for the tribe-score terms.
+
+**Leads (not fixed here)**
+
+- Tribe score is absolute, so a tribe at `popCap` out-scores equally good smaller tribes and
+  tends to stay at the cap (Medium: 100/25/25/25 for many generations). Per-member scoring is a
+  Sprint 4.2 balance question (plan §2.5 note).
+- `foodEaten` credits energy actually regained, so moving (which costs energy) and then eating
+  earns more food fitness than eating in place. That is foraging, not an exploit, but watch for
+  pointless back-and-forth moves on food tiles in 3.4.
+- Battle royale ends at the first generation where all tribes but one die — which, early on, is
+  generation 1. The 4.2 battle-royale criterion will need a grace period or a later switch-on.

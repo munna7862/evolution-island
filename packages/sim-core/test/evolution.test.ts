@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import fc from 'fast-check';
 import {
   Action,
   addToHallOfFame,
@@ -19,6 +20,7 @@ import {
   outputWeightIndex,
   pickParent,
   rankByFitness,
+  respawnGenomes,
   runBenchmark,
   SensorIndex,
   weightCount,
@@ -164,6 +166,98 @@ describe('allocateTribeSizes', () => {
     expect(
       allocateTribeSizes([share(5), { kind: 'min' }, { kind: 'none' }, share(5)], 200, 25, 100),
     ).toEqual([88, 25, 0, 87]);
+  });
+
+  // Sprint 3.2 review: fixing low tribes at min first and the leader at popCap afterwards never
+  // gave the low tribes back what the cap freed, so these lost 25 of Medium's 200 creatures.
+  it('keeps the whole budget when one tribe hits popCap and the rest scored little', () => {
+    expect(
+      allocateTribeSizes([share(750), share(125), share(125), share(125)], 200, 25, 100),
+    ).toEqual([100, 34, 33, 33]);
+    expect(allocateTribeSizes([share(1000), share(10), share(10), share(1)], 200, 25, 100)).toEqual(
+      [100, 38, 37, 25],
+    );
+  });
+
+  it('stays at the clamps when the budget cannot be met', () => {
+    expect(allocateTribeSizes([share(1), share(1)], 300, 25, 100)).toEqual([100, 100]);
+    expect(allocateTribeSizes([share(9), share(1), share(0)], 60, 25, 100)).toEqual([25, 25, 25]);
+  });
+
+  it('property: sizes within [min, max], total = budget when feasible, order follows score', () => {
+    const tribe = fc.oneof(
+      { weight: 6, arbitrary: fc.integer({ min: 0, max: 5000 }).map((s) => share(s)) },
+      { weight: 1, arbitrary: fc.constant({ kind: 'min' as const }) },
+      { weight: 1, arbitrary: fc.constant({ kind: 'none' as const }) },
+    );
+    fc.assert(
+      fc.property(
+        fc.array(tribe, { minLength: 1, maxLength: 8 }),
+        fc.integer({ min: 1, max: 60 }),
+        fc.integer({ min: 0, max: 200 }),
+        fc.integer({ min: 0, max: 1500 }),
+        (tribes, min, extra, budget) => {
+          const max = min + extra;
+          const sizes = allocateTribeSizes(tribes, budget, min, max);
+          const shares = tribes.flatMap((t, i) => (t.kind === 'share' ? [i] : []));
+          let floor = 0;
+          let ceiling = 0;
+          tribes.forEach((t, i) => {
+            if (t.kind === 'none') expect(sizes[i]).toBe(0);
+            if (t.kind === 'min') expect(sizes[i]).toBe(min);
+            if (t.kind === 'share') {
+              expect(sizes[i]).toBeGreaterThanOrEqual(min);
+              expect(sizes[i]).toBeLessThanOrEqual(max);
+            }
+            floor += t.kind === 'none' ? 0 : min;
+            ceiling += t.kind === 'min' ? min : t.kind === 'share' && t.score > 0 ? max : 0;
+          });
+          const anyScore = shares.some((i) => (tribes[i] as { score: number }).score > 0);
+          if (!anyScore) ceiling += shares.length * (max - min);
+          const total = sizes.reduce((a, s) => a + s, 0);
+          if (shares.length > 0 && budget >= floor && budget <= ceiling) {
+            expect(total).toBe(budget);
+          }
+          for (const i of shares) {
+            for (const j of shares) {
+              const si = (tribes[i] as { score: number }).score;
+              const sj = (tribes[j] as { score: number }).score;
+              if (si > sj) expect(sizes[i]! + 1).toBeGreaterThanOrEqual(sizes[j]!);
+            }
+          }
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+});
+
+describe('respawnGenomes (extinct tribe, respawn mode)', () => {
+  const rng = () => createRngStream('respawn');
+  const hof = (...values: number[]): HallOfFameEntry[] =>
+    values.map((v, i) => ({ genome: genomeOf(v), benchmarkScore: 100 - i, generation: i + 1 }));
+
+  it('brings back the best hall-of-fame genome unchanged and breeds the rest from members', () => {
+    const members = [genomeOf(0.5), genomeOf(-0.5), genomeOf(0.25)];
+    const next = respawnGenomes(SPEC, hof(3, 2), members, 10, EVO, rng());
+    expect(next).toHaveLength(10);
+    expect(next[0]).toEqual(genomeOf(3));
+    // Same draws as breeding the members alone: the hall of fame takes no parent slot.
+    expect(next.slice(1)).toEqual(breedGenomes(SPEC, members, 9, EVO, rng()));
+    for (const g of next.slice(1)) {
+      expect(g.some((w) => w === 3 || w === 2)).toBe(false);
+    }
+  });
+
+  it('falls back to the members without a hall of fame, and to the hall of fame without members', () => {
+    const members = [genomeOf(0.5), genomeOf(-0.5)];
+    expect(respawnGenomes(SPEC, [], members, 6, EVO, rng())).toEqual(
+      breedGenomes(SPEC, members, 6, EVO, rng()),
+    );
+    expect(respawnGenomes(SPEC, hof(3, 2), [], 6, EVO, rng())).toEqual(
+      breedGenomes(SPEC, [genomeOf(3), genomeOf(2)], 6, EVO, rng()),
+    );
+    expect(respawnGenomes(SPEC, hof(3), members, 0, EVO, rng())).toEqual([]);
   });
 });
 
@@ -339,7 +433,7 @@ describe('EvolutionRun', () => {
     expect(Math.abs(a!.size - fairShareA)).toBeLessThanOrEqual(1);
   });
 
-  it('respawns an extinct tribe at minTribeSize, led by its hall of fame', () => {
+  it('respawns an extinct tribe at minTribeSize: hall-of-fame champion + members offspring', () => {
     const run = createEvolutionRun({
       preset: 'small',
       seed: 6,
@@ -353,7 +447,13 @@ describe('EvolutionRun', () => {
     expect(tribe1.alive).toBe(true);
     expect(tribe1.size).toBe(10);
     expect(run.tribes[0]!.size).toBe(40);
-    expect(tribeGenomes(run, 1)[0]).toEqual(tribe1.hallOfFame[0]!.genome);
+    const genomes = tribeGenomes(run, 1);
+    expect(genomes[0]).toEqual(tribe1.hallOfFame[0]!.genome);
+    // Only the champion returns as is; generation 1's champion IS the best member, so it also
+    // comes back once as an elite of the members' breeding, and no further unchanged copies.
+    const champion = tribe1.hallOfFame[0]!.genome;
+    const copies = genomes.filter((g) => g.every((w, i) => w === champion[i])).length;
+    expect(copies).toBe(2);
   });
 
   it('keeps the total population when every tribe went extinct', () => {
@@ -370,7 +470,7 @@ describe('EvolutionRun', () => {
     expect(run.tribes.map((t) => t.history[0]!.survivors)).toEqual([0, 0]);
     expect(run.tribes[0]!.size + run.tribes[1]!.size).toBe(50);
     expect(run.world.livingCount).toBe(50);
-    // Both still breed from their hall of fame first (extinction rule).
+    // Both are still respawned: their hall-of-fame champion comes back first (extinction rule).
     for (const t of run.tribes) {
       expect(tribeGenomes(run, t.id)[0]).toEqual(t.hallOfFame[0]!.genome);
     }
