@@ -50,6 +50,16 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 4. **Golden scenarios run in a real browser engine, not only Node.** Vitest browser mode (Playwright
    provider) runs the same golden-hash test in Chromium, covering sensors + forward pass, not just
    tick rules. Firefox/WebKit instances can be added to that project (plan Sprint 5.2).
+5. **`EvolutionRun` drives generations (Sprint 3.2).** `World.tick()` stays one tick; the run
+   wraps a world, ends generations (length reached, everyone dead, or one tribe left in battle
+   royale) and restarts it with `World.startGeneration` (food full, creatures respawned in their
+   zones, ids from 0). All GA randomness comes from `rng.evolution`, tribes in ascending id order.
+6. **Engine-exact Gaussian.** Mutation noise is the Irwin–Hall sum of 12 uniforms − 6; Box–Muller
+   needs `Math.log`/`cos` (plan §3.3).
+7. **Benchmark arena = champion clones on a fixed map.** A fixed-seed map of the run's preset,
+   `startingCreaturesPerTribe` clones in tribe 0's start zone, alone, one generation; score = mean
+   clone fitness. Runs at generation 1 and every `benchmarkInterval` generations; the hall of fame
+   keeps the top K champions by this score.
 
 ## Risks
 

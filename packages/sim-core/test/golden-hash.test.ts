@@ -5,6 +5,7 @@ import {
   brainSpecFromConfig,
   createBrainPolicy,
   createBrainScratch,
+  createEvolutionRun,
   createWorld,
   DEFAULT_CONFIG,
   forwardPass,
@@ -95,5 +96,15 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     // Same world as the brainPolicy scenario, so the recording policy decides like the real one.
     expect(worldHashes).toEqual(GOLDEN.brainPolicy);
     expect(digests).toEqual(GOLDEN.brainOutputs);
+  });
+
+  it('reproduce the pinned evolution-run hashes (genetic algorithm + benchmark arena)', () => {
+    const run = createEvolutionRun({ preset: GOLDEN.preset, seed: GOLDEN.seed });
+    const actual: Record<number, string> = {};
+    for (const generation of [2, 3, 4] as const) {
+      while (run.generation < generation) run.runGeneration();
+      actual[generation] = run.hash();
+    }
+    expect(actual).toEqual(GOLDEN.evolution);
   });
 });

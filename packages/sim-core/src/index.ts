@@ -16,12 +16,17 @@ export {
   MAP_PRESETS,
   type BrainConfig,
   type CreatureConfig,
+  type EvolutionConfig,
+  type ExtinctionMode,
+  type FitnessWeights,
   type FoodConfig,
   type MapGenConfig,
   type MapPreset,
   type MapPresetId,
+  type SelectionMode,
   type SensorConfig,
   type SimConfig,
+  type TribeScoreWeights,
 } from './config.js';
 export { hashConfig, hashMap, hashWorld, StateHasher } from './hash.js';
 export {
@@ -47,6 +52,7 @@ export {
 export {
   applyMetabolism,
   createCreature,
+  EMPTY_GENOME,
   NO_MOVE_DIR,
   type Creature,
   type CreatureStats,
@@ -67,6 +73,7 @@ export {
   World,
   type CreateWorldOptions,
   type DecisionPolicy,
+  type TribeSpawn,
 } from './world.js';
 export { SpatialGrid } from './spatial-grid.js';
 export { readSensors, SENSOR_COUNT, SensorIndex } from './sensors.js';
@@ -89,3 +96,28 @@ export {
   type BrainScratch,
   type BrainSpec,
 } from './brain.js';
+export { creatureFitness, tribeOutcome, tribeScore, type TribeOutcome } from './fitness.js';
+export {
+  crossoverPerNeuron,
+  gaussian,
+  mutateGenome,
+  randomGenome,
+  type MutationSettings,
+} from './genome.js';
+export { createBenchmarkArena, runBenchmark, type BenchmarkArena } from './benchmark.js';
+export {
+  addToHallOfFame,
+  allocateTribeSizes,
+  breedGenomes,
+  createEvolutionRun,
+  EvolutionRun,
+  isBenchmarkGeneration,
+  pickParent,
+  rankByFitness,
+  type EvolutionRunOptions,
+  type GenerationStats,
+  type HallOfFameEntry,
+  type RankedCreature,
+  type TribeAllocation,
+  type TribeState,
+} from './evolution.js';
