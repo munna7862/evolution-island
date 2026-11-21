@@ -543,7 +543,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - [ ] Tile occupancy: one creature per tile (default) vs stacking
 - [ ] Can enemies overhear calls? (default: no; eavesdropping is a later experiment — decide before Sprint 4.3)
 - [ ] Speed: 1× = 10 ticks/sec (default)
-- [ ] License / open source or private
+- [x] License: MIT, public repo on GitHub (decided 2026-11-21)
 
 ---
 
@@ -585,3 +585,6 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Browser targets now include the fastest smooth speed per preset; creature movement interpolated between ticks; Huge sensor benchmark sized at ≈ 1,400 creatures.
 - Viewer loads runs via file picker / drag-and-drop; duplicate "load trained tribes" item in Sprint 5.2 replaced by replay export; Sprint 3.4 gets an example pass bar.
 - Fitness term names match the data model (`ticksAlive`, `kills`); sprint count added to §4; open decisions note when they're due; new CLAUDE.md rule to keep this plan updated; §11 updated for the existing folder.
+
+**2026-11-21 — repo published**
+- Public GitHub repo created and MIT license added; the license decision in §10 is ticked.
