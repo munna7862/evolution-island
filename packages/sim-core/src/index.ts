@@ -14,12 +14,14 @@ export {
 export {
   DEFAULT_CONFIG,
   MAP_PRESETS,
+  type CreatureConfig,
+  type FoodConfig,
   type MapGenConfig,
   type MapPreset,
   type MapPresetId,
   type SimConfig,
 } from './config.js';
-export { hashConfig, hashMap, StateHasher } from './hash.js';
+export { hashConfig, hashMap, hashWorld, StateHasher } from './hash.js';
 export {
   Biome,
   computeWaterField,
@@ -40,3 +42,27 @@ export {
   type WaterField,
   type WorldMap,
 } from './map/index.js';
+export {
+  applyMetabolism,
+  createCreature,
+  NO_MOVE_DIR,
+  type Creature,
+  type CreatureStats,
+} from './creature.js';
+export {
+  Action,
+  ACTION_COUNT,
+  ACTION_DX,
+  ACTION_DY,
+  applyAction,
+  isWaterReachable,
+  type ActionWorldContext,
+} from './actions.js';
+export {
+  createWorld,
+  NO_CREATURE,
+  randomActionPolicy,
+  World,
+  type CreateWorldOptions,
+  type DecisionPolicy,
+} from './world.js';

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, generateMap, hashConfig, hashMap, StateHasher } from '../src/index.js';
+import {
+  createWorld,
+  DEFAULT_CONFIG,
+  generateMap,
+  hashConfig,
+  hashMap,
+  hashWorld,
+  StateHasher,
+} from '../src/index.js';
 
 describe('StateHasher, hashConfig & hashMap', () => {
   it('produces identical 16-char hex digests and uint32 digests for identical streams', () => {
@@ -125,5 +133,42 @@ describe('StateHasher, hashConfig & hashMap', () => {
 
     expect(hashMap({ ...map, attempt: map.attempt + 1 })).not.toBe(map.hash);
     expect(hashMap({ ...map, seed: '42' })).not.toBe(map.hash);
+  });
+
+  it('hashes creature/food config fields and World state deterministically', () => {
+    const baseCfgHash = hashConfig(DEFAULT_CONFIG);
+    const modifiedCreature = {
+      ...DEFAULT_CONFIG,
+      creature: {
+        ...DEFAULT_CONFIG.creature,
+        baseEnergyDrain: DEFAULT_CONFIG.creature.baseEnergyDrain + 0.01,
+      },
+    };
+    expect(hashConfig(modifiedCreature)).not.toBe(baseCfgHash);
+
+    const modifiedFood = {
+      ...DEFAULT_CONFIG,
+      food: {
+        ...DEFAULT_CONFIG.food,
+        regrowthRate: DEFAULT_CONFIG.food.regrowthRate + 0.05,
+      },
+    };
+    expect(hashConfig(modifiedFood)).not.toBe(baseCfgHash);
+
+    const w = createWorld({ preset: 'small', seed: 123 });
+    const h0 = hashWorld(w);
+    expect(h0).toBe(w.hash());
+
+    const wDiffMaxAge = createWorld({ preset: 'small', seed: 123, maxAge: 999 });
+    expect(hashWorld(wDiffMaxAge)).not.toBe(h0);
+
+    const wDiffConfig = createWorld({ preset: 'small', seed: 123, config: modifiedFood });
+    expect(hashWorld(wDiffConfig)).not.toBe(h0);
+
+    w.rng.spawn.nextUint32();
+    expect(hashWorld(w)).not.toBe(h0);
+
+    w.tick();
+    expect(hashWorld(w)).not.toBe(h0);
   });
 });

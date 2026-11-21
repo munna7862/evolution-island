@@ -3,6 +3,7 @@
  * whose simVersion differs from this one is refused or migrated.
  *
  * Bump it whenever the sensor list, brain spec or tick rules change (CLAUDE.md).
- * 0 = skeleton: no simulation rules exist yet.
+ * 0 = skeleton + world map generator (Phase 0–1).
+ * 1 = Phase 2.1 creature model, metabolism, Phase 2 actions, and two-phase tick loop.
  */
-export const SIM_VERSION = 0;
+export const SIM_VERSION = 1;
