@@ -1,0 +1,224 @@
+import type { MapPresetId, SimConfig } from './config.js';
+import type { WorldMap } from './map/types.js';
+import { normalizeSeed } from './rng.js';
+
+const PRESET_ORDER: readonly MapPresetId[] = ['small', 'medium', 'large', 'huge'];
+
+/**
+ * Deterministic 64-bit state hasher (two 32-bit mixed lanes, zero BigInt or host dependencies).
+ * Used for determinism tests, map hashes, config hashes and replay checkpoints (plan §3.2, §3.3).
+ */
+export class StateHasher {
+  private h1 = 0x9e3779b9;
+  private h2 = 0x85ebca6b;
+  private readonly buffer = new ArrayBuffer(8);
+  private readonly view = new DataView(this.buffer);
+
+  private mix32(value: number): void {
+    const v = value | 0;
+    let a = (this.h1 ^ v) | 0;
+    a = Math.imul(a ^ (a >>> 16), 0x85ebca6b);
+    a = Math.imul(a ^ (a >>> 13), 0xc2b2ae35);
+    a ^= a >>> 16;
+
+    let b = (this.h2 + Math.imul(v ^ 0x27d4eb2f, 0x165667b1)) | 0;
+    b = (b << 13) | (b >>> 19);
+    b = (Math.imul(b, 5) + 0xe6546b64) | 0;
+
+    this.h1 = (a ^ b) >>> 0;
+    this.h2 = (b ^ ((this.h1 << 7) | (this.h1 >>> 25))) >>> 0;
+  }
+
+  writeBoolean(value: boolean): this {
+    this.mix32(value ? 1 : 0);
+    return this;
+  }
+
+  writeUint8(value: number): this {
+    this.mix32(value & 0xff);
+    return this;
+  }
+
+  writeInt16(value: number): this {
+    this.mix32((value << 16) >> 16);
+    return this;
+  }
+
+  writeInt32(value: number): this {
+    this.mix32(value | 0);
+    return this;
+  }
+
+  writeUint32(value: number): this {
+    this.mix32(value >>> 0);
+    return this;
+  }
+
+  writeFloat32(value: number): this {
+    if (Number.isNaN(value)) {
+      this.mix32(0x7fc00000);
+      return this;
+    }
+    const f32 = Math.fround(value);
+    const canonical = f32 === 0 ? 0 : f32;
+    this.view.setFloat32(0, canonical, true);
+    this.mix32(this.view.getUint32(0, true));
+    return this;
+  }
+
+  writeFloat64(value: number): this {
+    if (Number.isNaN(value)) {
+      this.mix32(0x00000000);
+      this.mix32(0x7ff80000);
+      return this;
+    }
+    const canonical = value === 0 ? 0 : value;
+    this.view.setFloat64(0, canonical, true);
+    this.mix32(this.view.getUint32(0, true));
+    this.mix32(this.view.getUint32(4, true));
+    return this;
+  }
+
+  writeString(value: string): this {
+    this.writeUint32(value.length);
+    for (let i = 0; i < value.length; i++) {
+      this.mix32(value.charCodeAt(i));
+    }
+    return this;
+  }
+
+  writeUint8Array(values: Uint8Array): this {
+    this.writeUint32(values.length);
+    for (let i = 0; i < values.length; i++) {
+      this.mix32(values[i]!);
+    }
+    return this;
+  }
+
+  writeInt16Array(values: Int16Array): this {
+    this.writeUint32(values.length);
+    for (let i = 0; i < values.length; i++) {
+      this.mix32(values[i]!);
+    }
+    return this;
+  }
+
+  writeFloat32Array(values: Float32Array): this {
+    this.writeUint32(values.length);
+    for (let i = 0; i < values.length; i++) {
+      this.writeFloat32(values[i]!);
+    }
+    return this;
+  }
+
+  digest(): string {
+    const hi = (this.h1 >>> 0).toString(16).padStart(8, '0');
+    const lo = (this.h2 >>> 0).toString(16).padStart(8, '0');
+    return `${hi}${lo}`;
+  }
+
+  digestUint32(): number {
+    return (this.h1 ^ this.h2) >>> 0;
+  }
+}
+
+export function hashConfig(config: SimConfig): string {
+  const hasher = new StateHasher();
+
+  for (const id of PRESET_ORDER) {
+    const p = config.presets[id];
+    hasher
+      .writeString(p.id)
+      .writeUint32(p.width)
+      .writeUint32(p.height)
+      .writeUint32(p.tribeCount)
+      .writeUint32(p.startingCreaturesPerTribe)
+      .writeUint32(p.minTribeSize)
+      .writeUint32(p.popCapPerTribe)
+      .writeUint32(p.generationLength)
+      .writeFloat64(p.spawnRingRadius)
+      .writeFloat64(p.spawnZoneRadius)
+      .writeFloat64(p.fairnessRadius)
+      .writeUint32(p.hotspotCount)
+      .writeFloat64(p.hotspotRadius);
+  }
+
+  const m = config.map;
+  hasher
+    .writeFloat64(m.elevationScale)
+    .writeUint32(m.elevationOctaves)
+    .writeFloat64(m.elevationAmplitude)
+    .writeFloat64(m.islandCoreLift)
+    .writeFloat64(m.moistureScale)
+    .writeUint32(m.moistureOctaves)
+    .writeFloat64(m.fbmLacunarity)
+    .writeFloat64(m.fbmGain)
+    .writeFloat64(m.islandPlateauRadius)
+    .writeFloat64(m.islandCoastRadius)
+    .writeFloat64(m.falloffStrength)
+    .writeFloat64(m.deepWaterThreshold)
+    .writeFloat64(m.shallowWaterThreshold)
+    .writeFloat64(m.sandThreshold)
+    .writeFloat64(m.mountainThreshold)
+    .writeFloat64(m.forestMoistureThreshold)
+    .writeUint32(m.biomeMaxFood.length);
+
+  for (const food of m.biomeMaxFood) {
+    hasher.writeFloat64(food);
+  }
+
+  hasher
+    .writeFloat64(m.hotspotMaxFood)
+    .writeFloat64(m.moistureFoodBonus)
+    .writeFloat64(m.spawnAngularJitter)
+    .writeFloat64(m.spawnDryCoreRadius)
+    .writeFloat64(m.pondDistanceRatio)
+    .writeFloat64(m.pondRadius)
+    .writeFloat64(m.pondAngleJitter)
+    .writeFloat64(m.hotspotRingRatio)
+    .writeFloat64(m.hotspotClearingRatio)
+    .writeFloat64(m.hotspotMinClearingRadius)
+    .writeFloat64(m.hotspotEdgeBoost)
+    .writeFloat64(m.fairnessTolerance)
+    .writeUint32(m.minFairnessWaterTiles)
+    .writeUint32(m.targetFairnessWaterTiles)
+    .writeFloat64(m.spawnCapacityMultiplier)
+    .writeUint32(m.maxGenerationAttempts);
+
+  return hasher.digest();
+}
+
+export function hashMap(map: Omit<WorldMap, 'hash'>): string {
+  const hasher = new StateHasher();
+  hasher
+    .writeString(map.preset)
+    .writeString(normalizeSeed(map.seed))
+    .writeUint32(map.width)
+    .writeUint32(map.height)
+    .writeUint32(map.attempt)
+    .writeUint32(map.walkableCount)
+    .writeUint8Array(map.biomes)
+    .writeFloat32Array(map.maxFood)
+    .writeFloat32Array(map.food)
+    .writeInt16Array(map.waterDx)
+    .writeInt16Array(map.waterDy)
+    .writeUint32(map.spawnZones.length);
+
+  for (const zone of map.spawnZones) {
+    hasher
+      .writeUint32(zone.tribeId)
+      .writeInt32(zone.x)
+      .writeInt32(zone.y)
+      .writeFloat64(zone.radius)
+      .writeUint32(zone.walkableCount)
+      .writeFloat64(zone.foodInFairnessRadius)
+      .writeUint32(zone.waterInFairnessRadius);
+  }
+
+  hasher.writeUint32(map.hotspots.length);
+  for (const spot of map.hotspots) {
+    hasher.writeInt32(spot.x).writeInt32(spot.y).writeFloat64(spot.radius);
+  }
+
+  return hasher.digest();
+}

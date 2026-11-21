@@ -168,7 +168,7 @@ Setting expectations up front, so tuning effort goes to the right places:
 | Trainer     | Node.js (headless, fast-forward; `worker_threads` for multi-seed runs) |
 | Viewer      | Vite + PixiJS (WebGL)                    |
 | Charts      | uPlot (lightweight, fast)                |
-| Map noise   | `simplex-noise` (fed by the seeded RNG)  |
+| Map noise   | Self-contained 2D simplex noise in `sim-core` (fed by the seeded RNG; zero external deps) |
 | Threading   | Simulation in a Web Worker; main thread renders |
 | Unit tests  | Vitest                                   |
 | Property tests | fast-check                            |
@@ -588,3 +588,6 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 
 **2026-11-21 — repo published**
 - Public GitHub repo created and MIT license added; the license decision in §10 is ticked.
+
+**2026-11-21 — Sprint 1.1 (self-contained simplex noise)**
+- §3.1 updated: instead of adding `simplex-noise` as an external dependency, `sim-core` includes a self-contained pure-TS 2D simplex noise implementation (`packages/sim-core/src/map/simplex.ts`) using only allow-listed `Math` members so the ESLint determinism guard checks every line.
