@@ -14,6 +14,7 @@ export {
 export {
   DEFAULT_CONFIG,
   MAP_PRESETS,
+  type BrainConfig,
   type CreatureConfig,
   type FoodConfig,
   type MapGenConfig,
@@ -69,3 +70,22 @@ export {
 } from './world.js';
 export { SpatialGrid } from './spatial-grid.js';
 export { readSensors, SENSOR_COUNT, SensorIndex } from './sensors.js';
+export {
+  argmaxAction,
+  BRAIN_FORMAT_VERSION,
+  brainSpecFromConfig,
+  createBrainPolicy,
+  createBrainScratch,
+  createZeroGenome,
+  forwardPass,
+  inputWeightIndex,
+  outputBiasIndex,
+  outputWeightIndex,
+  sameBrainSpec,
+  softsign,
+  validateBrainSpec,
+  validateGenome,
+  weightCount,
+  type BrainScratch,
+  type BrainSpec,
+} from './brain.js';

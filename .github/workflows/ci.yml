@@ -32,7 +32,7 @@ jobs:
       - run: pnpm build
 
   e2e:
-    name: Viewer smoke test (Playwright, Chromium)
+    name: Browser tests (golden hashes + viewer e2e, Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -44,6 +44,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @evolution-island/viewer exec playwright install --with-deps chromium
+      - run: pnpm test:browser
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()

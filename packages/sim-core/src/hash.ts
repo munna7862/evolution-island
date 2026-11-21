@@ -210,7 +210,8 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.sensor.forestVisionMultiplier)
     .writeFloat64(config.sensor.countNormalization)
     .writeFloat64(config.sensor.foodNormalization)
-    .writeFloat64(config.sensor.minVisibleFood);
+    .writeFloat64(config.sensor.minVisibleFood)
+    .writeUint32(config.brain.hiddenNeurons);
 
   return hasher.digest();
 }

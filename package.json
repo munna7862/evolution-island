@@ -16,14 +16,17 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:e2e": "pnpm --filter @evolution-island/viewer run test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
+    "@vitest/browser-playwright": "5.1.1",
     "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.14.0",
+    "playwright": "^1.65.1",
     "prettier": "3.10.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.73.0",

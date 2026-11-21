@@ -354,7 +354,7 @@ test.describe('Viewer v1', () => {
     await expect.poll(() => page.evaluate(() => window.__ei?.mapHash)).toBe(GOLDEN.mapHash);
     expect(await page.evaluate(() => window.__ei!.simVersion)).toBe(GOLDEN.simVersion);
 
-    const ticks = Object.keys(GOLDEN.worldHashes)
+    const ticks = Object.keys(GOLDEN.randomPolicy)
       .map(Number)
       .sort((a, b) => a - b);
     const actual: Record<number, string> = {};
@@ -377,7 +377,7 @@ test.describe('Viewer v1', () => {
       expect(reply.tick).toBe(target);
       actual[target] = reply.worldHash;
     }
-    expect(actual).toEqual(GOLDEN.worldHashes);
+    expect(actual).toEqual(GOLDEN.randomPolicy);
     expect(errors).toEqual([]);
   });
 });
