@@ -46,7 +46,8 @@ See `docs/phases/phase-0.md` → "Architecture decisions" for package direction,
 
 ## What was done
 
-All ten backlog items, on branch `sprint-0.1` (not committed or pushed yet).
+All ten backlog items, on branch `sprint-0.1`, PR
+[munna7862/evolution-island#1](https://github.com/munna7862/evolution-island/pull/1).
 
 | Command | Result (Windows 11, Node 24.13, pnpm 12.21) |
 |---------|---------------------------------------------|
@@ -74,7 +75,9 @@ wiring is tested.
 
 **CI**: `.github/workflows/ci.yml` — `checks` job (frozen install, lint, typecheck, test, build) and
 `e2e` job (Playwright Chromium, report uploaded on failure). Runs on pushes to `main`, pull requests
-and manual dispatch. **Not yet observed running**: the branch has not been pushed.
+and manual dispatch. **Green on the PR** (Ubuntu): both jobs passed on the first run
+([run 44898840980](https://github.com/munna7862/evolution-island/actions/runs/44898840980), ~30 s
+each). Pushing a branch alone does not trigger CI; a pull request does.
 
 ## Retro
 
@@ -98,7 +101,6 @@ and manual dispatch. **Not yet observed running**: the branch has not been pushe
   rule.
 
 **Not done / open**
-- CI green on GitHub is unverified until `sprint-0.1` is pushed (user's call).
 - Known limits of the lint guard: it can't see into third-party code (Sprint 1.1 must vet
   `simplex-noise` against the math rules or vendor it, plan §3.3), and it can't check ordering rules
   (stable sorts, ties by id) — those need the state-hash determinism tests from Sprint 1.1.
