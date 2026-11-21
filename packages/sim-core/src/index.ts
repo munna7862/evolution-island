@@ -19,6 +19,7 @@ export {
   type MapGenConfig,
   type MapPreset,
   type MapPresetId,
+  type SensorConfig,
   type SimConfig,
 } from './config.js';
 export { hashConfig, hashMap, hashWorld, StateHasher } from './hash.js';
@@ -66,3 +67,5 @@ export {
   type CreateWorldOptions,
   type DecisionPolicy,
 } from './world.js';
+export { SpatialGrid } from './spatial-grid.js';
+export { readSensors, SENSOR_COUNT, SensorIndex } from './sensors.js';

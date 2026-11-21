@@ -5,5 +5,6 @@
  * Bump it whenever the sensor list, brain spec or tick rules change (CLAUDE.md).
  * 0 = skeleton + world map generator (Phase 0–1).
  * 1 = Phase 2.1 creature model, metabolism, Phase 2 actions, and two-phase tick loop.
+ * 2 = Phase 2.2 spatial grid and 18-input normalized creature sensors.
  */
-export const SIM_VERSION = 1;
+export const SIM_VERSION = 2;

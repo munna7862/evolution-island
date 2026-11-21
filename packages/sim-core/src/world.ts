@@ -5,6 +5,7 @@ import { hashWorld } from './hash.js';
 import { floodFillWalkable, generateMap } from './map/generator.js';
 import { isWalkable, type WorldMap } from './map/types.js';
 import { createRngStreams, type RngStream, type RngStreams, type Seed } from './rng.js';
+import { SpatialGrid } from './spatial-grid.js';
 
 export const NO_CREATURE = -1;
 
@@ -37,6 +38,7 @@ export class World implements ActionWorldContext {
   readonly rng: RngStreams;
   readonly occupancy: Int32Array;
   readonly creatures: Creature[] = [];
+  readonly grid: SpatialGrid;
   readonly maxAge: number;
 
   tickCount = 0;
@@ -49,6 +51,7 @@ export class World implements ActionWorldContext {
   private readonly livingBuffer: Creature[] = [];
   private depletedCount = 0;
   private nextCreatureId = 0;
+  private gridDirty = true;
 
   constructor(options: CreateWorldOptions) {
     this.seed = options.seed;
@@ -72,6 +75,11 @@ export class World implements ActionWorldContext {
 
     const tileCount = this.map.width * this.map.height;
     this.occupancy = new Int32Array(tileCount).fill(NO_CREATURE);
+    this.grid = new SpatialGrid(
+      this.map.width,
+      this.map.height,
+      Math.max(1, Math.floor(this.config.sensor.visionRadius)),
+    );
     this.depletedTiles = new Int32Array(tileCount);
     this.isDepleted = new Uint8Array(tileCount);
 
@@ -187,7 +195,20 @@ export class World implements ActionWorldContext {
     this.occupancy[idx] = creature.id;
     this.creatures.push(creature);
     this.livingCount++;
+    this.gridDirty = true;
     return creature;
+  }
+
+  rebuildGrid(): void {
+    this.grid.rebuild(this.creatures);
+    this.gridDirty = false;
+  }
+
+  ensureGrid(): SpatialGrid {
+    if (this.gridDirty) {
+      this.rebuildGrid();
+    }
+    return this.grid;
   }
 
   moveCreature(creature: Creature, nx: number, ny: number, dir: Action): void {
@@ -214,6 +235,7 @@ export class World implements ActionWorldContext {
     creature.x = nx;
     creature.y = ny;
     creature.lastMoveDir = dir;
+    this.gridDirty = true;
   }
 
   /**
@@ -221,6 +243,7 @@ export class World implements ActionWorldContext {
    */
   tick(): void {
     this.regrowResources();
+    this.rebuildGrid();
 
     const living = this.livingBuffer;
     living.length = 0;
@@ -249,6 +272,7 @@ export class World implements ActionWorldContext {
       if (died) {
         this.occupancy[creature.y * this.map.width + creature.x] = NO_CREATURE;
         this.livingCount--;
+        this.gridDirty = true;
       }
     }
 
