@@ -93,12 +93,18 @@ export interface SensorConfig {
   readonly minVisibleFood: number;
 }
 
+export interface BrainConfig {
+  /** Hidden-layer size of the fixed-topology MLP (plan §2.4). */
+  readonly hiddenNeurons: number;
+}
+
 export interface SimConfig {
   readonly presets: Readonly<Record<MapPresetId, MapPreset>>;
   readonly map: MapGenConfig;
   readonly creature: CreatureConfig;
   readonly food: FoodConfig;
   readonly sensor: SensorConfig;
+  readonly brain: BrainConfig;
 }
 
 export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
@@ -229,5 +235,8 @@ export const DEFAULT_CONFIG: SimConfig = {
     countNormalization: 5,
     foodNormalization: 160,
     minVisibleFood: 20, // one full bite (creature.eatBiteSize)
+  },
+  brain: {
+    hiddenNeurons: 12,
   },
 };
