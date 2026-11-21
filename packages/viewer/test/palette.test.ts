@@ -5,7 +5,12 @@ import {
   BIOME_LEGEND,
   tileColorRgb,
   TRIBE_COLORS,
+  TRIBE_NAMES,
+  TRIBE_SHAPES,
   tribeColor,
+  tribeHex,
+  tribeName,
+  tribeShape,
 } from '../src/renderer/palette.js';
 
 describe('palette helpers', () => {
@@ -16,12 +21,22 @@ describe('palette helpers', () => {
     }
   });
 
-  it('wraps tribeColor safely for negative, fractional, and large tribe IDs', () => {
+  it('wraps tribeColor, tribeHex, tribeName, and tribeShape safely across tribe IDs', () => {
     expect(tribeColor(0)).toBe(TRIBE_COLORS[0]);
     expect(tribeColor(-1)).toBe(TRIBE_COLORS[TRIBE_COLORS.length - 1]);
     expect(tribeColor(TRIBE_COLORS.length + 2)).toBe(TRIBE_COLORS[2]);
     expect(tribeColor(2.9)).toBe(TRIBE_COLORS[2]);
     expect(tribeColor(Number.NaN)).toBe(TRIBE_COLORS[0]);
+
+    expect(TRIBE_NAMES).toHaveLength(8);
+    expect(TRIBE_SHAPES).toHaveLength(8);
+    expect(tribeName(0)).toBe('Amber');
+    expect(tribeName(-1)).toBe('Ivory');
+    expect(tribeName(Number.NaN)).toBe('Amber');
+    expect(tribeHex(0)).toBe('#e69f00');
+    expect(tribeHex(7)).toBe('#ffffff');
+    expect(tribeShape(0)).toBe('circle');
+    expect(tribeShape(9)).toBe('diamond');
   });
 
   it('shades Grass and Forest relative to their own base food without falsely tinting moist Forest as hotspot', () => {

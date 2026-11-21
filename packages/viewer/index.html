@@ -13,6 +13,35 @@
           <span id="status-badge" class="badge"></span>
         </div>
 
+        <div class="sim-controls" role="group" aria-label="Simulation playback">
+          <button id="play-pause-btn" type="button" class="btn btn-primary" aria-pressed="true">
+            Pause
+          </button>
+          <button id="step-btn" type="button" class="btn" title="Advance one tick">Step</button>
+          <div id="speed-controls" class="speed-group" role="group" aria-label="Simulation speed">
+            <button
+              type="button"
+              class="btn speed-btn is-active"
+              data-speed="1"
+              aria-pressed="true"
+            >
+              1×
+            </button>
+            <button type="button" class="btn speed-btn" data-speed="2" aria-pressed="false">
+              2×
+            </button>
+            <button type="button" class="btn speed-btn" data-speed="5" aria-pressed="false">
+              5×
+            </button>
+            <button type="button" class="btn speed-btn" data-speed="20" aria-pressed="false">
+              20×
+            </button>
+            <button type="button" class="btn speed-btn" data-speed="max" aria-pressed="false">
+              Max
+            </button>
+          </div>
+        </div>
+
         <form id="map-controls" class="controls">
           <label class="field">
             <span>Preset</span>
@@ -41,7 +70,18 @@
         </form>
       </header>
 
-      <main id="viewport" aria-label="Evolution Island map canvas"></main>
+      <div class="stage-area">
+        <main id="viewport" aria-label="Evolution Island map canvas"></main>
+        <aside id="sim-hud" class="sim-hud" aria-label="Simulation HUD">
+          <div class="hud-metrics">
+            <span id="hud-tick">Tick 0</span>
+            <span id="hud-generation">Gen 1</span>
+            <span id="hud-tps">0.0 t/s</span>
+            <span id="hud-population">Pop 0</span>
+          </div>
+          <div id="hud-tribes" class="hud-tribes"></div>
+        </aside>
+      </div>
 
       <footer class="statusbar">
         <div id="map-stats" class="stats"></div>

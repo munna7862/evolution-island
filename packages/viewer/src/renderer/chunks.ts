@@ -50,7 +50,7 @@ export function computeChunkGrid(
 }
 
 export function buildChunkPixels(
-  map: WorldMap,
+  map: Pick<WorldMap, 'width' | 'biomes' | 'maxFood'>,
   chunk: ChunkDescriptor,
   config: SimConfig = DEFAULT_CONFIG,
 ): Uint8Array {

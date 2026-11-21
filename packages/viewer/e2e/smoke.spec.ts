@@ -10,13 +10,13 @@ function trackErrors(page: Page): string[] {
   return errors;
 }
 
-test.describe('Viewer v0', () => {
-  test('loads, renders initial medium map, and exposes window.__ei debug hook', async ({
+test.describe('Viewer v1', () => {
+  test('loads, initializes medium world with 200 creatures in Web Worker, and exposes window.__ei', async ({
     page,
   }) => {
     const errors = trackErrors(page);
 
-    await page.goto('/');
+    await page.goto('/?paused=1');
     await expect(page).toHaveTitle('Evolution Island');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Evolution Island');
     await expect(page.getByText(/sim v\d+/)).toBeVisible();
@@ -39,21 +39,32 @@ test.describe('Viewer v0', () => {
     expect(state!.mapHash).toMatch(/^[0-9a-f]{16}$/);
     expect(state!.mapWidth).toBe(128);
     expect(state!.mapHeight).toBe(128);
+    expect(state!.tribeCount).toBe(4);
     expect(state!.tick).toBe(0);
-    expect(state!.population).toBe(0);
+    expect(state!.generation).toBe(1);
+    expect(state!.population).toBe(200);
+    expect(state!.tribePopulations).toEqual([50, 50, 50, 50]);
+    expect(state!.renderedCreatureCount).toBe(200);
+    expect(state!.running).toBe(false);
+    expect(state!.speed).toBe(1);
     expect(state!.chunkCount).toBe(4);
     expect(state!.visibleChunkCount).toBeGreaterThan(0);
     expect(['webgl', 'webgpu']).toContain(state!.rendererType);
     expect(state!.overlaysVisible).toBe(true);
+
+    await expect(page.locator('#hud-tick')).toHaveText('Tick 0');
+    await expect(page.locator('#hud-generation')).toHaveText('Gen 1');
+    await expect(page.locator('#hud-population')).toHaveText('Pop 200');
+    await expect(page.locator('#hud-tribes')).toContainText('Amber 50');
     expect(errors).toEqual([]);
   });
 
-  test('switching presets re-renders chunked textures and culls off-screen chunks on zoom', async ({
+  test('switching presets re-renders chunked textures, spawns expected tribe pops, and culls off-screen chunks', async ({
     page,
   }) => {
     const errors = trackErrors(page);
 
-    await page.goto('/');
+    await page.goto('/?paused=1');
     await expect
       .poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0))
       .toBeGreaterThanOrEqual(1);
@@ -65,6 +76,7 @@ test.describe('Viewer v0', () => {
     const smallState = await page.evaluate(() => window.__ei!.getState());
     expect(smallState.mapWidth).toBe(64);
     expect(smallState.chunkCount).toBe(1);
+    expect(smallState.population).toBe(50);
     expect(smallState.mapHash).not.toBe(initialHash);
 
     await page.selectOption('#preset-select', 'large');
@@ -72,6 +84,7 @@ test.describe('Viewer v0', () => {
     const largeState = await page.evaluate(() => window.__ei!.getState());
     expect(largeState.mapWidth).toBe(256);
     expect(largeState.chunkCount).toBe(16);
+    expect(largeState.population).toBe(480);
     expect(largeState.mapHash).not.toBe(smallState.mapHash);
 
     await page.selectOption('#preset-select', 'huge');
@@ -80,6 +93,7 @@ test.describe('Viewer v0', () => {
     expect(hugeState.mapWidth).toBe(512);
     expect(hugeState.chunkCount).toBe(64);
     expect(hugeState.visibleChunkCount).toBe(64);
+    expect(hugeState.population).toBe(1200);
     expect(hugeState.renderCount).toBeGreaterThanOrEqual(4);
 
     // Zoom deeply into the Huge map and verify off-screen chunk culling engages.
@@ -99,7 +113,7 @@ test.describe('Viewer v0', () => {
   }) => {
     const errors = trackErrors(page);
 
-    await page.goto('/?preset=small&seed=42');
+    await page.goto('/?preset=small&seed=42&paused=1');
     await expect
       .poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0))
       .toBeGreaterThanOrEqual(1);
@@ -108,9 +122,9 @@ test.describe('Viewer v0', () => {
     expect(numericSeedState.preset).toBe('small');
     expect(numericSeedState.seed).toBe(42);
 
-    await page.fill('#seed-input', 'sprint-1-2-seed');
+    await page.fill('#seed-input', 'sprint-2-3-seed');
     await page.click('#generate-btn');
-    await expect.poll(() => page.evaluate(() => window.__ei?.seed)).toBe('sprint-1-2-seed');
+    await expect.poll(() => page.evaluate(() => window.__ei?.seed)).toBe('sprint-2-3-seed');
     const firstHash = await page.evaluate(() => window.__ei!.mapHash);
 
     await page.fill('#seed-input', 'other-seed');
@@ -124,7 +138,7 @@ test.describe('Viewer v0', () => {
       .poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0))
       .toBeGreaterThanOrEqual(4);
 
-    await page.goto(`/?preset=small&seed=sprint-1-2-seed`);
+    await page.goto('/?preset=small&seed=sprint-2-3-seed&paused=1');
     await expect
       .poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0))
       .toBeGreaterThanOrEqual(1);
@@ -138,7 +152,7 @@ test.describe('Viewer v0', () => {
   }) => {
     const errors = trackErrors(page);
 
-    await page.goto('/');
+    await page.goto('/?paused=1');
     await expect
       .poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0))
       .toBeGreaterThanOrEqual(1);
@@ -198,6 +212,137 @@ test.describe('Viewer v0', () => {
     expect(resetCam.x).toBeCloseTo(initialCam.x, 4);
     expect(resetCam.y).toBeCloseTo(initialCam.y, 4);
     expect(resetCam.zoom).toBeCloseTo(initialCam.zoom, 4);
+    expect(errors).toEqual([]);
+  });
+
+  test('runs live Web Worker simulation, updates HUD, and supports Play/Pause/Step/Speed controls', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page);
+
+    await page.goto('/?preset=medium&seed=42');
+    await expect.poll(() => page.evaluate(() => window.__ei?.tick ?? 0)).toBeGreaterThanOrEqual(4);
+    await expect
+      .poll(() => page.evaluate(() => window.__ei?.actualTicksPerSec ?? 0))
+      .toBeGreaterThan(0);
+
+    const liveState = await page.evaluate(() => window.__ei!.getState());
+    expect(liveState.running).toBe(true);
+    expect(liveState.population).toBe(200);
+    expect(liveState.renderedCreatureCount).toBe(liveState.population);
+
+    await expect(page.locator('#hud-tick')).toContainText(/^Tick \d+$/);
+    await expect(page.locator('#hud-generation')).toHaveText('Gen 1');
+    await expect(page.locator('#hud-population')).toHaveText('Pop 200');
+    await expect(page.locator('#hud-tribes')).toContainText('Amber 50');
+
+    // Pause stops tick progression.
+    await page.click('#play-pause-btn');
+    await expect.poll(() => page.evaluate(() => window.__ei!.running)).toBe(false);
+    const pausedTick = await page.evaluate(() => window.__ei!.tick);
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.__ei!.tick)).toBe(pausedTick);
+
+    // Step advances exactly +1 tick.
+    await page.click('#step-btn');
+    await expect.poll(() => page.evaluate(() => window.__ei!.tick)).toBe(pausedTick + 1);
+    const steppedHash = await page.evaluate(() => window.__ei!.worldHash);
+    expect(steppedHash).toMatch(/^[0-9a-f]{16}$/);
+
+    // Switch to 5x then Max speed, and verify Space toggles Play/Pause while ignoring inputs.
+    const speed5Btn = page.locator('#speed-controls button[data-speed="5"]');
+    await speed5Btn.click();
+    await expect(speed5Btn).toHaveAttribute('aria-pressed', 'true');
+    const speed1Btn = page.locator('#speed-controls button[data-speed="1"]');
+    await expect(speed1Btn).toHaveAttribute('aria-pressed', 'false');
+
+    // Space toggles Play cleanly after clicking a toolbar button.
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => window.__ei!.running)).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => window.__ei!.tick))
+      .toBeGreaterThanOrEqual(pausedTick + 5);
+
+    // Space inside #seed-input must type into input rather than pausing simulation.
+    await page.focus('#seed-input');
+    await page.keyboard.press('Space');
+    expect(await page.evaluate(() => window.__ei!.running)).toBe(true);
+
+    // Switch to Max speed and verify live preset switch while running.
+    const maxBtn = page.locator('#speed-controls button[data-speed="max"]');
+    await maxBtn.click();
+    await expect(maxBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(() => page.evaluate(() => window.__ei!.tick))
+      .toBeGreaterThanOrEqual(pausedTick + 25);
+
+    await page.selectOption('#preset-select', 'small');
+    await expect.poll(() => page.evaluate(() => window.__ei!.preset)).toBe('small');
+    expect(await page.evaluate(() => window.__ei!.running)).toBe(true);
+    expect(await page.evaluate(() => window.__ei!.population)).toBeLessThanOrEqual(50);
+
+    // Verify requestHash() works on demand and matches /^[0-9a-f]{16}$/.
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => window.__ei!.running)).toBe(false);
+    const reqHash = await page.evaluate(() => window.__ei!.requestHash());
+    expect(reqHash.worldHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(reqHash.tick).toBe(await page.evaluate(() => window.__ei!.tick));
+
+    expect(errors).toEqual([]);
+  });
+
+  test('changing speed mid-run produces identical worldHash at tick 60', async ({ page }) => {
+    const errors = trackErrors(page);
+
+    // Run A: straight to tick 60 at Max speed.
+    await page.goto('/?preset=small&seed=42&paused=1&speed=max');
+    await expect.poll(() => page.evaluate(() => window.__ei !== undefined)).toBe(true);
+    await page.evaluate(() => {
+      window.__ei!.pauseAtTick(60);
+    });
+    await page.click('#play-pause-btn');
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const s = window.__ei?.getState();
+          return s !== undefined && s.tick === 60 && !s.running;
+        }),
+      )
+      .toBe(true);
+    const hashA = await page.evaluate(() => window.__ei!.worldHash);
+    expect(hashA).toMatch(/^[0-9a-f]{16}$/);
+
+    // Clicking Play after pauseAtTick must stay paused and reset button to Play.
+    await page.click('#play-pause-btn');
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => window.__ei!.running)).toBe(false);
+    await expect(page.locator('#play-pause-btn')).toHaveText('Play');
+
+    // Run B: change speed 2x -> 20x -> Max mid-run to tick 60.
+    await page.goto('/?preset=small&seed=42&paused=1');
+    await expect.poll(() => page.evaluate(() => window.__ei !== undefined)).toBe(true);
+    await page.evaluate(() => {
+      window.__ei!.pauseAtTick(60);
+    });
+    await page.click('#speed-controls button[data-speed="2"]');
+    await page.click('#play-pause-btn');
+
+    await expect.poll(() => page.evaluate(() => window.__ei!.tick)).toBeGreaterThanOrEqual(10);
+    await page.click('#speed-controls button[data-speed="20"]');
+    await expect.poll(() => page.evaluate(() => window.__ei!.tick)).toBeGreaterThanOrEqual(30);
+    await page.click('#speed-controls button[data-speed="max"]');
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const s = window.__ei?.getState();
+          return s !== undefined && s.tick === 60 && !s.running;
+        }),
+      )
+      .toBe(true);
+    const hashB = await page.evaluate(() => window.__ei!.worldHash);
+    expect(hashB).toBe(hashA);
     expect(errors).toEqual([]);
   });
 });

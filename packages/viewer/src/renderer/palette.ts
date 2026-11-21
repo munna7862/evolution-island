@@ -58,10 +58,50 @@ export const TRIBE_COLORS: readonly number[] = [
   0xffffff, // white
 ];
 
-export function tribeColor(tribeId: number): number {
-  const len = TRIBE_COLORS.length;
+export const TRIBE_NAMES: readonly string[] = [
+  'Amber',
+  'Sky',
+  'Vermilion',
+  'Orchid',
+  'Gold',
+  'Emerald',
+  'Cobalt',
+  'Ivory',
+];
+
+export type TribeShape =
+  'circle' | 'diamond' | 'triangle' | 'square' | 'pentagon' | 'hexagon' | 'star' | 'cross';
+
+export const TRIBE_SHAPES: readonly TribeShape[] = [
+  'circle',
+  'diamond',
+  'triangle',
+  'square',
+  'pentagon',
+  'hexagon',
+  'star',
+  'cross',
+];
+
+function normalizeTribeIndex(tribeId: number, length: number): number {
   const normalized = Number.isFinite(tribeId) ? Math.trunc(tribeId) : 0;
-  return TRIBE_COLORS[((normalized % len) + len) % len]!;
+  return ((normalized % length) + length) % length;
+}
+
+export function tribeColor(tribeId: number): number {
+  return TRIBE_COLORS[normalizeTribeIndex(tribeId, TRIBE_COLORS.length)]!;
+}
+
+export function tribeHex(tribeId: number): string {
+  return `#${tribeColor(tribeId).toString(16).padStart(6, '0')}`;
+}
+
+export function tribeName(tribeId: number): string {
+  return TRIBE_NAMES[normalizeTribeIndex(tribeId, TRIBE_NAMES.length)]!;
+}
+
+export function tribeShape(tribeId: number): TribeShape {
+  return TRIBE_SHAPES[normalizeTribeIndex(tribeId, TRIBE_SHAPES.length)]!;
 }
 
 function clampByte(v: number): number {

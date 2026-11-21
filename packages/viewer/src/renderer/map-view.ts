@@ -1,3 +1,4 @@
+import type { CreatureBuffer } from '@evolution-island/shared';
 import { DEFAULT_CONFIG, type SimConfig, type WorldMap } from '@evolution-island/sim-core';
 import {
   Application,
@@ -23,7 +24,22 @@ import {
   computeVisibleChunkIndices,
   type ChunkDescriptor,
 } from './chunks.js';
+import { CreatureLayer } from './creature-layer.js';
 import { tribeColor } from './palette.js';
+
+export type RenderableMap = Pick<
+  WorldMap,
+  | 'preset'
+  | 'seed'
+  | 'width'
+  | 'height'
+  | 'hash'
+  | 'walkableCount'
+  | 'biomes'
+  | 'maxFood'
+  | 'spawnZones'
+  | 'hotspots'
+>;
 
 export interface MapViewCallbacks {
   readonly onHoverTile?: (tile: TileCoord | null) => void;
@@ -63,12 +79,14 @@ export class MapView {
   private readonly worldContainer = new Container();
   private readonly terrainContainer = new Container();
   private readonly overlayGraphics = new Graphics();
+  private readonly creatureLayer = new CreatureLayer();
   private readonly resizeObserver: ResizeObserver;
 
-  private map: WorldMap | null = null;
+  private map: RenderableMap | null = null;
   private chunks: readonly ChunkEntry[] = [];
   private chunkDescriptors: readonly ChunkDescriptor[] = [];
   private visibleChunkCount = 0;
+  private creatureRenderDirty = false;
   private camera: CameraState = { x: 0, y: 0, zoom: 1, minZoom: 1e-4, maxZoom: 16 };
   private draggingPointerId: number | null = null;
   private lastPointerX = 0;
@@ -79,7 +97,11 @@ export class MapView {
     this.hostEl = hostEl;
     this.callbacks = callbacks;
 
-    this.worldContainer.addChild(this.terrainContainer, this.overlayGraphics);
+    this.worldContainer.addChild(
+      this.terrainContainer,
+      this.overlayGraphics,
+      this.creatureLayer.container,
+    );
     this.app.stage.addChild(this.worldContainer);
 
     this.bindEvents();
@@ -113,8 +135,10 @@ export class MapView {
     return new MapView(app, hostEl, callbacks);
   }
 
-  setMap(map: WorldMap, config: SimConfig = DEFAULT_CONFIG): void {
+  setMap(map: RenderableMap, config: SimConfig = DEFAULT_CONFIG): void {
     this.destroyChunks();
+    this.creatureLayer.clear();
+    this.creatureRenderDirty = false;
     this.map = map;
 
     const descriptors = computeChunkGrid(map.width, map.height);
@@ -177,10 +201,44 @@ export class MapView {
     return formatRendererType(this.app.renderer.type);
   }
 
+  setCreatureSnapshot(
+    creatures: CreatureBuffer,
+    receivedAtMs: number,
+    tickDurationMs: number,
+    running: boolean,
+    renderNow = true,
+  ): void {
+    this.creatureLayer.setSnapshot(creatures, receivedAtMs, tickDurationMs, running);
+    if (renderNow) {
+      this.creatureRenderDirty = false;
+      this.app.render();
+    } else {
+      this.creatureRenderDirty = true;
+    }
+  }
+
+  renderInterpolatedFrame(nowMs: number): {
+    readonly rendered: boolean;
+    readonly needsMoreFrames: boolean;
+  } {
+    const needsMoreFrames = this.creatureLayer.updateInterpolation(nowMs);
+    const rendered = this.creatureRenderDirty || this.creatureLayer.didPositionChange();
+    if (rendered) {
+      this.creatureRenderDirty = false;
+      this.app.render();
+    }
+    return { rendered, needsMoreFrames };
+  }
+
+  getRenderedCreatureCount(): number {
+    return this.creatureLayer.getRenderedCount();
+  }
+
   destroy(): void {
     this.resizeObserver.disconnect();
     this.unbindEvents();
     this.destroyChunks();
+    this.creatureLayer.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true, context: true });
   }
 
@@ -201,7 +259,7 @@ export class MapView {
     this.visibleChunkCount = 0;
   }
 
-  private rebuildOverlays(map: WorldMap): void {
+  private rebuildOverlays(map: RenderableMap): void {
     const g = this.overlayGraphics;
     g.clear();
 

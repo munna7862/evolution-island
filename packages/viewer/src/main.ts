@@ -1,18 +1,38 @@
-import { parseSeed } from '@evolution-island/shared';
 import {
-  generateMap,
-  MAP_PRESETS,
-  SIM_VERSION,
-  type MapPresetId,
-  type Seed,
-  type WorldMap,
-} from '@evolution-island/sim-core';
+  formatSpeed,
+  parseSeed,
+  SIM_SPEEDS,
+  type MainToWorkerMessage,
+  type SimSnapshot,
+  type SimSpeed,
+  type TransferableMapData,
+  type WorkerToMainMessage,
+} from '@evolution-island/shared';
+import { MAP_PRESETS, SIM_VERSION, type MapPresetId, type Seed } from '@evolution-island/sim-core';
 import type { EvolutionIslandDebugHook, EvolutionIslandDebugState } from './debug-hook.js';
 import type { TileCoord } from './renderer/camera.js';
 import { MapView } from './renderer/map-view.js';
-import { BIOME_LEGEND, BIOME_NAMES } from './renderer/palette.js';
+import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
 import { statusLine } from './status.js';
 import './styles.css';
+
+interface HashRequestEntry {
+  readonly resolve: (result: { readonly tick: number; readonly worldHash: string }) => void;
+  readonly reject: (reason: Error) => void;
+}
+
+interface InitialParams {
+  readonly preset: MapPresetId;
+  readonly seed: Seed;
+  readonly running: boolean;
+  readonly speed: SimSpeed;
+}
+
+interface HudTribeNode {
+  readonly item: HTMLSpanElement;
+  readonly swatch: HTMLSpanElement;
+  readonly label: HTMLSpanElement;
+}
 
 function requireEl<T extends Element>(selector: string, ctor: abstract new () => T): T {
   const el = document.querySelector(selector);
@@ -26,13 +46,27 @@ function isMapPresetId(value: string | null): value is MapPresetId {
   return value !== null && Object.prototype.hasOwnProperty.call(MAP_PRESETS, value);
 }
 
-function readInitialParams(): { readonly preset: MapPresetId; readonly seed: Seed } {
+function parseSpeedParam(raw: string | null): SimSpeed {
+  if (raw === null) return 1;
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed === 'max') return 'max';
+  const num = Number(trimmed);
+  for (const candidate of SIM_SPEEDS) {
+    if (candidate === num) return candidate;
+  }
+  return 1;
+}
+
+function readInitialParams(): InitialParams {
   const params = new URLSearchParams(window.location.search);
   const rawPreset = params.get('preset');
   const rawSeed = params.get('seed');
+  const paused = params.get('paused');
   return {
     preset: isMapPresetId(rawPreset) ? rawPreset : 'medium',
     seed: rawSeed !== null ? parseSeed(rawSeed, 42) : 42,
+    running: paused !== '1' && paused !== 'true',
+    speed: parseSpeedParam(params.get('speed')),
   };
 }
 
@@ -74,10 +108,21 @@ async function boot(): Promise<void> {
   const randomBtn = requireEl('#random-btn', HTMLButtonElement);
   const overlaysToggle = requireEl('#overlays-toggle', HTMLInputElement);
   const resetViewBtn = requireEl('#reset-view-btn', HTMLButtonElement);
+  const playPauseBtn = requireEl('#play-pause-btn', HTMLButtonElement);
+  const stepBtn = requireEl('#step-btn', HTMLButtonElement);
+  const speedControlsEl = requireEl('#speed-controls', HTMLElement);
+  const speedButtons = Array.from(
+    speedControlsEl.querySelectorAll<HTMLButtonElement>('.speed-btn'),
+  );
   const viewport = requireEl('#viewport', HTMLElement);
   const mapStatsEl = requireEl('#map-stats', HTMLElement);
   const hoverInfoEl = requireEl('#hover-info', HTMLElement);
   const legendEl = requireEl('#legend', HTMLElement);
+  const hudTickEl = requireEl('#hud-tick', HTMLElement);
+  const hudGenEl = requireEl('#hud-generation', HTMLElement);
+  const hudTpsEl = requireEl('#hud-tps', HTMLElement);
+  const hudPopEl = requireEl('#hud-population', HTMLElement);
+  const hudTribesEl = requireEl('#hud-tribes', HTMLElement);
 
   statusBadge.textContent = statusLine();
   renderLegend(legendEl);
@@ -86,9 +131,70 @@ async function boot(): Promise<void> {
   presetSelect.value = initial.preset;
   seedInput.value = String(initial.seed);
 
-  let currentMap: WorldMap | null = null;
+  let currentMap: TransferableMapData | null = null;
   let currentSeed: Seed = initial.seed;
+  let latestSnapshot: SimSnapshot | null = null;
+  let desiredRunning = initial.running;
+  let desiredSpeed: SimSpeed = initial.speed;
+  let lastControlSeq = 0;
+  let activeRunId = 0;
   let renderCount = 0;
+  let nextHashRequestId = 1;
+  const pendingHashRequests = new Map<number, HashRequestEntry>();
+  let hudTribeNodes: HudTribeNode[] = [];
+
+  let rafId: number | null = null;
+  let fpsWindowStart = performance.now();
+  let fpsFrameCount = 0;
+  let currentFps = 0;
+
+  const nextSeq = (): number => ++lastControlSeq;
+
+  const rejectPendingHashes = (reason: string): void => {
+    for (const entry of pendingHashRequests.values()) {
+      entry.reject(new Error(reason));
+    }
+    pendingHashRequests.clear();
+  };
+
+  const updatePlaybackUi = (): void => {
+    playPauseBtn.textContent = desiredRunning ? 'Pause' : 'Play';
+    playPauseBtn.setAttribute('aria-pressed', String(desiredRunning));
+    for (const btn of speedButtons) {
+      const btnSpeed = parseSpeedParam(btn.dataset['speed'] ?? null);
+      const active = btnSpeed === desiredSpeed;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+      btn.textContent = formatSpeed(btnSpeed);
+    }
+  };
+
+  const updateHud = (): void => {
+    if (latestSnapshot === null) return;
+    hudTickEl.textContent = `Tick ${latestSnapshot.tick}`;
+    hudGenEl.textContent = `Gen ${latestSnapshot.generation}`;
+    hudTpsEl.textContent = `${latestSnapshot.actualTicksPerSec.toFixed(1)} t/s`;
+    hudPopEl.textContent = `Pop ${latestSnapshot.livingCount}`;
+
+    const pops = latestSnapshot.tribePopulations;
+    if (hudTribeNodes.length !== pops.length) {
+      hudTribeNodes = pops.map((_, tribeId) => {
+        const item = document.createElement('span');
+        item.className = 'hud-tribe';
+        const swatch = document.createElement('span');
+        swatch.className = 'hud-swatch';
+        swatch.style.backgroundColor = tribeHex(tribeId);
+        const label = document.createElement('span');
+        item.append(swatch, label);
+        return { item, swatch, label };
+      });
+      hudTribesEl.replaceChildren(...hudTribeNodes.map((n) => n.item));
+    }
+
+    for (let tribeId = 0; tribeId < pops.length; tribeId++) {
+      hudTribeNodes[tribeId]!.label.textContent = `${tribeName(tribeId)} ${pops[tribeId]!}`;
+    }
+  };
 
   const updateStats = (): void => {
     if (currentMap === null) return;
@@ -119,24 +225,60 @@ async function boot(): Promise<void> {
     onViewChange: updateStats,
   });
 
-  const generateAndRender = (preset: MapPresetId, rawSeed: string | Seed): void => {
-    const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
-    currentSeed = seed;
-    seedInput.value = String(seed);
-    presetSelect.value = preset;
-
-    currentMap = generateMap({ preset, seed });
-    mapView.setMap(currentMap);
-    mapView.setOverlaysVisible(overlaysToggle.checked);
-    renderCount++;
-    syncUrlParams(preset, seed);
-    updateStats();
-    updateHover(null);
+  const stopRaf = (): void => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    currentFps = 0;
+    fpsFrameCount = 0;
   };
 
+  const onAnimationFrame = (nowMs: number): void => {
+    rafId = null;
+    const frame = mapView.renderInterpolatedFrame(nowMs);
+    if (frame.rendered) {
+      fpsFrameCount++;
+    }
+    const elapsed = nowMs - fpsWindowStart;
+    if (elapsed >= 500) {
+      currentFps = (fpsFrameCount * 1000) / elapsed;
+      fpsWindowStart = nowMs;
+      fpsFrameCount = 0;
+    }
+
+    if ((latestSnapshot?.running ?? false) || frame.needsMoreFrames) {
+      rafId = requestAnimationFrame(onAnimationFrame);
+    } else {
+      currentFps = 0;
+      fpsFrameCount = 0;
+    }
+  };
+
+  const ensureRafRunning = (): void => {
+    if (rafId === null) {
+      fpsWindowStart = performance.now();
+      fpsFrameCount = 0;
+      rafId = requestAnimationFrame(onAnimationFrame);
+    }
+  };
+
+  const worker = new Worker(new URL('./worker/sim.worker.ts', import.meta.url), { type: 'module' });
+
+  const postToWorker = (msg: MainToWorkerMessage): void => {
+    worker.postMessage(msg);
+  };
+
+  let resolveInitialReady: (() => void) | null = null;
+  let rejectInitialReady: ((err: Error) => void) | null = null;
+  const initialReadyPromise = new Promise<void>((resolve, reject) => {
+    resolveInitialReady = resolve;
+    rejectInitialReady = reject;
+  });
+
   const getState = (): EvolutionIslandDebugState => {
-    if (currentMap === null) {
-      throw new Error('Map has not been generated yet');
+    if (currentMap === null || latestSnapshot === null) {
+      throw new Error('Simulation has not finished initializing');
     }
     return {
       simVersion: SIM_VERSION,
@@ -148,8 +290,16 @@ async function boot(): Promise<void> {
       walkableCount: currentMap.walkableCount,
       tribeCount: currentMap.spawnZones.length,
       hotspotCount: currentMap.hotspots.length,
-      tick: 0,
-      population: 0,
+      tick: latestSnapshot.tick,
+      generation: latestSnapshot.generation,
+      population: latestSnapshot.livingCount,
+      tribePopulations: latestSnapshot.tribePopulations,
+      running: latestSnapshot.running,
+      speed: latestSnapshot.speed,
+      actualTicksPerSec: latestSnapshot.actualTicksPerSec,
+      worldHash: latestSnapshot.worldHash,
+      renderedCreatureCount: mapView.getRenderedCreatureCount(),
+      fps: currentFps,
       chunkCount: mapView.getChunkCount(),
       visibleChunkCount: mapView.getVisibleChunkCount(),
       renderCount,
@@ -188,10 +338,34 @@ async function boot(): Promise<void> {
       return getState().hotspotCount;
     },
     get tick() {
-      return 0;
+      return getState().tick;
+    },
+    get generation() {
+      return getState().generation;
     },
     get population() {
-      return 0;
+      return getState().population;
+    },
+    get tribePopulations() {
+      return getState().tribePopulations;
+    },
+    get running() {
+      return getState().running;
+    },
+    get speed() {
+      return getState().speed;
+    },
+    get actualTicksPerSec() {
+      return getState().actualTicksPerSec;
+    },
+    get worldHash() {
+      return getState().worldHash;
+    },
+    get renderedCreatureCount() {
+      return getState().renderedCreatureCount;
+    },
+    get fps() {
+      return getState().fps;
     },
     get chunkCount() {
       return getState().chunkCount;
@@ -212,12 +386,207 @@ async function boot(): Promise<void> {
       return getState().camera;
     },
     getState,
+    pauseAtTick(targetTick: number | null) {
+      postToWorker({
+        type: 'setPauseAtTick',
+        runId: activeRunId,
+        seq: nextSeq(),
+        targetTick,
+      });
+    },
+    requestHash() {
+      const requestId = nextHashRequestId++;
+      return new Promise((resolve, reject) => {
+        pendingHashRequests.set(requestId, { resolve, reject });
+        postToWorker({ type: 'requestHash', runId: activeRunId, requestId });
+      });
+    },
   };
 
+  worker.addEventListener('message', (event: MessageEvent<WorkerToMainMessage>) => {
+    const msg = event.data;
+
+    if (msg.type === 'ready') {
+      if (msg.runId !== activeRunId) return;
+      currentMap = msg.map;
+      currentSeed = msg.seed;
+      latestSnapshot = msg.snapshot;
+      if (msg.snapshot.ackSeq >= lastControlSeq) {
+        desiredRunning = msg.snapshot.running;
+        desiredSpeed = msg.snapshot.speed;
+      }
+
+      mapView.setMap(msg.map);
+      mapView.setOverlaysVisible(overlaysToggle.checked);
+      mapView.setCreatureSnapshot(
+        msg.snapshot.creatures,
+        performance.now(),
+        msg.snapshot.tickDurationMs,
+        msg.snapshot.running,
+        true,
+      );
+      renderCount++;
+      updateStats();
+      updateHover(null);
+      updateHud();
+      updatePlaybackUi();
+      if (msg.snapshot.running) {
+        ensureRafRunning();
+      } else {
+        stopRaf();
+      }
+      window.__ei = debugHook;
+      resolveInitialReady?.();
+      resolveInitialReady = null;
+      rejectInitialReady = null;
+      return;
+    }
+
+    if (msg.type === 'snapshot') {
+      if (msg.snapshot.runId !== activeRunId) return;
+      latestSnapshot = msg.snapshot;
+      if (msg.snapshot.ackSeq >= lastControlSeq) {
+        desiredRunning = msg.snapshot.running;
+        desiredSpeed = msg.snapshot.speed;
+      }
+      // Coalesce running-frame renders in RAF; render synchronously on pause/step for instant feedback.
+      mapView.setCreatureSnapshot(
+        msg.snapshot.creatures,
+        performance.now(),
+        msg.snapshot.tickDurationMs,
+        msg.snapshot.running,
+        !msg.snapshot.running,
+      );
+      updateHud();
+      updatePlaybackUi();
+      if (msg.snapshot.running) {
+        ensureRafRunning();
+      }
+      return;
+    }
+
+    if (msg.type === 'hash') {
+      if (msg.runId !== activeRunId) return;
+      const entry = pendingHashRequests.get(msg.requestId);
+      if (entry !== undefined) {
+        pendingHashRequests.delete(msg.requestId);
+        entry.resolve({ tick: msg.tick, worldHash: msg.worldHash });
+      }
+      return;
+    }
+
+    if (msg.runId === activeRunId) {
+      stopRaf();
+      rejectPendingHashes(msg.message);
+      rejectInitialReady?.(new Error(msg.message));
+      resolveInitialReady = null;
+      rejectInitialReady = null;
+      showFatalError(msg.message);
+    }
+  });
+
+  worker.addEventListener('error', (event) => {
+    const errMsg = event.message || 'Simulation worker crashed';
+    stopRaf();
+    rejectPendingHashes(errMsg);
+    rejectInitialReady?.(new Error(errMsg));
+    resolveInitialReady = null;
+    rejectInitialReady = null;
+    showFatalError(errMsg);
+  });
+
+  const generateAndRun = (preset: MapPresetId, rawSeed: string | Seed): void => {
+    const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
+    seedInput.value = String(seed);
+    presetSelect.value = preset;
+    syncUrlParams(preset, seed);
+
+    activeRunId++;
+    rejectPendingHashes('Simulation restarted');
+    postToWorker({
+      type: 'init',
+      runId: activeRunId,
+      seq: nextSeq(),
+      preset,
+      seed,
+      speed: desiredSpeed,
+      running: desiredRunning,
+      pauseAtTick: null,
+    });
+  };
+
+  const togglePlayPause = (): void => {
+    const nextRunning = !desiredRunning;
+    desiredRunning = nextRunning;
+    updatePlaybackUi();
+    postToWorker({
+      type: 'setRunning',
+      runId: activeRunId,
+      seq: nextSeq(),
+      running: nextRunning,
+    });
+  };
+
+  const blurMouseTarget = (event: MouseEvent): void => {
+    if (event.detail > 0 && event.currentTarget instanceof HTMLElement) {
+      event.currentTarget.blur();
+    }
+  };
+
+  playPauseBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    togglePlayPause();
+  });
+
+  stepBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    desiredRunning = false;
+    updatePlaybackUi();
+    postToWorker({ type: 'step', runId: activeRunId, seq: nextSeq(), ticks: 1 });
+  });
+
+  for (const btn of speedButtons) {
+    btn.addEventListener('click', (event) => {
+      blurMouseTarget(event);
+      const nextSpeed = parseSpeedParam(btn.dataset['speed'] ?? null);
+      desiredSpeed = nextSpeed;
+      updatePlaybackUi();
+      postToWorker({
+        type: 'setSpeed',
+        runId: activeRunId,
+        seq: nextSeq(),
+        speed: nextSpeed,
+      });
+    });
+  }
+
+  viewport.addEventListener('pointerdown', () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) {
+      active.blur();
+    }
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.code !== 'Space' || event.repeat) return;
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLSelectElement ||
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLButtonElement
+    ) {
+      return;
+    }
+    event.preventDefault();
+    togglePlayPause();
+  });
+
   presetSelect.addEventListener('change', () => {
+    presetSelect.blur();
     const val = presetSelect.value;
     if (isMapPresetId(val)) {
-      generateAndRender(val, seedInput.value);
+      generateAndRun(val, seedInput.value);
     }
   });
 
@@ -225,15 +594,16 @@ async function boot(): Promise<void> {
     event.preventDefault();
     const val = presetSelect.value;
     if (isMapPresetId(val)) {
-      generateAndRender(val, seedInput.value);
+      generateAndRun(val, seedInput.value);
     }
   });
 
-  randomBtn.addEventListener('click', () => {
+  randomBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
     const nextSeed = Math.floor(Math.random() * 1_000_000);
     const val = presetSelect.value;
     if (isMapPresetId(val)) {
-      generateAndRender(val, nextSeed);
+      generateAndRun(val, nextSeed);
     }
   });
 
@@ -241,12 +611,21 @@ async function boot(): Promise<void> {
     mapView.setOverlaysVisible(overlaysToggle.checked);
   });
 
-  resetViewBtn.addEventListener('click', () => {
+  resetViewBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
     mapView.resetView();
   });
 
-  generateAndRender(initial.preset, initial.seed);
-  window.__ei = debugHook;
+  window.addEventListener('beforeunload', () => {
+    stopRaf();
+    rejectPendingHashes('Viewer unloaded');
+    worker.terminate();
+    mapView.destroy();
+  });
+
+  updatePlaybackUi();
+  generateAndRun(initial.preset, initial.seed);
+  await initialReadyPromise;
 }
 
 boot().catch((error: unknown) => {
