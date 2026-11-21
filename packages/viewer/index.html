@@ -6,7 +6,51 @@
     <title>Evolution Island</title>
   </head>
   <body>
-    <main id="app"></main>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <h1>Evolution Island</h1>
+          <span id="status-badge" class="badge"></span>
+        </div>
+
+        <form id="map-controls" class="controls">
+          <label class="field">
+            <span>Preset</span>
+            <select id="preset-select" name="preset">
+              <option value="small">Small (64×64)</option>
+              <option value="medium" selected>Medium (128×128)</option>
+              <option value="large">Large (256×256)</option>
+              <option value="huge">Huge (512×512)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Seed</span>
+            <input id="seed-input" name="seed" type="text" value="42" spellcheck="false" />
+          </label>
+
+          <button id="generate-btn" type="submit" class="btn btn-primary">Generate</button>
+          <button id="random-btn" type="button" class="btn">Random</button>
+
+          <label class="toggle">
+            <input id="overlays-toggle" type="checkbox" checked />
+            <span>Overlays</span>
+          </label>
+
+          <button id="reset-view-btn" type="button" class="btn">Reset View</button>
+        </form>
+      </header>
+
+      <main id="viewport" aria-label="Evolution Island map canvas"></main>
+
+      <footer class="statusbar">
+        <div id="map-stats" class="stats"></div>
+        <div id="hover-info" class="hover-info">
+          Drag to pan · Scroll to zoom · Double-click to fit
+        </div>
+        <div id="legend" class="legend"></div>
+      </footer>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

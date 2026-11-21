@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@evolution-island/shared": "workspace:*",
-    "@evolution-island/sim-core": "workspace:*"
+    "@evolution-island/sim-core": "workspace:*",
+    "pixi.js": "^8.23.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
