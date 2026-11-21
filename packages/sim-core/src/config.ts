@@ -57,9 +57,34 @@ export interface MapGenConfig {
   readonly maxGenerationAttempts: number;
 }
 
+export interface CreatureConfig {
+  readonly maxHealth: number;
+  readonly maxEnergy: number;
+  readonly maxHydration: number;
+  readonly baseEnergyDrain: number;
+  readonly baseHydrationDrain: number;
+  readonly moveEnergyCost: number;
+  readonly slowTileMoveMultiplier: number;
+  readonly slowTileMoveCooldown: number;
+  readonly starvationHealthDrain: number;
+  readonly dehydrationHealthDrain: number;
+  readonly healthRegenRate: number;
+  readonly regenThresholdRatio: number;
+  readonly eatBiteSize: number;
+  readonly drinkBiteSize: number;
+  readonly attackEnergyCost: number;
+  readonly maxAgeMultiplier: number;
+}
+
+export interface FoodConfig {
+  readonly regrowthRate: number;
+}
+
 export interface SimConfig {
   readonly presets: Readonly<Record<MapPresetId, MapPreset>>;
   readonly map: MapGenConfig;
+  readonly creature: CreatureConfig;
+  readonly food: FoodConfig;
 }
 
 export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
@@ -162,5 +187,26 @@ export const DEFAULT_CONFIG: SimConfig = {
     targetFairnessWaterTiles: 12,
     spawnCapacityMultiplier: 2,
     maxGenerationAttempts: 64,
+  },
+  creature: {
+    maxHealth: 100,
+    maxEnergy: 100,
+    maxHydration: 100,
+    baseEnergyDrain: 0.25,
+    baseHydrationDrain: 0.3,
+    moveEnergyCost: 0.35,
+    slowTileMoveMultiplier: 2,
+    slowTileMoveCooldown: 1,
+    starvationHealthDrain: 0.5,
+    dehydrationHealthDrain: 0.5,
+    healthRegenRate: 0.25,
+    regenThresholdRatio: 0.5,
+    eatBiteSize: 20,
+    drinkBiteSize: 25,
+    attackEnergyCost: 0.5,
+    maxAgeMultiplier: 2,
+  },
+  food: {
+    regrowthRate: 0.15,
   },
 };

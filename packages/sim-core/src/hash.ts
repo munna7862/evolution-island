@@ -1,6 +1,8 @@
 import type { MapPresetId, SimConfig } from './config.js';
 import type { WorldMap } from './map/types.js';
 import { normalizeSeed } from './rng.js';
+import { SIM_VERSION } from './version.js';
+import type { World } from './world.js';
 
 const PRESET_ORDER: readonly MapPresetId[] = ['small', 'medium', 'large', 'huge'];
 
@@ -185,6 +187,26 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(m.spawnCapacityMultiplier)
     .writeUint32(m.maxGenerationAttempts);
 
+  const c = config.creature;
+  hasher
+    .writeFloat64(c.maxHealth)
+    .writeFloat64(c.maxEnergy)
+    .writeFloat64(c.maxHydration)
+    .writeFloat64(c.baseEnergyDrain)
+    .writeFloat64(c.baseHydrationDrain)
+    .writeFloat64(c.moveEnergyCost)
+    .writeFloat64(c.slowTileMoveMultiplier)
+    .writeUint32(c.slowTileMoveCooldown)
+    .writeFloat64(c.starvationHealthDrain)
+    .writeFloat64(c.dehydrationHealthDrain)
+    .writeFloat64(c.healthRegenRate)
+    .writeFloat64(c.regenThresholdRatio)
+    .writeFloat64(c.eatBiteSize)
+    .writeFloat64(c.drinkBiteSize)
+    .writeFloat64(c.attackEnergyCost)
+    .writeFloat64(c.maxAgeMultiplier)
+    .writeFloat64(config.food.regrowthRate);
+
   return hasher.digest();
 }
 
@@ -218,6 +240,57 @@ export function hashMap(map: Omit<WorldMap, 'hash'>): string {
   hasher.writeUint32(map.hotspots.length);
   for (const spot of map.hotspots) {
     hasher.writeInt32(spot.x).writeInt32(spot.y).writeFloat64(spot.radius);
+  }
+
+  return hasher.digest();
+}
+
+export function hashWorld(world: World): string {
+  const hasher = new StateHasher();
+  hasher
+    .writeUint32(SIM_VERSION)
+    .writeString(world.preset)
+    .writeString(normalizeSeed(world.seed))
+    .writeString(hashConfig(world.config))
+    .writeUint32(world.maxAge)
+    .writeUint32(world.tickCount)
+    .writeUint32(world.generation)
+    .writeUint32(world.livingCount)
+    .writeString(world.map.hash)
+    .writeFloat32Array(world.map.food);
+
+  for (const state of [
+    world.rng.spawn.getState(),
+    world.rng.evolution.getState(),
+    world.rng.tick.getState(),
+  ]) {
+    hasher.writeUint32(state[0]).writeUint32(state[1]).writeUint32(state[2]).writeUint32(state[3]);
+  }
+
+  hasher.writeUint32(world.creatures.length);
+  for (const c of world.creatures) {
+    hasher
+      .writeUint32(c.id)
+      .writeUint32(c.tribeId)
+      .writeInt32(c.x)
+      .writeInt32(c.y)
+      .writeInt32(c.prevX)
+      .writeInt32(c.prevY)
+      .writeInt32(c.lastMoveDir)
+      .writeFloat64(c.health)
+      .writeFloat64(c.energy)
+      .writeFloat64(c.hydration)
+      .writeUint32(c.age)
+      .writeBoolean(c.alive)
+      .writeUint32(c.moveCooldown)
+      .writeUint32(c.intent)
+      .writeUint32(c.lastAction)
+      .writeUint32(c.stats.ticksAlive)
+      .writeFloat64(c.stats.foodEaten)
+      .writeFloat64(c.stats.waterDrunk)
+      .writeUint32(c.stats.kills)
+      .writeFloat64(c.stats.alliesHelped)
+      .writeUint32(c.stats.callsMade);
   }
 
   return hasher.digest();
