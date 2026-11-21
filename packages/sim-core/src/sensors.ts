@@ -131,18 +131,24 @@ export function readSensors(world: World, creature: Creature, out?: Float32Array
   const forestVr = vr * forestMult;
   const forestVr2 = forestVr * forestVr;
 
-  // 3–4: Nearest visible food tile offset / visionRadius (0, 0 if none).
+  // 3–4: Offset / visionRadius to the nearest *other* tile within vision holding at least
+  // minVisibleFood (0, 0 if none). The own tile is excluded — input 13 reports it — so (0, 0)
+  // always means "no worthwhile food in sight".
   let foodDxOut = 0;
   let foodDyOut = 0;
+  // One comparison per tile: `food >= minFood` with minFood > 0 also implies `food > 0`.
+  const cfgMinFood = sensorCfg.minVisibleFood;
+  const minFood = Number.isFinite(cfgMinFood) && cfgMinFood > 0 ? cfgMinFood : Number.MIN_VALUE;
   const ring = getFoodRingOffsets(vr);
   const rDx = ring.dx;
   const rDy = ring.dy;
-  for (let i = 0; i < ring.count; i++) {
+  // ring[0] is always the own tile: (0, 0) is the only offset with d² = 0, so it sorts first.
+  for (let i = 1; i < ring.count; i++) {
     const ox = rDx[i]!;
     const oy = rDy[i]!;
     const tx = cx + ox;
     const ty = cy + oy;
-    if (tx >= 0 && tx < width && ty >= 0 && ty < height && food[ty * width + tx]! > 0) {
+    if (tx >= 0 && tx < width && ty >= 0 && ty < height && food[ty * width + tx]! >= minFood) {
       foodDxOut = ox * invVr;
       foodDyOut = oy * invVr;
       break;

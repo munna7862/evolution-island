@@ -209,7 +209,8 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.sensor.visionRadius)
     .writeFloat64(config.sensor.forestVisionMultiplier)
     .writeFloat64(config.sensor.countNormalization)
-    .writeFloat64(config.sensor.foodNormalization);
+    .writeFloat64(config.sensor.foodNormalization)
+    .writeFloat64(config.sensor.minVisibleFood);
 
   return hasher.digest();
 }
@@ -267,6 +268,7 @@ export function hashWorld(world: World): string {
     world.rng.spawn.getState(),
     world.rng.evolution.getState(),
     world.rng.tick.getState(),
+    world.rng.policy.getState(),
   ]) {
     hasher.writeUint32(state[0]).writeUint32(state[1]).writeUint32(state[2]).writeUint32(state[3]);
   }

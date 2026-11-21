@@ -334,13 +334,6 @@ export class SimRunner {
     return Math.ceil(1000 / (this.speed * BASE_TICKS_PER_SECOND));
   }
 
-  private currentTickDurationMs(): number {
-    if (!this.running || this.speed === 'max' || this.speed > 5) {
-      return 0;
-    }
-    return 1000 / (this.speed * BASE_TICKS_PER_SECOND);
-  }
-
   private updateTps(ticksRun: number, nowMs: number): void {
     if (ticksRun > 0) {
       this.tpsWindowTicks += ticksRun;

@@ -10,9 +10,10 @@ import { SpatialGrid } from './spatial-grid.js';
 export const NO_CREATURE = -1;
 
 /**
- * Policy callback evaluated in Phase A for every living creature.
- * Note: Phase 2's placeholder `randomActionPolicy` draws from `world.rng.tick`;
- * Phase 3 neural-network policies are pure functions of creature sensors.
+ * Policy callback evaluated in Phase A for every living creature. `rng` is the dedicated
+ * `world.rng.policy` stream, never the tick stream, so a policy's draws cannot change the
+ * Phase B shuffle (CLAUDE.md: never share one stream between systems). Phase 3
+ * neural-network policies are pure functions of creature sensors and ignore it.
  */
 export type DecisionPolicy = (world: World, creature: Creature, rng: RngStream) => Action;
 
@@ -253,7 +254,7 @@ export class World implements ActionWorldContext {
       if (!creature.alive) continue;
       creature.prevX = creature.x;
       creature.prevY = creature.y;
-      creature.intent = this.policy(this, creature, this.rng.tick);
+      creature.intent = this.policy(this, creature, this.rng.policy);
       living.push(creature);
     }
 

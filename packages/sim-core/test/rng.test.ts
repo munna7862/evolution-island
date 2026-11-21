@@ -98,6 +98,7 @@ describe('RngStream (sfc32)', () => {
       expect(mutated.spawn.nextUint32()).toBe(baseline.spawn.nextUint32());
       expect(mutated.evolution.nextUint32()).toBe(baseline.evolution.nextUint32());
       expect(mutated.tick.nextUint32()).toBe(baseline.tick.nextUint32());
+      expect(mutated.policy.nextUint32()).toBe(baseline.policy.nextUint32());
     }
 
     const d1 = deriveRngStream('a::b', 'c');

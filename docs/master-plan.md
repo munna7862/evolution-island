@@ -41,7 +41,7 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 
 ¹ *Slow* = entering the tile costs 2× movement energy and the creature cannot move again on the next tick.
 
-- **Resources:** food is a per-tile amount (0..max) on grass/forest (a little on sand) that **regrows** toward its max; water is infinite. `DRINK` works when on or next to any water tile.
+- **Resources:** food is a per-tile amount (0..max) on grass/forest (a little on sand) that **regrows** toward its max; water is infinite. `DRINK` works when on or 4-adjacent to any water tile (N/E/S/W, matching movement).
 - **Contested hotspots:** a few high-yield food patches ("oases") placed roughly equidistant between start zones, so tribes have a reason to meet (like contested resources in AoE).
 - **Climate cycle (later phase):** summer/winter phases within a generation; winter slows food regrowth → scarcity pressure. *(The word "season" is reserved for climate; the evolution unit is a "generation", §2.5.)*
 
@@ -55,7 +55,7 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 | Huge   | 512×512 | 8      | 150                       | 1,200 | 4,000 ticks       | Epic long runs, highlights     |
 
 **Rules:**
-- Keep density roughly constant (~1 creature per 80–220 tiles at starting population; re-check against *walkable* tiles once the generator exists); scale food with map area.
+- Keep density roughly constant; scale food with map area. *Measured on the generator (Sprint 1.1):* ~29–32 **walkable** tiles per starting creature on Small/Medium, ~50 on Large, ~77 on Huge (the 80–220 first estimated counted raw grid tiles, including the deep-water ring). Accepted for now: food regrowth capacity is several times what the starting population burns (Small: ~1,170 food tiles × 0.15 regrowth/tick ≈ 175 energy/tick vs ~30/tick needed by 50 creatures). Revisit in Sprint 3.4 tuning if crowding or the population cap (2× start) makes Small/Medium too tight.
 - Minimum **25 creatures per tribe** for genetic diversity (except in battle-royale mode).
 - **Population cap per tribe** = 2× starting size, so no tribe can flood the map. Tribe sizes are re-allocated by performance each generation (§2.5), so the *total* stays roughly constant. On Small (2 tribes × 25, minimum 25) there is no room to re-allocate, so tribe sizes stay fixed there — fine for a dev map.
 - Tribes spawn in balanced, spread-out start zones (like AoE player starts). The generator checks that all zones are connected by walkable tiles, that each zone has similar food and water within radius R (±15%), and that each zone has free walkable tiles for at least 2× the tribe's population cap (one creature per tile). If not, it retries with the next derived seed (still deterministic).
@@ -77,7 +77,7 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 1. Own energy
 2. Own hydration
 3. Own health
-4–5. Offset (dx, dy) ÷ visionRadius to nearest visible food tile (0, 0 if none)
+4–5. Offset (dx, dy) ÷ visionRadius to the nearest *other* tile in vision holding at least `minVisibleFood` (default: one full bite) (0, 0 if none). The own tile is left to input 14.
 6–7. Offset to nearest water within vision (0, 0 if none) — creatures can't sense water they can't see
 8–9. Offset to nearest ally
 10–11. Offset to nearest enemy
@@ -89,7 +89,9 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 17. Enemy adjacent (1 if an enemy is in the 8 surrounding tiles) — *"can I ATTACK?"*
 18. Bias (constant 1)
 
-*Why flags instead of one "tile type" number:* a single number for a category implies a fake ordering (sand < grass < forest) that the network has to unlearn. Flags 14–15 also remove the ambiguity of a (0, 0) food/water offset meaning both "none visible" and "standing on it". Ally/enemy (0, 0) is unambiguous because tiles hold one creature.
+*Why flags instead of one "tile type" number:* a single number for a category implies a fake ordering (sand < grass < forest) that the network has to unlearn. Flags 14–15 also remove the ambiguity of a (0, 0) food/water offset meaning both "none visible" and "standing on it"; the food offset skips the own tile entirely, so its (0, 0) always means "no worthwhile food in sight". Ally/enemy (0, 0) is unambiguous because tiles hold one creature.
+
+*Why a food threshold:* almost every land tile carries some food, and grazed tiles start regrowing at once, so "nearest tile with any food" read (0, 0) for 78–90% of creatures on Small/Medium. Requiring one full bite turns it into a direction to the next real meal.
 
 *Optional:* memory and signal inputs (see **Memory & signals** below); an oscillator input (idea only).
 
@@ -535,14 +537,14 @@ Notes:
 ## 10. Open Decisions
 Most should be settled before/during Phase 1; later ones say when. Defaults are proposed so work can start; change them in the sprint retro if needed.
 - [ ] Final game name
-- [ ] Top-down pixel art vs simple coloured shapes for creatures (default: start with shapes)
+- [x] Top-down pixel art vs simple coloured shapes for creatures: simple coloured shapes (implemented Sprint 2.3)
 - [ ] Generation length per preset (defaults in §2.2)
 - [ ] Extinction mode default: respawn (default) vs battle royale
-- [ ] Tribe names & colours (use a colour-blind-safe palette plus a distinct shape per tribe)
+- [x] Tribe names & colours: Okabe-Ito-based colour-blind-safe palette plus a distinct shape per tribe; names Amber, Sky, Vermilion, Orchid, Gold, Emerald, Cobalt, Ivory (implemented Sprint 2.3)
 - [ ] Generational (default for v1, world resets each generation) vs **continuous mode** (births when energy is high, death by old age, no reset). Continuous is more alive to watch on Large/Huge but harder to tune; revisit after Phase 4.
-- [ ] Tile occupancy: one creature per tile (default) vs stacking
+- [x] Tile occupancy: one creature per tile (implemented Sprint 2.1)
 - [ ] Can enemies overhear calls? (default: no; eavesdropping is a later experiment — decide before Sprint 4.3)
-- [ ] Speed: 1× = 10 ticks/sec (default)
+- [x] Speed: 1× = 10 ticks/sec (implemented Sprint 2.3)
 - [x] License: MIT, public repo on GitHub (decided 2026-11-21)
 
 ---
@@ -591,3 +593,11 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 
 **2026-11-21 — Sprint 1.1 (self-contained simplex noise)**
 - §3.1 updated: instead of adding `simplex-noise` as an external dependency, `sim-core` includes a self-contained pure-TS 2D simplex noise implementation (`packages/sim-core/src/map/simplex.ts`) using only allow-listed `Math` members so the ESLint determinism guard checks every line.
+
+**2026-11-21 — Phase 2 close-out** (`simVersion` 2 → 3)
+- §2.3: the food-direction sensor (inputs 4–5) now targets the nearest *other* tile holding at least `minVisibleFood` (config, default one bite). Before, it read (0, 0) for 78–90% of creatures; after, for none on the same seeds.
+- `DRINK` and input 15 count water on or **4-adjacent** to the creature (matching 4-way movement), as implemented since Sprint 2.1.
+- Decision policies get their own `policy` RNG stream; the tick stream is used only for the Phase B shuffle.
+- §2.2: density rule restated against walkable tiles with measured values; current density accepted until Sprint 3.4 tuning.
+- §10: shapes, tribe names & colours, one creature per tile and 1× = 10 ticks/sec ticked (all implemented in Phase 2).
+- Golden state hashes for one fixed scenario are pinned in `packages/sim-core/test/golden-hashes.ts` and checked in Node and Chromium; a behaviour change without a `simVersion` bump now fails the tests.
