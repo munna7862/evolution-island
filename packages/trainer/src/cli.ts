@@ -1,4 +1,22 @@
 #!/usr/bin/env node
-import { banner } from './banner.js';
+import { availableParallelism } from 'node:os';
+import { main } from './main.js';
+import { trainSeed } from './train-seed.js';
+import { runSeedInWorker } from './worker-runner.js';
 
-console.log(banner());
+process.exitCode = await main(
+  process.argv.slice(2),
+  {
+    log: (line) => {
+      console.log(line);
+    },
+    error: (line) => {
+      console.error(line);
+    },
+    cpus: availableParallelism(),
+  },
+  {
+    inProcess: (job, onProgress) => Promise.resolve(trainSeed(job, onProgress)),
+    inWorker: runSeedInWorker,
+  },
+);

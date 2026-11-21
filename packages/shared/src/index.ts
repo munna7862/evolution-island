@@ -10,6 +10,33 @@ export {
   type GenomeFileErrorReason,
   type LoadedGenome,
 } from './genome-file.js';
+export {
+  assertCheckpointCompatible,
+  CHECKPOINT_FILE_FORMAT,
+  CHECKPOINT_FILE_NAME,
+  CHECKPOINTS_DIR_NAME,
+  checkpointDirName,
+  checkpointStart,
+  hallOfFameFileName,
+  parseCheckpoint,
+  parseRunManifest,
+  RUN_FILE_FORMAT,
+  RUN_FILES_VERSION,
+  RUN_MANIFEST_NAME,
+  RunFileError,
+  serializeCheckpoint,
+  serializeRunManifest,
+  type CheckpointContent,
+  type CheckpointExpectations,
+  type CheckpointFile,
+  type CheckpointHallOfFameEntry,
+  type CheckpointTribe,
+  type RunFileErrorReason,
+  type RunManifest,
+  type RunManifestContent,
+  type RunManifestInfo,
+  type RunTiming,
+} from './run-files.js';
 export { parseSeed } from './seed.js';
 export { simVersionLabel } from './version-label.js';
 export {

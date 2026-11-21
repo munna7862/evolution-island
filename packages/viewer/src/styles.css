@@ -298,3 +298,41 @@ body {
   border-radius: 2px;
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
+
+/* Trained runs (Sprint 3.3): load a run folder, pick a saved generation. */
+.run-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.run-info {
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 36ch;
+}
+
+.run-info.is-error {
+  color: #f87171;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: rgba(11, 19, 30, 0.75);
+  color: var(--text);
+  font-size: 1.1rem;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.drop-overlay[hidden],
+.field[hidden] {
+  display: none;
+}

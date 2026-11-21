@@ -613,3 +613,8 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - §2.5 extinction: an extinct tribe's next generation is its best hall-of-fame genome plus offspring of its own members. Before, the whole hall of fame was ranked ahead of the members, filled 5 of the 6 truncation parent slots and both elite slots, and a tribe that had not had a survivor yet stopped learning (Small seed 42: tribe 1 was extinct in 50 of 50 generations, benchmark 498 → 515). Over 29 Small seeds × 50 generations, tribes improving > 1.1× went from 29/58 to 37/58.
 - §2.5 tribe sizes: one scale factor for all tribes (exact clamped proportional split). The old fix-low-then-cap-high loop never gave the low tribes what the cap freed, so Medium lost 25 creatures whenever one tribe out-scored the rest (e.g. scores 750/125/125/125 → 100/25/25/25).
 - For Sprint 4.2: tribe score is absolute (survivors + food), so a tribe at `popCap` out-scores equally good smaller tribes and tends to stay at the cap; consider a per-member score there.
+
+**2026-11-21 — Sprint 3.3 (headless trainer CLI)**
+- Run folder layout fixed: `run.json` (manifest + full config), `stats.json`/`stats.csv`, and `checkpoints/gen-NNNN/` holding `checkpoint.json` plus each tribe's hall-of-fame genomes as genome files; saved at generation 1, every `--save-every` generations and the last one.
+- A checkpoint at generation N is the state after generation N: hall of fame + next sizes. The viewer plays it as "Gen N" (creature i runs hall-of-fame genome i mod K) with an `EvolutionRun` that keeps evolving; it is not a replay (Sprint 5.2).
+- §3.6 trainer targets met with room to spare: 500 generations in 25 s on Small (≈ 30,000 ticks/s) and 2 min on Medium (≈ 8,400 ticks/s).

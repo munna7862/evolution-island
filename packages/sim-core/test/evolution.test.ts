@@ -10,6 +10,7 @@ import {
   createCreature,
   createEvolutionRun,
   createRngStream,
+  createRngStreams,
   createWorld,
   createZeroGenome,
   DEFAULT_CONFIG,
@@ -25,6 +26,7 @@ import {
   SensorIndex,
   weightCount,
   type EvolutionConfig,
+  type EvolutionStart,
   type EvolutionRun,
   type HallOfFameEntry,
   type MapPreset,
@@ -357,6 +359,98 @@ describe('EvolutionRun', () => {
       expect(Math.max(...c.genome)).toBeLessThan(EVO.initialWeightRange);
       expect(Math.min(...c.genome)).toBeGreaterThanOrEqual(-EVO.initialWeightRange);
     }
+  });
+
+  describe('start from given genomes (Sprint 3.3: playing a saved checkpoint)', () => {
+    const hofEntry = (value: number, benchmarkScore: number, generation: number) => ({
+      genome: genomeOf(value),
+      benchmarkScore,
+      generation,
+    });
+    const start = (): EvolutionStart => ({
+      generation: 30,
+      tribes: [
+        {
+          tribeId: 1,
+          alive: true,
+          genomes: [genomeOf(0.3), genomeOf(-0.3), genomeOf(0.3)],
+          hallOfFame: [hofEntry(0.3, 700, 20), hofEntry(-0.3, 650, 10)],
+        },
+        {
+          tribeId: 0,
+          alive: true,
+          genomes: Array.from({ length: 27 }, (_, i) => genomeOf(i / 100)),
+          hallOfFame: [hofEntry(0.5, 500, 30), hofEntry(0.7, 900, 10)],
+        },
+      ],
+    });
+
+    it('spawns the given genomes in order with the given sizes and hall of fame, drawing nothing', () => {
+      const run = createEvolutionRun({ preset: 'small', seed: 5, start: start() });
+      expect(run.generation).toBe(30);
+      expect(run.tribes.map((t) => [t.id, t.size, t.alive])).toEqual([
+        [0, 27, true],
+        [1, 3, true],
+      ]);
+      expect(tribeGenomes(run, 0)).toEqual(start().tribes[1]!.genomes);
+      expect(tribeGenomes(run, 1)).toEqual(start().tribes[0]!.genomes);
+      // Hall of fame re-sorted best first and copied (not the caller's arrays).
+      const hof0 = run.tribes[0]!.hallOfFame;
+      expect(hof0.map((e) => [e.benchmarkScore, e.generation])).toEqual([
+        [900, 10],
+        [500, 30],
+      ]);
+      const fresh = createRngStreams(5).evolution.getState();
+      expect(run.world.rng.evolution.getState()).toEqual(fresh);
+    });
+
+    it('evolves on from the given genomes', () => {
+      const run = createEvolutionRun({
+        preset: 'small',
+        seed: 5,
+        config: smallConfig({ generationLength: 20 }),
+        start: start(),
+      });
+      run.runGeneration();
+      expect(run.generation).toBe(31);
+      expect(run.tribes[0]!.history[0]!.generation).toBe(30);
+      expect(run.tribes[0]!.history[0]!.population).toBe(27);
+      // 30 is a benchmark generation; the given hall of fame is kept and extended.
+      expect(run.tribes[0]!.hallOfFame.length).toBeGreaterThanOrEqual(2);
+      expect(run.world.creatures.length).toBe(run.tribes[0]!.size + run.tribes[1]!.size);
+    });
+
+    it('is deterministic, so a checkpoint plays the same in Node and the browser', () => {
+      const hashAfter = () => {
+        const run = createEvolutionRun({ preset: 'small', seed: 5, start: start() });
+        for (let i = 0; i < 50; i++) run.tick();
+        return run.hash();
+      };
+      expect(hashAfter()).toBe(hashAfter());
+    });
+
+    it('takes an eliminated tribe without creatures', () => {
+      const s = start();
+      const run = createEvolutionRun({
+        preset: 'small',
+        seed: 5,
+        start: { ...s, tribes: [s.tribes[0]!, { ...s.tribes[1]!, alive: false, genomes: [] }] },
+      });
+      expect(run.tribes[0]!.alive).toBe(false);
+      expect(run.tribes[0]!.size).toBe(0);
+      expect(tribeGenomes(run, 0)).toEqual([]);
+    });
+
+    it('refuses starts that do not fit the map or the brain', () => {
+      const s = start();
+      const make = (tribes: EvolutionStart['tribes']) => () =>
+        createEvolutionRun({ preset: 'small', seed: 5, start: { generation: 2, tribes } });
+      expect(make([s.tribes[0]!])).toThrow(/missing tribe 0/);
+      expect(make([...s.tribes, { ...s.tribes[0]!, tribeId: 7 }])).toThrow(/tribe 7/);
+      expect(make([...s.tribes, s.tribes[0]!])).toThrow(/twice/);
+      expect(make([s.tribes[0]!, { ...s.tribes[1]!, genomes: [new Float32Array(3)] }])).toThrow();
+      expect(make([s.tribes[0]!, { ...s.tribes[1]!, alive: false }])).toThrow(/Eliminated/);
+    });
   });
 
   it('ends a generation, records stats, benchmarks gen 1 and carries the elites over', () => {

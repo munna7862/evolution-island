@@ -3,7 +3,14 @@ import type {
   SimSnapshot,
   WorkerToMainMessage,
 } from '@evolution-island/shared';
-import { createWorld } from '@evolution-island/sim-core';
+import {
+  brainSpecFromConfig,
+  createEvolutionRun,
+  createWorld,
+  DEFAULT_CONFIG,
+  weightCount,
+  type EvolutionStart,
+} from '@evolution-island/sim-core';
 import { describe, expect, it } from 'vitest';
 import { SimRunner, type SimRunnerHost } from '../src/worker/sim-runner.js';
 
@@ -304,5 +311,72 @@ describe('SimRunner', () => {
     runner.destroy();
     const activeTasks = host.queue.filter((t) => !t.cancelled);
     expect(activeTasks).toHaveLength(0);
+  });
+
+  describe('playing a saved checkpoint (Sprint 3.3)', () => {
+    const spec = brainSpecFromConfig(DEFAULT_CONFIG);
+    const genome = (v: number) => new Float32Array(weightCount(spec)).fill(v);
+    const start = (): EvolutionStart => ({
+      generation: 40,
+      tribes: [
+        { tribeId: 0, alive: true, genomes: [genome(0.2), genome(-0.2)], hallOfFame: [] },
+        {
+          tribeId: 1,
+          alive: true,
+          genomes: [genome(0.1), genome(0.4), genome(-0.4)],
+          hallOfFame: [{ genome: genome(0.1), benchmarkScore: 600, generation: 40 }],
+        },
+      ],
+    });
+
+    it('starts an EvolutionRun from the given genomes and matches Node tick for tick', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 3,
+        preset: 'small',
+        seed: 42,
+        speed: 1,
+        running: false,
+        pauseAtTick: null,
+        start: start(),
+      });
+      const ready = host.messages[0]!;
+      expect(ready.type).toBe('ready');
+      expect(host.latestSnapshot().generation).toBe(40);
+      expect(host.latestSnapshot().tribePopulations).toEqual([2, 3]);
+
+      send(runner, { type: 'step', runId: 3, ticks: 25 });
+      send(runner, { type: 'requestHash', runId: 3, requestId: 1 });
+      const reply = host.messages.at(-1)!;
+      const expected = createEvolutionRun({ preset: 'small', seed: 42, start: start() });
+      for (let i = 0; i < 25; i++) expected.tick();
+      expect(reply).toMatchObject({ type: 'hash', tick: 25, worldHash: expected.world.hash() });
+    });
+
+    it('plays a checkpoint in which a tribe was eliminated', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 4,
+        preset: 'small',
+        seed: 42,
+        speed: 'max',
+        running: false,
+        pauseAtTick: null,
+        start: {
+          generation: 1,
+          tribes: [
+            { tribeId: 0, alive: true, genomes: [genome(0)], hallOfFame: [] },
+            { tribeId: 1, alive: false, genomes: [], hallOfFame: [] },
+          ],
+        },
+      });
+      send(runner, { type: 'step', runId: 4, ticks: 3 });
+      expect(host.latestSnapshot().tick).toBe(3);
+      expect(host.latestSnapshot().tribePopulations).toEqual([1, 0]);
+    });
   });
 });

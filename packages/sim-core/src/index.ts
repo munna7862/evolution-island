@@ -116,9 +116,11 @@ export {
   rankByFitness,
   respawnGenomes,
   type EvolutionRunOptions,
+  type EvolutionStart,
   type GenerationStats,
   type HallOfFameEntry,
   type RankedCreature,
   type TribeAllocation,
+  type TribeStart,
   type TribeState,
 } from './evolution.js';

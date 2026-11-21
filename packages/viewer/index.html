@@ -68,10 +68,30 @@
 
           <button id="reset-view-btn" type="button" class="btn">Reset View</button>
         </form>
+
+        <div class="run-controls" role="group" aria-label="Trained runs">
+          <button
+            id="load-run-btn"
+            type="button"
+            class="btn"
+            title="Pick a run folder made by pnpm train (or drop it on the map)"
+          >
+            Load run…
+          </button>
+          <input id="run-input" type="file" webkitdirectory multiple hidden />
+          <label id="checkpoint-field" class="field" hidden>
+            <span>Saved</span>
+            <select id="checkpoint-select" name="checkpoint"></select>
+          </label>
+          <span id="run-info" class="run-info" role="status"></span>
+        </div>
       </header>
 
       <div class="stage-area">
         <main id="viewport" aria-label="Evolution Island map canvas"></main>
+        <div id="drop-overlay" class="drop-overlay" hidden>
+          Drop a run folder to watch its champions
+        </div>
         <aside id="sim-hud" class="sim-hud" aria-label="Simulation HUD">
           <div class="hud-metrics">
             <span id="hud-tick">Tick 0</span>

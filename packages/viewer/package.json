@@ -10,7 +10,7 @@
     "build": "tsc --project src && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --project src && tsc --project .",
-    "test:e2e": "playwright test"
+    "test:e2e": "pnpm --filter \"@evolution-island/trainer...\" run build && playwright test"
   },
   "dependencies": {
     "@evolution-island/shared": "workspace:*",
