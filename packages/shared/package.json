@@ -1,0 +1,29 @@
+{
+  "name": "@evolution-island/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Types, serialization (genomes, snapshots, replays) and the worker message protocol shared by trainer and viewer.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@evolution-island/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project src && tsc --project ."
+  },
+  "dependencies": {
+    "@evolution-island/sim-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~6.0.3"
+  }
+}

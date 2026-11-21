@@ -1,0 +1,8 @@
+{
+  // Root-level tool configs only (vitest.config.ts). Packages have their own tsconfigs.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}

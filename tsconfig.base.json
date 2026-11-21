@@ -1,0 +1,29 @@
+{
+  // Shared compiler options for every package. Each package has three configs:
+  //   src/tsconfig.json     – the runtime environment of the shipped code (sim-core: no DOM, no Node)
+  //   tsconfig.json         – tests and tool configs (Node types)
+  //   tsconfig.build.json   – emits src/ to dist/
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // Resolve workspace packages to their src/ (see "exports" in each package.json),
+    // so type-checks and tests never need a prior build. Build configs switch this off.
+    "customConditions": ["@evolution-island/source"],
+    "types": [],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "noEmit": true
+  }
+}

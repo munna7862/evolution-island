@@ -1,0 +1,27 @@
+{
+  "name": "@evolution-island/sim-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "World, creatures, brain and evolution. Pure and deterministic: no DOM, no Node, no wall clock, no Math.random.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@evolution-island/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project src && tsc --project ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "fast-check": "^4.10.3",
+    "typescript": "~6.0.3"
+  }
+}

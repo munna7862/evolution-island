@@ -1,0 +1,10 @@
+{
+  // Runtime environment of sim-core: plain ECMAScript only. No DOM and no Node types exist here,
+  // so `document`, `window`, `process`, `performance` are compile errors (plan §3.3).
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["**/*.ts"]
+}

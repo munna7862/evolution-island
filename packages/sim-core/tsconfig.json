@@ -1,0 +1,8 @@
+{
+  // Tests and benchmarks. They run in Node and may use Node APIs and timers.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["test/**/*.ts"]
+}
