@@ -1,0 +1,34 @@
+{
+  "name": "@evolution-island/trainer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Headless Node CLI: runs generations fast-forward and saves genomes and stats.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@evolution-island/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "ei-train": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project src && tsc --project .",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@evolution-island/shared": "workspace:*",
+    "@evolution-island/sim-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~6.0.3"
+  }
+}

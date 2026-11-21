@@ -1,0 +1,9 @@
+{
+  // The trainer is a Node program.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

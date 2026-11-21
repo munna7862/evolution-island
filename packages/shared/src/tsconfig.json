@@ -1,0 +1,9 @@
+{
+  // shared runs in the browser (viewer, worker) and in Node (trainer): plain ECMAScript only.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["**/*.ts"]
+}

@@ -1,0 +1,12 @@
+# Generated
+pnpm-lock.yaml
+**/dist/
+**/coverage/
+**/playwright-report/
+**/test-results/
+
+# Docs are hand-written; don't reformat them
+**/*.md
+
+# Local tool state
+.claude/

@@ -1,0 +1,13 @@
+{
+  "extends": "./src/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    // Resolve workspace dependencies to their built dist/, not their src/.
+    "customConditions": []
+  }
+}
