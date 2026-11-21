@@ -7,13 +7,16 @@ export type Seed = number | string;
 
 export type RngState = readonly [number, number, number, number];
 
-export type RngStreamName = 'map' | 'spawn' | 'evolution' | 'tick';
+export type RngStreamName = 'map' | 'spawn' | 'evolution' | 'tick' | 'policy';
 
 export interface RngStreams {
   readonly map: RngStream;
   readonly spawn: RngStream;
   readonly evolution: RngStream;
+  /** Tick resolution: the Phase B action-order shuffle. */
   readonly tick: RngStream;
+  /** Decision policies that need randomness (Phase 2's random policy); brains use none. */
+  readonly policy: RngStream;
 }
 
 const UINT32_SPAN = 4294967296; // 2^32
@@ -189,5 +192,6 @@ export function createRngStreams(masterSeed: Seed): RngStreams {
     spawn: deriveRngStream(masterSeed, 'spawn'),
     evolution: deriveRngStream(masterSeed, 'evolution'),
     tick: deriveRngStream(masterSeed, 'tick'),
+    policy: deriveRngStream(masterSeed, 'policy'),
   };
 }

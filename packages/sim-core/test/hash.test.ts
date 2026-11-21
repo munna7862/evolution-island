@@ -187,6 +187,14 @@ describe('StateHasher, hashConfig & hashMap', () => {
     expect(hashConfig(modifiedSensorForestMult)).not.toBe(baseCfgHash);
     expect(hashConfig(modifiedSensorCountNorm)).not.toBe(baseCfgHash);
     expect(hashConfig(modifiedSensorFoodNorm)).not.toBe(baseCfgHash);
+    const modifiedSensorMinFood = {
+      ...DEFAULT_CONFIG,
+      sensor: {
+        ...DEFAULT_CONFIG.sensor,
+        minVisibleFood: DEFAULT_CONFIG.sensor.minVisibleFood + 1,
+      },
+    };
+    expect(hashConfig(modifiedSensorMinFood)).not.toBe(baseCfgHash);
 
     const w = createWorld({ preset: 'small', seed: 123 });
     const h0 = hashWorld(w);

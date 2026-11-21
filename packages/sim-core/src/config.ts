@@ -85,6 +85,12 @@ export interface SensorConfig {
   readonly forestVisionMultiplier: number;
   readonly countNormalization: number;
   readonly foodNormalization: number;
+  /**
+   * The "nearest food" sensor only sees tiles holding at least this much food. Without it, almost
+   * every land tile (including freshly grazed, regrowing ones) counts as food and the sensor is
+   * nearly always (0, 0).
+   */
+  readonly minVisibleFood: number;
 }
 
 export interface SimConfig {
@@ -222,5 +228,6 @@ export const DEFAULT_CONFIG: SimConfig = {
     forestVisionMultiplier: 0.5,
     countNormalization: 5,
     foodNormalization: 160,
+    minVisibleFood: 20, // one full bite (creature.eatBiteSize)
   },
 };

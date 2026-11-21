@@ -64,15 +64,17 @@ function bruteForceSensors(world: World, creature: Creature): number[] {
   const cy = creature.y;
   const selfIdx = cy * width + cx;
 
-  // Nearest food brute force (Euclidean distance, tie by dy then dx).
+  // Nearest food brute force: other tiles only, food >= minVisibleFood (Euclidean, tie by dy then dx).
   let bestFoodD2 = vr2 + 1;
   let bestFoodDx = 0;
   let bestFoodDy = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (food[y * width + x]! <= 0) continue;
+      const tileFood = food[y * width + x]!;
+      if (tileFood <= 0 || tileFood < sCfg.minVisibleFood) continue;
       const dx = x - cx;
       const dy = y - cy;
+      if (dx === 0 && dy === 0) continue;
       const d2 = dx * dx + dy * dy;
       if (d2 <= vr2) {
         if (
@@ -191,7 +193,7 @@ describe('readSensors (18 inputs)', () => {
     biomes[2]![5] = Biome.ShallowWater; // Water at (5, 2) -> dx=0, dy=-3 from (5,5)
     biomes[5]![5] = Biome.Forest; // Observer stands in Forest
     const foodGrid = Array.from({ length: 12 }, () => new Array<number>(12).fill(0));
-    foodGrid[5]![5] = 80; // Current tile food -> nearest food is (0, 0)
+    foodGrid[5]![5] = 80; // Own tile is excluded from the food direction -> no other food -> (0, 0)
 
     const world = createWorld({
       preset: 'small',
@@ -323,6 +325,51 @@ describe('readSensors (18 inputs)', () => {
     const sEdge = readSensors(world, c);
     expect(sEdge[SensorIndex.FOOD_DX]).toBe(1);
     expect(sEdge[SensorIndex.FOOD_DY]).toBe(0);
+  });
+
+  it('food direction skips the own tile and tiles below minVisibleFood', () => {
+    const biomes = Array.from({ length: 20 }, () => new Array<Biome>(20).fill(Biome.Grass));
+    const foodGrid = Array.from({ length: 20 }, () => new Array<number>(20).fill(0));
+    const minFood = DEFAULT_CONFIG.sensor.minVisibleFood;
+    foodGrid[10]![10] = 100; // own tile: rich, but reported by CURRENT_TILE_FOOD only
+    foodGrid[10]![11] = minFood - 0.5; // adjacent, just below the threshold
+    foodGrid[10]![9] = 0.15; // adjacent, freshly grazed and regrowing
+    foodGrid[10]![13] = minFood; // 3 tiles east, exactly one bite
+
+    const world = createWorld({
+      preset: 'small',
+      seed: 1,
+      map: makeMiniMap(biomes, foodGrid),
+      populate: false,
+    });
+    const c = world.spawnCreature(0, 10, 10)!;
+    const s = readSensors(world, c);
+    expect(s[SensorIndex.FOOD_DX]).toBeCloseTo(3 / 8, 5);
+    expect(s[SensorIndex.FOOD_DY]).toBe(0);
+    expect(s[SensorIndex.CURRENT_TILE_FOOD]).toBeCloseTo(
+      100 / DEFAULT_CONFIG.sensor.foodNormalization,
+      5,
+    );
+
+    // Nothing worthwhile left in sight -> (0, 0), even though the own and adjacent tiles hold food.
+    world.map.food[10 * 20 + 13] = minFood - 1;
+    const sNone = readSensors(world, c);
+    expect(sNone[SensorIndex.FOOD_DX]).toBe(0);
+    expect(sNone[SensorIndex.FOOD_DY]).toBe(0);
+
+    // minVisibleFood = 0 falls back to "any food > 0" (own tile still excluded): the regrowing
+    // west neighbour wins the d² = 1 tie (dy, then dx ascending).
+    const anyFoodWorld = createWorld({
+      preset: 'small',
+      seed: 1,
+      map: makeMiniMap(biomes, foodGrid),
+      populate: false,
+      config: { ...DEFAULT_CONFIG, sensor: { ...DEFAULT_CONFIG.sensor, minVisibleFood: 0 } },
+    });
+    const c2 = anyFoodWorld.spawnCreature(0, 10, 10)!;
+    const sAny = readSensors(anyFoodWorld, c2);
+    expect(sAny[SensorIndex.FOOD_DX]).toBeCloseTo(-1 / 8, 5);
+    expect(sAny[SensorIndex.FOOD_DY]).toBe(0);
   });
 
   it('returns (0, 0) for water beyond visionRadius even when water exists on the map', () => {

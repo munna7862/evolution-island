@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { GOLDEN } from '../../sim-core/test/golden-hashes.js';
 import type {} from '../src/debug-hook.js';
 
 function trackErrors(page: Page): string[] {
@@ -343,6 +344,40 @@ test.describe('Viewer v1', () => {
       .toBe(true);
     const hashB = await page.evaluate(() => window.__ei!.worldHash);
     expect(hashB).toBe(hashA);
+    expect(errors).toEqual([]);
+  });
+
+  test('browser simulation reproduces the Node golden hashes', async ({ page }) => {
+    const errors = trackErrors(page);
+
+    await page.goto(`/?preset=${GOLDEN.preset}&seed=${GOLDEN.seed}&paused=1&speed=max`);
+    await expect.poll(() => page.evaluate(() => window.__ei?.mapHash)).toBe(GOLDEN.mapHash);
+    expect(await page.evaluate(() => window.__ei!.simVersion)).toBe(GOLDEN.simVersion);
+
+    const ticks = Object.keys(GOLDEN.worldHashes)
+      .map(Number)
+      .sort((a, b) => a - b);
+    const actual: Record<number, string> = {};
+    for (const target of ticks) {
+      if (target > 0) {
+        await page.evaluate((t) => {
+          window.__ei!.pauseAtTick(t);
+        }, target);
+        await page.click('#play-pause-btn');
+        await expect
+          .poll(() =>
+            page.evaluate((t) => {
+              const s = window.__ei?.getState();
+              return s !== undefined && s.tick === t && !s.running;
+            }, target),
+          )
+          .toBe(true);
+      }
+      const reply = await page.evaluate(() => window.__ei!.requestHash());
+      expect(reply.tick).toBe(target);
+      actual[target] = reply.worldHash;
+    }
+    expect(actual).toEqual(GOLDEN.worldHashes);
     expect(errors).toEqual([]);
   });
 });
