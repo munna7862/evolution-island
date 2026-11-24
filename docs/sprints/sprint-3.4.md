@@ -24,24 +24,38 @@ Small, seeds 1–7, 100 generations, benchmark per tribe gen 1 → gen 100:
 Seeds 3 and 5 learn nothing in 100 generations; on 3 more seeds one tribe stalls. Medium seed 42:
 534/546/499/503 → 1,015/522/567/761 at generation 100.
 
-## Acceptance bar (fixed before tuning)
+## Acceptance bar (fixed before the held-out run)
 
-Measured with `pnpm train --preset small --seeds 101-103 --generations 100` and the shipped
-`DEFAULT_CONFIG`. Seeds 101, 102 and 103 are **held out**: no sweep uses them, so the result says
-whether the tuning generalises rather than whether it fits the seeds it was tuned on.
-"Benchmark" is the champion's benchmark-arena score recorded in `stats.csv` at that generation.
+Measured **once** with `pnpm train --preset small --seeds 101-120 --generations 100` and the
+shipped `DEFAULT_CONFIG`. Seeds 101–120 are **held out**: no sweep used them, so the result says
+whether the tuning generalises rather than whether it fits the seeds it was tuned on. No re-run and
+no re-tuning against them. "Benchmark" is the champion's benchmark-arena score recorded in
+`stats.csv` at that generation; a seed's *ratio* is its mean generation-100 benchmark over the
+tribes ÷ its mean generation-1 benchmark.
 
-On **each** of the three seeds:
+The bar passes only if all three hold:
 
-1. **Clearly rising:** the mean benchmark over the tribes at generation 100 is ≥ **2×** the mean at
-   generation 1.
-2. **Not a low baseline:** the generation-100 mean is also ≥ 2× the arena score of a creature that
-   only `STAY`s (same config), so a change that just makes generation 1 worse can't pass.
-3. **Every tribe learns:** each tribe's generation-100 benchmark is ≥ **1.5×** its own
-   generation-1 benchmark (today one tribe often carries the mean).
+1. **Clearly rising on average:** the mean of the 20 per-seed ratios is ≥ **2.0**.
+2. **On most seeds:** at least **12 of 20** seeds each reach a generation-100 mean ≥ 2× their
+   generation-1 mean **and** ≥ 2× the arena score of a brain that only `STAY`s (515 with the
+   shipped config; so a change that just makes generation 1 worse can't pass).
+3. **Most tribes learn:** at least **75 %** of all tribes (30 of 40) reach ≥ **1.5×** their own
+   generation-1 benchmark.
 
-Recorded, not blocking: the same check on the tuning seeds 1–20, Medium seeds 101–103 at
-generation 100, and Small/Medium seed 42 over 500 generations (comparison with Sprint 3.3).
+Every seed's numbers are reported below, pass or fail.
+
+*Changed during the sprint, before any held-out seed was run* (user's decision, 2026-11-24). The
+first bar, fixed before tuning, asked for all three conditions (2×, 2× STAY-only, every tribe ≥
+1.5×) on **each** of three held-out seeds 101–103. Tuning showed that a 100-generation outcome is
+still partly luck per seed: the best config met that per-seed bar on 25 of 40 tuning seeds (≈ 62 %;
+≈ 72 % for the plain 2× rule), because about one tribe in seven locks into "always EAT" or "always
+DRINK". Three of three would then pass only 25–40 % of the time, which says more about luck than
+about learning, and so would "4 of 5" (≈ 57 %). Twenty seeds with thresholds on the mean and on the
+share of seeds and tribes measure the same thing with far less luck.
+
+Recorded, not blocking: the same check on the tuning seeds (sweep table below), Medium seeds
+101–103 at generation 100, and Small/Medium seed 42 over 500 generations (comparison with Sprint
+3.3).
 
 Visual check: in the viewer, a run of the new defaults loaded with "Load run…", "Gen 1" vs
 "Gen 100": generation-1 creatures wander or stand and die of thirst; generation-100 creatures
@@ -57,13 +71,13 @@ committed under `docs/`.
 | 3 | Trainer `--config <file>`: reads the override, trains every seed with the merged config (worker threads too), the default `--save-every` follows its `benchmarkInterval`, the header prints the config hash; bad file → exit 2 with the reason | Unit tests for parsing and `main()` (config reaches the run: `run.json` stores it and its hash) |
 | 4 | Sweeps on Small seeds 1–7 (then 1–20 for the finalists), 100 generations: initial weight range, mutation rate/σ, elites, parent fraction, selection mode, fitness weights, generation length, food/water balance | Every sweep recorded below (what, why, result) |
 | 5 | The winning values become `DEFAULT_CONFIG` (all in `config.ts`); `SIM_VERSION` bump if behaviour changes; golden hashes re-recorded; exploit tests still pass (and new ones for any new fitness term); the Sprint 3.2 evolution test re-checked | `pnpm test` green |
-| 6 | Acceptance run on held-out seeds 101–103 | Bar above met, numbers recorded |
+| 6 | Acceptance run on held-out seeds 101–120, once | Bar above met, every seed's numbers recorded |
 | 7 | Viewer: train a run with the new defaults, load it, compare Gen 1 vs Gen 100; record a GIF to `docs/` | GIF committed, visual check described |
 | 8 | Docs: this file (results, retro), `phase-3.md`, plan revision note for the new defaults | — |
 
 ## Definition of done
 
-- Acceptance bar met on the three held-out seeds, numbers recorded here.
+- Acceptance bar met on the 20 held-out seeds, every seed's numbers recorded here.
 - GIF of gen 1 vs gen 100 committed.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:browser`, `pnpm build`, `pnpm test:e2e` pass
   locally and in CI.
