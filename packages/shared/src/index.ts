@@ -1,4 +1,9 @@
 export {
+  applyConfigOverride,
+  ConfigOverrideError,
+  parseConfigOverride,
+} from './config-override.js';
+export {
   assertGenomeCompatible,
   GENOME_FILE_FORMAT,
   GENOME_FILE_VERSION,
