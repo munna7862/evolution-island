@@ -16,7 +16,7 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | 3.1 | Neural network brain | Fixed-topology 18 → 12 → 9 softsign MLP on a `Float32Array` genome (333 weights), argmax over all 9 actions (ties → lowest index), brain spec carried in genome files, brain-driven decision policy, cross-engine golden test, benchmark |
 | 3.2 | Generations & genetic algorithm | Fitness from effective intake, selection, elitism, per-hidden-neuron crossover, mutation, per-tribe gene pools, tribe-size re-allocation, extinction handling, hall of fame, benchmark arena, exploit tests |
 | 3.3 | Headless trainer CLI | `pnpm train ...`, multi-seed `worker_threads`, saved hall-of-fame genomes + stats, viewer loads a run |
-| 3.4 | "It learns!" milestone | Tuning until benchmark score clearly rises on 3 seeds (bar fixed in the sprint plan) |
+| 3.4 | "It learns!" milestone | Tuning until benchmark score clearly rises on 20 held-out seeds (bar fixed in the sprint plan) |
 | 3.5 | Memory experiment | 2 memory neurons behind a config switch, genome migration with zero weights, A/B in the arena |
 
 ## Exit criteria (Phase 3 is done when)
@@ -28,7 +28,8 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
    dies well before the generation ends) — Sprint 3.2.
 3. The trainer meets the §3.6 targets for Small and Medium, and the viewer plays genomes from a run
    — Sprint 3.3.
-4. Benchmark score clearly rising on 3 seeds, with gen 1 vs gen 100 recorded — Sprint 3.4.
+4. Benchmark score clearly rising on 20 held-out seeds (bar in the Sprint 3.4 file), with gen 1 vs
+   gen 100 recorded — Sprint 3.4.
 5. Memory experiment decided and recorded (kept only if the A/B shows it helps) — Sprint 3.5.
 
 ## Architecture decisions taken in this phase
@@ -72,6 +73,15 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
    `checkpointStart()` (shared) serves the viewer worker and Node, so tests compare hashes across
    engines. It is not a replay: spawns and tick order come from a fresh world (replays: 5.2).
 
+10. **Config overrides for tuning (Sprint 3.4).** `pnpm train --config <file>` merges a partial
+    config JSON onto `DEFAULT_CONFIG` (`shared/config-override.ts`), refusing unknown keys and wrong
+    types by path. Runs store the full config and its hash, so a tuned run is watchable in the viewer
+    once its values become the defaults. Tuning changed config values only (`SIM_VERSION` 8): energy
+    drain, generation lengths, tournament selection, ±1 initial weights, σ 0.6.
+11. **"It learns" is pinned on seed 42.** `evolution-learns.test.ts` runs Small seed 42 for 100
+    generations and requires the Sprint 3.4 bar there (mean ≥ 2× generation 1 and ≥ 2× a STAY-only
+    brain, every tribe ≥ 1.5×), so a change that slows learning fails `pnpm test`.
+
 ## Risks
 
 | Risk | Mitigation |
@@ -79,4 +89,5 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | Creatures don't learn anything (plan §8) | Food sensor fixed in the Phase 2 close-out; benchmark arena as the progress metric; tuning in 3.4 with the trainer from 3.3 |
 | Forward pass differs between engines | Softsign only, fixed summation order, golden hashes checked in Node and Chromium |
 | Brain cost dominates Huge maps | Allocation-free forward pass with reused scratch buffers; benchmark against the §3.6 budget in 3.1 |
-| Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried |
+| Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried (3.4: ~60 sweeps in one session, recorded in its sprint file) |
+| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance. After 100 generations about 1 tribe in 7 (tuning seeds) to 1 in 4 (held-out seeds: 10 of 40) is still below 1.5× its generation-1 score; only some are hard lock-ins ("always EAT"/"always DRINK", 2 of the 10 held-out), the rest have a noisy generation-100 champion |

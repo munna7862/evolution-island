@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { DEFAULT_CONFIG } from '@evolution-island/sim-core';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_GENERATIONS,
@@ -50,7 +49,8 @@ describe('parseTrainArgs', () => {
       seeds: [42],
       generations: 500,
       out: 'runs/medium-42/',
-      saveEvery: DEFAULT_CONFIG.evolution.benchmarkInterval,
+      saveEvery: null, // the config's benchmarkInterval, resolved by main()
+      configPath: null,
       workers: 1,
       force: false,
       quiet: false,
@@ -86,6 +86,11 @@ describe('parseTrainArgs', () => {
     expect([options.saveEvery, options.force, options.quiet]).toEqual([25, true, true]);
   });
 
+  it('takes a --config file path (read and checked by main())', () => {
+    expect(train(['--config', 'sweeps/sigma-0.3.json']).configPath).toBe('sweeps/sigma-0.3.json');
+    expect(train([]).configPath).toBeNull();
+  });
+
   it('asks for help', () => {
     expect(parseTrainArgs(['--help'], 8)).toEqual({ kind: 'help' });
     expect(parseTrainArgs(['-h'], 8)).toEqual({ kind: 'help' });
@@ -102,6 +107,8 @@ describe('parseTrainArgs', () => {
       ['--save-every', '-1'],
       ['--workers', '0'],
       ['--out', ''],
+      ['--config', ' '],
+      ['--config'],
       ['--unknown'],
       ['positional'],
       ['--generations'],

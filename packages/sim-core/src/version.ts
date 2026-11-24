@@ -17,5 +17,7 @@
  *     clamped proportional split (the whole budget whenever min/popCap allow it).
  * 7 = Sprint 3.3 review: the hall of fame holds distinct genomes; a champion already in it keeps
  *     its stored benchmark score instead of being benchmarked and added again.
+ * 8 = Sprint 3.4 tuning (config defaults only, no rule change): energy drain 0.25 → 0.2,
+ *     generation lengths doubled, tournament selection, ±1 initial weights, mutation σ 0.6.
  */
-export const SIM_VERSION = 7;
+export const SIM_VERSION = 8;

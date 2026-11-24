@@ -11,23 +11,24 @@ import { weightCount, type BrainSpec } from '../src/index.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 7,
+  simVersion: 8,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: 'f1731c25ceed9934',
-    100: '7115acee803b0705',
-    600: 'e51987e029c9af48',
+    0: '1ba379a07ba15d99',
+    100: '7cd52945f8afd9e8',
+    600: '298dbb40cb327ba9',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome`: adds the
-   * sensors and the forward pass. All 50 creatures have died by tick 600, so deaths are covered too.
+   * sensors and the forward pass. 26 of the 50 creatures have died by tick 600 (all by 700), so deaths
+   * are covered too.
    */
   brainPolicy: {
-    100: 'ff1044eac461b66e',
-    600: '2ff0d81ab78f2837',
+    100: 'e85af2fddccfbc00',
+    600: '694e2a0ac9ef887a',
   },
   /**
    * Running digest of every sensor vector and every raw forward-pass output (float64 bits) of the
@@ -35,8 +36,8 @@ export const GOLDEN = {
    * chooses DRINK/STAY, so a last-bit difference in the forward pass would rarely reach them.
    */
   brainOutputs: {
-    100: '87ca840eebf59125',
-    600: '848c46f173d005d3',
+    100: '6dac8da5d2b503a3',
+    600: '43c46f7b4e57eff9',
   },
   /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
@@ -44,9 +45,9 @@ export const GOLDEN = {
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: '85c2197898d81f41',
-    3: '6252b0bfbe6c6c8e',
-    4: '5c6183020649df42',
+    2: '6700e1c4b510af4f',
+    3: '1eed9eaabc283d98',
+    4: 'fe38449c7859693b',
   },
 } as const;
 

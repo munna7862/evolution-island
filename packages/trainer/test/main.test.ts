@@ -1,7 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_CONFIG, type SimConfig } from '@evolution-island/sim-core';
+import { applyConfigOverride } from '@evolution-island/shared';
+import { DEFAULT_CONFIG, hashConfig, type SimConfig } from '@evolution-island/sim-core';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   assertSeedJob,
@@ -31,25 +32,38 @@ function tempDir(): string {
   return dir;
 }
 
-function io() {
+function io(files: Readonly<Record<string, string>> = {}) {
   const out: string[] = [];
   const err: string[] = [];
+  const readTextFile = (path: string): string => {
+    const text = files[path];
+    if (text === undefined) throw new Error(`ENOENT: no such file '${path}'`);
+    return text;
+  };
   return {
     out,
     err,
-    io: { log: (l: string) => out.push(l), error: (l: string) => err.push(l), cpus: 4 },
+    io: {
+      log: (l: string) => out.push(l),
+      error: (l: string) => err.push(l),
+      cpus: 4,
+      readTextFile,
+    },
   };
 }
 
-/** Runs seeds in this thread (vitest has no built worker file), recording who ran what. */
-function runners(fail: readonly number[] = []) {
+/**
+ * Runs seeds in this thread (vitest has no built worker file), recording who ran what. Seeds
+ * train with short generations (`FAST`) unless `jobConfig`: then with the config main() chose.
+ */
+function runners(fail: readonly number[] = [], jobConfig = false) {
   const calls: { kind: 'process' | 'worker'; job: SeedJob }[] = [];
   const run = (kind: 'process' | 'worker'): SeedRunners['inProcess'] => {
     return async (job, onProgress) => {
       calls.push({ kind, job });
       await Promise.resolve();
       if (fail.includes(Number(job.seed))) throw new Error(`seed ${String(job.seed)} broke`);
-      return trainSeed({ ...job, config: FAST }, onProgress);
+      return trainSeed(jobConfig ? job : { ...job, config: FAST }, onProgress);
     };
   };
   return { calls, runners: { inProcess: run('process'), inWorker: run('worker') } };
@@ -114,6 +128,89 @@ describe('trainer CLI main()', () => {
     expect(existsSync(join(out, 'small-3', 'run.json'))).toBe(true);
   });
 
+  it('trains with --config merged onto the defaults, on worker threads too', async () => {
+    const override = {
+      presets: { small: { generationLength: 20 } },
+      evolution: { benchmarkInterval: 2 },
+    };
+    const config = applyConfigOverride(override);
+    const out = tempDir();
+    const t = io({ 'tune.json': JSON.stringify(override) });
+    const r = runners([], true);
+    const code = await main(
+      [
+        '--preset',
+        'small',
+        '--seeds',
+        '1-2',
+        '--generations',
+        '4',
+        '--config',
+        'tune.json',
+        '--out',
+        out,
+      ],
+      t.io,
+      r.runners,
+    );
+    expect(code).toBe(0);
+    expect(r.calls.map((c) => [c.kind, c.job.config, c.job.saveEvery])).toEqual([
+      ['worker', config, 2], // default --save-every follows the config's benchmarkInterval
+      ['worker', config, 2],
+    ]);
+    expect(t.out[2]).toBe(`Config ${hashConfig(config)} (defaults + tune.json)`);
+    const manifest = JSON.parse(readFileSync(join(out, 'small-1', 'run.json'), 'utf8')) as {
+      configHash: string;
+      config: unknown;
+      checkpoints: number[];
+    };
+    expect(manifest.configHash).toBe(hashConfig(config));
+    expect(manifest.config).toEqual(config);
+    expect(manifest.checkpoints).toEqual([1, 2, 4]);
+  });
+
+  it('trains with DEFAULT_CONFIG and checkpoints at benchmark generations without --config', async () => {
+    const t = io();
+    const r = runners();
+    const out = join(tempDir(), 'small-1');
+    expect(
+      await main(['--preset', 'small', '--generations', '1', '--out', out], t.io, r.runners),
+    ).toBe(0);
+    expect(r.calls[0]!.job.config).toBe(DEFAULT_CONFIG);
+    expect(r.calls[0]!.job.saveEvery).toBe(DEFAULT_CONFIG.evolution.benchmarkInterval);
+    expect(t.out[2]).toBe(`Config ${hashConfig(DEFAULT_CONFIG)} (defaults)`);
+  });
+
+  it('checkpoints at the default interval when the --config turns benchmarks off', async () => {
+    // benchmarkInterval 0 = benchmark generation 1 only; checkpoints must not use it as a step.
+    const override = { evolution: { benchmarkInterval: 0 } };
+    const t = io({ 'no-bench.json': JSON.stringify(override) });
+    const r = runners();
+    const out = join(tempDir(), 'small-1');
+    const argv = ['--preset', 'small', '--generations', '1', '--config', 'no-bench.json'];
+    expect(await main([...argv, '--out', out], t.io, r.runners)).toBe(0);
+    expect(r.calls[0]!.job.config?.evolution.benchmarkInterval).toBe(0);
+    expect(r.calls[0]!.job.saveEvery).toBe(DEFAULT_CONFIG.evolution.benchmarkInterval);
+  });
+
+  it('refuses a missing or invalid --config file with exit code 2, before training', async () => {
+    const missing = io();
+    const r = runners();
+    expect(await main(['--config', 'nope.json'], missing.io, r.runners)).toBe(2);
+    expect(missing.err).toEqual([`Error: --config nope.json: ENOENT: no such file 'nope.json'`]);
+    const typo = io({ 'typo.json': '{"evolution": {"mutationSigmaa": 0.3}}' });
+    expect(await main(['--config', 'typo.json'], typo.io, r.runners)).toBe(2);
+    expect(typo.err).toEqual([
+      'Error: --config typo.json: unknown config key evolution.mutationSigmaa',
+    ]);
+    const notJson = io({ 'bad.json': '{' });
+    expect(await main(['--config', 'bad.json'], notJson.io, r.runners)).toBe(2);
+    expect(notJson.err[0]).toMatch(
+      /^Error: --config bad.json: the config override is not valid JSON/,
+    );
+    expect(r.calls).toEqual([]);
+  });
+
   it('prints usage: exit 0 for --help, 2 for a bad command line', async () => {
     const help = io();
     expect(await main(['--help'], help.io, runners().runners)).toBe(0);
@@ -138,6 +235,8 @@ describe('worker messages', () => {
     expect(assertSeedJob(job)).toBe(job);
     expect(() => assertSeedJob({ ...job, preset: 'gigantic' })).toThrow(TypeError);
     expect(() => assertSeedJob({ ...job, seed: null })).toThrow(TypeError);
+    expect(assertSeedJob({ ...job, config: DEFAULT_CONFIG }).config).toBe(DEFAULT_CONFIG);
+    expect(() => assertSeedJob({ ...job, config: 'tuned' })).toThrow(TypeError);
     expect(() => assertSeedJob(null)).toThrow(TypeError);
   });
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { main } from './main.js';
 import { trainSeed } from './train-seed.js';
@@ -14,6 +15,7 @@ process.exitCode = await main(
       console.error(line);
     },
     cpus: availableParallelism(),
+    readTextFile: (path) => readFileSync(path, 'utf8'),
   },
   {
     inProcess: (job, onProgress) => Promise.resolve(trainSeed(job, onProgress)),

@@ -87,8 +87,9 @@ describe('creature metabolism', () => {
     expect(c.alive).toBe(false);
     expect(c.health).toBe(0);
     expect(ticks).toBeLessThan(600);
-    // Exact balance verification: hydration=0 at tick 334, energy=0 at tick 400 -> death at tick 466.
-    expect(ticks).toBe(466);
+    // Exact balance verification: hydration=0 at tick 334 (health −0.5/tick), energy=0 at tick 500
+    // (health −1/tick from then on) -> death at tick 516.
+    expect(ticks).toBe(516);
   });
 
   it('kills creatures at maxAge, ignores maxAge <= 0, handles health <= 0, and treats dead creatures as no-op', () => {

@@ -36,6 +36,8 @@ import {
 } from '../src/index.js';
 
 const EVO = DEFAULT_CONFIG.evolution;
+/** Truncation selection (the default is tournament since Sprint 3.4). */
+const TRUNCATION: EvolutionConfig = { ...EVO, selection: 'truncation', parentFraction: 0.2 };
 const SPEC = brainSpecFromConfig(DEFAULT_CONFIG);
 
 /** Small-preset config with overrides (short generations keep runs fast). */
@@ -86,7 +88,7 @@ describe('pickParent', () => {
   it('truncation picks only from the top parentFraction', () => {
     const rng = createRngStream('trunc');
     const picked = new Set<number>();
-    for (let i = 0; i < 500; i++) picked.add(pickParent(candidates, EVO, rng)[0]!);
+    for (let i = 0; i < 500; i++) picked.add(pickParent(candidates, TRUNCATION, rng)[0]!);
     expect([...picked].sort()).toEqual([0, 1]); // 20% of 10
   });
 
@@ -123,7 +125,7 @@ describe('breedGenomes', () => {
   });
 
   it('with crossover off, each child is a mutated copy of one top parent', () => {
-    const evo: EvolutionConfig = { ...EVO, crossover: false, eliteCount: 0 };
+    const evo: EvolutionConfig = { ...TRUNCATION, crossover: false, eliteCount: 0 };
     const next = breedGenomes(SPEC, candidates, 20, evo, createRngStream('mut-only'));
     for (const child of next) {
       // Most weights are untouched, and those equal one of the two truncation parents (0, 0.1).

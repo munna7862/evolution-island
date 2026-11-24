@@ -20,7 +20,8 @@ export function assertSeedJob(value: unknown): SeedJob {
     typeof value['generations'] !== 'number' ||
     typeof value['saveEvery'] !== 'number' ||
     typeof value['outDir'] !== 'string' ||
-    typeof value['force'] !== 'boolean'
+    typeof value['force'] !== 'boolean' ||
+    !(value['config'] === undefined || isRecord(value['config']))
   ) {
     throw new TypeError('seed worker received an invalid job');
   }

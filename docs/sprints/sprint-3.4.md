@@ -1,0 +1,389 @@
+# Sprint 3.4 — First "it learns!" milestone 🎉
+
+- **Phase:** 3 — Brains & Evolution (`docs/phases/phase-3.md`)
+- **Branch:** `sprint-3.4`
+- **Personas:** ML / Evolution Engineer (sweeps, GA settings, reward design), Game Designer
+  (fitness weights, food/water balance), SDET (acceptance measurements, exploit tests, golden
+  hashes), Frontend / Rendering Dev (gen 1 vs gen 100 recording)
+
+## Goal
+
+Tune the config until creatures clearly learn to seek food and water (plan §4 Sprint 3.4, §2.7
+"very likely" behaviour), measured by the benchmark arena on several seeds, and show it: gen 1 vs
+gen 100 side by side (Milestone M3).
+
+## Starting point (`main` at `b4dd3bc`, `SIM_VERSION` 7)
+
+Small, seeds 1–7, 100 generations, benchmark per tribe gen 1 → gen 100:
+
+| Seed | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|------|---|---|---|---|---|---|---|
+| Tribe 0 | 762 → 942 | 472 → 1,034 | 532 → 513 | 763 → 938 | 517 → 508 | 531 → 928 | 577 → 1,082 |
+| Tribe 1 | 528 → 992 | 499 → 470 | 512 → 542 | 684 → 994 | 465 → 537 | 524 → 769 | 539 → 498 |
+
+Seeds 3 and 5 learn nothing in 100 generations; on 3 more seeds one tribe stalls. Medium seed 42:
+534/546/499/503 → 1,015/522/567/761 at generation 100.
+
+## Acceptance bar (fixed before the held-out run)
+
+Measured **once** with `pnpm train --preset small --seeds 101-120 --generations 100` and the
+shipped `DEFAULT_CONFIG`. Seeds 101–120 are **held out**: no sweep used them, so the result says
+whether the tuning generalises rather than whether it fits the seeds it was tuned on. No re-run and
+no re-tuning against them. "Benchmark" is the champion's benchmark-arena score recorded in
+`stats.csv` at that generation; a seed's *ratio* is its mean generation-100 benchmark over the
+tribes ÷ its mean generation-1 benchmark.
+
+The bar passes only if all three hold:
+
+1. **Clearly rising on average:** the mean of the 20 per-seed ratios is ≥ **2.0**.
+2. **On most seeds:** at least **12 of 20** seeds each reach a generation-100 mean ≥ 2× their
+   generation-1 mean **and** ≥ 2× the arena score of a brain that only `STAY`s (515 with the
+   shipped config; so a change that just makes generation 1 worse can't pass).
+3. **Most tribes learn:** at least **75 %** of all tribes (30 of 40) reach ≥ **1.5×** their own
+   generation-1 benchmark.
+
+Every seed's numbers are reported below, pass or fail.
+
+*Changed during the sprint, before any held-out seed was run* (user's decision, 2026-11-24). The
+first bar, fixed before tuning, asked for all three conditions (2×, 2× STAY-only, every tribe ≥
+1.5×) on **each** of three held-out seeds 101–103. Tuning showed that a 100-generation outcome is
+still partly luck per seed: the best config met that per-seed bar on 25 of 40 tuning seeds (≈ 62 %;
+≈ 72 % for the plain 2× rule), because about one tribe in seven locks into "always EAT" or "always
+DRINK". Three of three would then pass only 25–40 % of the time, which says more about luck than
+about learning, and so would "4 of 5" (≈ 57 %). Twenty seeds with thresholds on the mean and on the
+share of seeds and tribes measure the same thing with far less luck.
+
+Recorded, not blocking: the same check on the tuning seeds (sweep table below), Medium seeds
+101–103 at generation 100, and Small/Medium seed 42 over 500 generations (comparison with Sprint
+3.3).
+
+Visual check: in the viewer, a run of the new defaults loaded with "Load run…", "Gen 1" vs
+"Gen 100": generation-1 creatures wander or stand and die of thirst; generation-100 creatures
+walk to water and food, drink and eat, and are still alive well after tick 600. A GIF of both is
+committed under `docs/`.
+
+## Backlog
+
+| # | Item | Acceptance |
+|---|------|------------|
+| 1 | This file: baseline, acceptance bar, definition of done | Written before any tuning |
+| 2 | `shared/config-override.ts`: a partial config JSON merged onto `DEFAULT_CONFIG`, validated (unknown keys, wrong types, non-finite numbers, bad enum values, wrong array lengths, preset ids refused with the key's path) | Unit tests: merge keeps everything not mentioned, nested presets merge per preset, each refusal case |
+| 3 | Trainer `--config <file>`: reads the override, trains every seed with the merged config (worker threads too), the default `--save-every` follows its `benchmarkInterval`, the header prints the config hash; bad file → exit 2 with the reason | Unit tests for parsing and `main()` (config reaches the run: `run.json` stores it and its hash) |
+| 4 | Sweeps on Small seeds 1–7 (then 1–20 for the finalists), 100 generations: initial weight range, mutation rate/σ, elites, parent fraction, selection mode, fitness weights, generation length, food/water balance | Every sweep recorded below (what, why, result) |
+| 5 | The winning values become `DEFAULT_CONFIG` (all in `config.ts`); `SIM_VERSION` bump if behaviour changes; golden hashes re-recorded; exploit tests still pass (and new ones for any new fitness term); the Sprint 3.2 evolution test re-checked | `pnpm test` green |
+| 6 | Acceptance run on held-out seeds 101–120, once | Bar above met, every seed's numbers recorded |
+| 7 | Viewer: train a run with the new defaults, load it, compare Gen 1 vs Gen 100; record a GIF to `docs/` | GIF committed, visual check described |
+| 8 | Docs: this file (results, retro), `phase-3.md`, plan revision note for the new defaults | — |
+
+## Definition of done
+
+- Acceptance bar met on the 20 held-out seeds, every seed's numbers recorded here.
+- GIF of gen 1 vs gen 100 committed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:browser`, `pnpm build`, `pnpm test:e2e` pass
+  locally and in CI.
+- Every fitness term keeps an exploit test (`CLAUDE.md`).
+
+## Out of scope
+
+- Memory neurons — Sprint 3.5.
+- Combat, sharing, territory, tribe-score balance on Medium (the "leader stays at `popCap`" lead
+  from the 3.2 review) — Sprint 4.1 / 4.2. Small has fixed tribe sizes, so the acceptance bar is
+  not affected by it.
+- Sensor or brain changes (they would need genome migration); this sprint changes config values
+  only, unless a sweep shows a rule is broken.
+- Resuming runs, migrating old runs to the new config — Sprint 5.1. Runs trained before the new
+  defaults stop being playable in the viewer (strict config hash, plan §3.3).
+
+---
+
+## What was done
+
+On branch `sprint-3.4`.
+
+**Trainer `--config <file>`** (commit `97aeb0a`). `shared/config-override.ts`
+(`applyConfigOverride`, `parseConfigOverride`, `ConfigOverrideError`) merges a partial config JSON
+onto `DEFAULT_CONFIG`: objects key by key (presets one at a time), arrays whole. It refuses unknown
+keys, wrong types, non-finite numbers, fractional or negative whole-number fields (they hash as
+32-bit integers), unknown `selection`/`extinction` values, wrong array lengths and preset id
+changes, naming the key path. A full config (e.g. a `run.json`'s) is a valid override. The CLI
+reads the file in `main()` (`CliIo.readTextFile`), passes the merged config to every seed (worker
+threads too), prints `Config <hash> (defaults + <file>)`, checkpoints at the config's
+`benchmarkInterval` unless `--save-every` is given, and exits 2 with the reason for a missing or
+bad file. Tests: `config-override.test.ts` (11), `args` (+2), `main` (+3 and the worker check).
+
+**Diagnosis** (scratch scripts on top of the built packages: arena inspection, population
+benchmarks, survival curves; none committed).
+- The arena floor and ceiling on Small: a STAY-only brain scores 465, DRINK-only 499, a
+  hand-written forager 1,262 (17 of 25 clones alive at the end; 8 never reach water).
+- Gen-100 champions of the old defaults **never moved**: "EAT where you stand, DRINK if water is
+  adjacent". Clones that spawned next to water lived; the rest died of thirst at tick 532.
+- Whole tribes locked into **"always EAT"** (or "always DRINK") for 100–300 generations: every
+  genome of seed 3's tribe 0 scored ~500 after 300 generations. EAT-only reliably adds 67 ticks
+  of life on almost any tile, DRINK only next to water, so without a lucky drinker in generation
+  1 the population converges on eating.
+- Not map overfitting: champions score the same on their own map as in the arena.
+- At 1,500 ticks a creature parked on a good shore tile survives on starting reserves plus the
+  tile's regrowth, so the generation barely separates foragers from sitters, and the arena ceiling
+  sits just above the 2× bar.
+
+**Sweeps** (Small, 100 generations; "full" = seeds meeting all three criteria of the bar,
+"ratio" = mean over seeds of gen-100 mean / gen-1 mean). Each row is one `pnpm train --seeds …
+--config …` run.
+
+| Change (on top of the row's base) | Seeds | Ratio | Seeds ≥ 2× | Tribes ≥ 1.5× | Full |
+|---|---|---|---|---|---|
+| Old defaults (baseline) | 1–20 | 1.45 | 0/20 | 18/40 | 0/20 |
+| initial weights ±1 / ±3 | 1–10 | 1.53 / 1.33 | 1 / 0 | 8 / 6 of 20 | 1 / 0 |
+| σ 0.4 / σ 0.1 | 1–10 | 1.46 / 1.19 | 1 / 0 | 8 / 3 | 1 / 0 |
+| mutation rate 0.1 / 0.02 | 1–10 | 1.34 / 1.32 | 0 / 0 | 5 / 5 | 0 / 0 |
+| tournament 3 / 5 | 1–10 | 1.42 / 1.40 | 1 / 0 | 8 / 7 | 1 / 0 |
+| elites 1 / 5, parent fraction 0.4 / 0.1 | 1–10 | 1.33–1.48 | 0 | 3–9 | 0 |
+| crossover off | 1–10 | 1.14 | 0 | 2 | 0 |
+| intake weights ×2.5 (food 5, water 5) | 1–10 | 1.37 | 0 | 6 | 0 |
+| move cost 0.1 / hydration drain 0.2 | 1–10 | 1.16 / 1.31 | 0 / 0 | 2 / 5 | 0 / 0 |
+| **±1 + σ 0.4 + tournament** ("T") | 1–10 | 1.74 | 2 | 14 | 2 |
+| T with σ 0.6 / 0.8 / 1.0 / 1.2 | 1–10 | 1.76 / 1.86 / 1.76 / 1.83 | 1–4 | 16–17 | 0–4 |
+| T σ 0.8 + rate 0.1 / elites 4 / clamp 8 / vision 6 / elites 0 | 1–10 | 1.63–1.79 | 1–4 | 12–15 | 1–4 |
+| T σ 0.6 + food 20, water 10 | 1–10 | 1.84 | 3 | 16 | 3 |
+| T σ 0.8 + generation 2,000 / 2,500 / 3,000 | 1–10 | 1.96 / 1.93 / 1.87 | 4 / 5 / 4 | 17 / 14 / 15 | 4 / 5 / 4 |
+| unit-length food/water direction sensors (local code experiment, reverted) | 1–10 | 1.43 | 0 | 7 | 0 |
+| T σ 0.8, generation 1,500 | 1–20 | 1.76 | 6 | 29/40 | 6 |
+| T σ 0.6, generation 3,000 | 1–20 | 2.11 | 12 | 31/40 | 9 |
+| **T σ 0.6, generation 3,000, energy drain 0.2** (new defaults) | 1–20 | 2.41 | 17 | 36/40 | **15** |
+| … same, fresh seeds | 21–40 | 2.26 | 12 | 33/40 | 10 |
+| … energy drain 0.15 / 0.175 | 1–20 | 2.62 / 2.42 | 16 / 15 | 34 / 31 | 14 / 13 |
+| … σ 0.8 / σ 0.4 | 1–20 | 2.43 / 2.16 | 14 / 11 | 31 / 30 | 10 / 10 |
+| … elites 4 / rate 0.1 | 1–20 | 2.53 / 2.54 | 17 / 18 | 37 / 34 | 16 / 15 |
+| … generation 1,500 / 2,000 / 4,000 | 1–20 | 1.59 / 1.96 / 2.51 | 1 / 10 / 16 | 25 / 32 / 35 | 1 / 9 / 14 |
+| energy drain 0.2 + generation 3,000, old GA settings | 1–20 | 1.70 | 5 | 19/40 | 3 |
+| Medium, new defaults (generation 4,000) / generation 2,000 / old defaults | 1–6 | 2.12 / 1.71 / 1.50 | 4 / 1 / 0 | 19 / 18 / 13 of 24 | 2 / 1 / 0 |
+
+All three parts are needed: the GA settings alone reach ~1.8, the drain and generation length
+without them 1.70, together 2.3–2.4. Elites 4 and mutation rate 0.1 were within the noise of the
+chosen row (≈ ±2 "full" seeds of 20), so the fewer-changes variant was kept.
+
+**New defaults** (`config.ts`, with the reasons in comments): `creature.baseEnergyDrain` 0.25 →
+0.2; `generationLength` Small/Medium/Large/Huge 1,500/2,000/3,000/4,000 → 3,000/4,000/6,000/8,000;
+`evolution.selection` truncation → tournament (size 3); `initialWeightRange` 2 → 1;
+`mutationSigma` 0.2 → 0.6. `SIM_VERSION` 7 → 8; golden hashes re-recorded (map hash unchanged;
+world hashes and the `brainOutputs` digest changed because energy drains slower, so the energy
+sensor reads differently; in the brain scenario 26 of 50 creatures are dead by tick 600, all by
+700). Exploit tests unchanged and green: an only-STAY creature now dies at tick 516 (was 466),
+still ≤ 600 and < half the shortest generation. Tests that relied on truncation being the default
+now set it. The e2e test that plays past a generation end now asks Node when the played
+generation ends instead of assuming 1,500 ticks.
+
+**Regression test for the milestone.** `evolution-learns.test.ts` now runs Small seed 42 (not
+used in any sweep) for 100 generations: benchmark 541/561 → 1,437/1,075 (mean 2.28×, tribes
+2.66× and 1.92×, STAY-only brain 515). It asserts the Sprint 3.4 bar there, plus the Sprint 3.2
+check at generation 50 (1.45×). ≈ 7 s.
+
+**What a generation-100 champion does** (arena, seed 17's tribe 0, score 2,158): 18 of 25 clones
+walk a few tiles to the shore, then alternate EAT and DRINK and live 2,000–3,000 ticks, eating
+20–28 bites and drinking 24–35; 7 never reach water and die at tick 532. Foraging trips away from
+the water are rare: the learned skill is "find water, stay by it, eat what grows there".
+
+**Visual check and GIF** — `docs/media/sprint-3.4-gen1-vs-gen100.gif`. A run of the new defaults
+(`pnpm train --preset small --seed 42 --generations 100`) loaded in the viewer with "Load run…";
+"Gen 1 · small-42" on the left and "Gen 100 · small-42" on the right, played in two browser pages
+paused at the same ticks (0–800 every 20 ticks, then every 100 to 2,999), cropped to both tribes'
+start zones. Each side freezes when its own generation ends (the viewer would start the next
+one). Gen 1 (25 clones of each tribe's generation-1 champion) mostly stands where it spawned;
+all 50 are dead at tick 699, the last 10 together, from hunger beside the water they drank from
+(they apparently never ate). Gen 100 (each tribe's five hall-of-fame genomes) heads for the
+ponds: the Amber tribe lines up along its pond's shores, 19 of 50 are alive at tick 700, 13 at
+1,300, 10 at 1,800 and 5 at the end of the 3,000-tick generation. Recorded with Playwright screenshots of the preview build and a
+small GIF89a encoder (scratch scripts, not committed); 63 frames, 1,286 × 405, 0.29 MB.
+
+## Acceptance (held-out seeds 101–120, run once)
+
+`pnpm train --preset small --seeds 101-120 --generations 100`, shipped defaults (config
+`7d11de5c9a8c5f9b`, `SIM_VERSION` 8), after the bar above was committed (`fa0879a`). Scores
+from each seed's `stats.csv`; STAY-only arena score 515, so condition 2 needs a gen-100 mean ≥
+1,030.
+
+| Seed | Gen 1 (tribe 0 / 1) | Gen 100 (tribe 0 / 1) | Ratio | Tribe ratios | 2× gen 1 and 2× STAY |
+|---|---|---|---|---|---|
+| 101 | 534 / 563 | 1,833 / 2,154 | 3.63 | 3.43 / 3.83 | yes |
+| 102 | 561 / 650 | 718 / 1,999 | 2.24 | 1.28 / 3.08 | yes |
+| 103 | 560 / 585 | 2,070 / 1,913 | 3.48 | 3.70 / 3.27 | yes |
+| 104 | 818 / 636 | 2,064 / 1,943 | 2.76 | 2.53 / 3.06 | yes |
+| 105 | 574 / 938 | 1,867 / 1,877 | 2.48 | 3.25 / 2.00 | yes |
+| 106 | 613 / 551 | 1,614 / 1,287 | 2.49 | 2.63 / 2.34 | yes |
+| 107 | 506 / 518 | 747 / 715 | 1.43 | 1.48 / 1.38 | **no** |
+| 108 | 523 / 625 | 1,611 / 1,077 | 2.34 | 3.08 / 1.72 | yes |
+| 109 | 568 / 586 | 2,214 / 1,915 | 3.58 | 3.90 / 3.27 | yes |
+| 110 | 542 / 523 | 808 / 521 | 1.25 | 1.49 / 1.00 | **no** |
+| 111 | 648 / 641 | 642 / 957 | 1.24 | 0.99 / 1.49 | **no** |
+| 112 | 504 / 650 | 541 / 1,902 | 2.12 | 1.07 / 2.92 | yes |
+| 113 | 541 / 947 | 1,556 / 896 | 1.65 | 2.88 / 0.95 | **no** |
+| 114 | 573 / 642 | 1,758 / 1,670 | 2.82 | 3.07 / 2.60 | yes |
+| 115 | 574 / 561 | 2,093 / 2,104 | 3.70 | 3.65 / 3.75 | yes |
+| 116 | 573 / 531 | 1,762 / 1,106 | 2.60 | 3.07 / 2.08 | yes |
+| 117 | 823 / 560 | 1,506 / 1,994 | 2.53 | 1.83 / 3.56 | yes |
+| 118 | 548 / 633 | 2,220 / 984 | 2.71 | 4.05 / 1.55 | yes |
+| 119 | 592 / 626 | 2,149 / 1,215 | 2.76 | 3.63 / 1.94 | yes |
+| 120 | 522 / 561 | 730 / 1,992 | 2.51 | 1.40 / 3.55 | yes |
+
+| Condition | Needed | Result | |
+|---|---|---|---|
+| 1. Mean of per-seed ratios | ≥ 2.0 | **2.52** | pass |
+| 2. Seeds ≥ 2× gen 1 and ≥ 2× STAY-only | ≥ 12 of 20 | **16 of 20** | pass |
+| 3. Tribes ≥ 1.5× their gen 1 | ≥ 75 % (30 of 40) | **30 of 40 (75 %)** | pass, with no margin |
+
+**The bar is met.** Condition 3 is met exactly at its threshold: one more tribe below 1.5× would
+have failed it, and three tribes ended at 1.48–1.49×. Conditions 1 and 2 have room (2.52 vs 2.0;
+16 vs 12). The tuning seeds predicted this (≈ 86 % of tribes at 1.5×, ≈ 72 % of seeds at 2×); the
+held-out set came out at 75 % and 80 %.
+
+**Known limitation: lock-in.** Ten of the 40 held-out tribes stayed below 1.5×. Two of them (seed
+110 tribe 1, seed 112 tribe 0) are hard lock-ins: in generations 91–100 their best creature never
+scored above ~550, i.e. the whole tribe still eats where it stands and dies of thirst at tick
+~533, exactly the "always EAT" optimum that the new energy drain made rarer but not impossible.
+The other eight did breed creatures that lived through whole generations in their own world, but
+their generation-100 champion (the creature with the best world fitness, which is partly spawn
+luck) scored only 521–896 in the arena, so the tribe either learned only partly or its champion
+was a lucky sitter. Leads for later sprints: memory (3.5) may help "remember where the water
+was"; more creatures per tribe or a less luck-driven fitness (e.g. fitness relative to the
+tribe's spawn conditions) would weaken lock-in and champion noise; Sprint 4.2's balance pass
+should re-measure this share.
+
+**Recorded, not blocking**
+
+- Small seed 42, 500 generations: 41.2 s, 1,446,348 ticks, 35,070 ticks/s; benchmark 541/561 →
+  1,391/2,057 (Sprint 3.3 defaults: 24.2 s, 499/498 → 948/622).
+- Medium seed 42, 500 generations: 226.9 s, 1,972,609 ticks, 8,694 ticks/s; benchmark
+  508/637/561/628 → 1,744/2,061/1,483/1,733 (Sprint 3.3 defaults: 109.9 s, 534/546/499/503 →
+  1,088/525/708/868). At generation 100: 1,028/1,550/669/1,598. Twice the time because
+  generations are twice as long and creatures live longer; ticks per second are unchanged and
+  still ~9× the §3.6 target.
+- Medium seeds 101–103, 100 generations (4 tribes, re-allocated sizes): ratios 2.36 / 2.70 /
+  2.74, gen-100 means 1,371 / 1,546 / 1,577 (all ≥ 2× STAY-only), 11 of 12 tribes ≥ 1.5× (the
+  twelfth at 1.47×); 48–62 s per seed.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (288 tests in 39 files),
+`pnpm test:browser` (6), `pnpm build`, `pnpm test:e2e` (11) pass locally.
+
+## Retro
+
+**Went well**
+- `--config` plus multi-seed `pnpm train` made ~60 sweeps fit in one session (20 seeds × 100
+  generations in 30–50 s). Small scratch scripts on top of the built packages (arena action mix,
+  survival per clone, whole-population benchmarks) found the real causes (champions never moved;
+  whole tribes locked into one action) much faster than more sweeps would have.
+- Holding seeds out and fixing the bar before looking at them kept the result honest. When the
+  bar turned out to be mostly luck, it was changed before the held-out run, not after.
+- Seed 42 now pins the milestone in `pnpm test`, so a later change that slows learning fails.
+
+**Surprises / learnings**
+- GA settings alone plateaued at a ratio of ~1.8. The decisive levers were in the world:
+  thirst killing before hunger (energy drain 0.2) and generations long enough that seeking food
+  and water pays. What creatures can learn depends as much on the environment as on the GA.
+- The "obvious" sensor fix (unit-length direction to food and water) made learning worse.
+- A single 100-generation run is a coin toss per seed and per tribe, and even the generation-1
+  champion's arena score ranges from 500 to 950, so any bar on 3 seeds measures mostly luck.
+  Multi-seed bars with thresholds on means and shares are the honest way to judge tuning.
+- The first GIF attempt showed Gen 1 with "50 of 50 alive" at tick 900: the viewer had already
+  started generation 2. Each side of the recording now freezes when its own generation ends.
+
+**Notes for Sprint 3.5 (memory)**
+- The plan's A/B is "≥ 2 of 3 seeds"; with this much per-seed luck, compare memory on vs off on
+  ≥ 20 seeds (same config otherwise) and look at means and shares, as here.
+- A sparse-water variant can be made with `--config` (map pond settings) without code changes.
+- Tribes below 1.5× (about one in seven on the tuning seeds, 10 of 40 held-out; see the known
+  limitation above) are the main source of failed seeds. Hard lock-in is only part of it (2 of
+  the 10 held-out); memory may or may not help it, so report lock-in and champion noise
+  separately.
+- A Small generation is now 3,000 ticks (5 minutes at 1×): watch at 20× or Max.
+- The GIF recorder (Playwright + a small GIF encoder) lives in scratch scripts; if later
+  milestones need recordings again, a cleaned-up version could be committed.
+
+## Review (2026-11-24)
+
+A fresh session reviewed PR #12 against `CLAUDE.md`, plan §2.5, §3.3, §3.6, §4 Sprint 3.4 and
+the revision notes, `phase-3.md` and this file.
+
+**Checked, no change needed**
+- **Bar before results.** `fa0879a` (20 held-out seeds, the three conditions) is committed
+  before `1b797d9` (the results); the doc says the bar changed before any held-out run, by the
+  user, and why (per-seed success ≈ 62 % on the tuning seeds makes 3 of 3 mostly luck). The three
+  Sprint 3.4 commits are three minutes apart, so git order is the only evidence of the sequence;
+  it is consistent with the doc and the implementer's notes.
+- **Held-out run reproduced** (`pnpm train --preset small --seeds 101-120 --generations 100`, run
+  once, nothing re-tuned): config `7d11de5c9a8c5f9b`, every seed's gen-1 and gen-100 scores equal
+  the table above. From the unrounded `stats.csv` values: mean ratio 2.516, 16 of 20 seeds at 2×
+  gen 1 and 2× STAY-only (515, also re-checked), 30 of 40 tribes at ≥ 1.5×. Condition 3 passed
+  exactly at its threshold; the three closest misses are 1.477 (seed 107 tribe 0), 1.489 (110/0)
+  and 1.492 (111/1), the weakest pass 1.554 (118/1). The doc and retro say so plainly.
+- **Lock-in diagnosis** confirmed from `stats.csv`: seed 110 tribe 1 and seed 112 tribe 0 never
+  had a creature above fitness ~557 in generations 91–100 (always-EAT lock-in); the other eight
+  tribes below 1.5× bred creatures that lived through whole 3,000-tick generations (fitness
+  ~3,090). Six of those eight had scored ≥ 1.5× at an earlier benchmark generation (e.g. seed 107
+  tribe 0: 1,564 at generation 60, 747 at 100): the generation-100 champion is picked by world
+  fitness, so a single benchmark generation is noisy.
+- **`--config`** (`shared/config-override.ts`): unknown keys (including `__proto__`), wrong
+  types, non-finite numbers, enum values, array lengths and preset ids are refused with the key
+  path; the whole-number list matches exactly the fields `hashConfig` writes as 32-bit integers,
+  so two different configs can't share a hash. Worker threads receive the merged config;
+  `run.json` stores it and its hash (tested). Range checks (e.g. a negative σ) are not done; for a
+  tuning tool that is acceptable, sim-core clamps counts and sizes.
+- **Tuned defaults** are all in `config.ts` with their reasons; `SIM_VERSION` 8 and the golden
+  hashes were re-recorded per `golden-hashes.ts` (map hash unchanged, as expected for a
+  config-only change). The new brain-scenario comment is right: 26 of 50 dead at tick 600, all 50
+  by 700. Old defaults through `--config` on this build give the Sprint 3.3 config hash
+  `74a8938d4a3f2e8c` and Sprint 3.3's seed-42 numbers (see timings below), so nothing but the
+  config changed.
+- **Exploit tests** still prove their claims: an only-STAY creature dies at tick 516 (≤ 600 and
+  < half the shortest generation, now 3,000); EAT/DRINK spam is checked with drain switched off
+  (earns nothing) and with the real drain (credited only what metabolism burned); no new fitness
+  term.
+- **GIF** (`docs/media/sprint-3.4-gen1-vs-gen100.gif`, 0.29 MB, 63 frames, 1,286 × 405):
+  frames decoded and checked against Node. Playing the seed-42 generation-1 and generation-100
+  checkpoints in Node gives exactly the counts the frames show and the text above claims:
+  generation 1 has 10 alive at tick 698 and all dead at 699; generation 100 has 19 / 13 / 10 / 5
+  alive at ticks 700 / 1,300 / 1,800 / 2,999, the Amber tribe along its pond's shore. Committed
+  size is sensible.
+- sim-core determinism rules, no `any`, docs (plan §2.2, §2.5, §3.6, §4, open decision, revision
+  note; `phase-3.md`) updated.
+
+**§3.6 timings re-measured** (seed 42, 500 generations, this machine, one session, one run at a
+time)
+
+| Run | Ticks | Time | Ticks/s | Benchmark gen 1 → 500 | §3.6 target |
+|---|---|---|---|---|---|
+| Small, new defaults | 1,446,348 | 83.1 s | 17,412 | 541/561 → 1,391/2,057 | > 2,000 ticks/s |
+| Medium, new defaults | 1,972,609 | 454.3 s | 4,342 | 508/637/561/628 → 1,744/2,061/1,483/1,733 | > 1,000 ticks/s |
+| Small, old defaults via `--config` (A/B) | 746,703 | 51.9 s | 14,392 | 499/498 → 948/622 | |
+| Small, new defaults again (A/B) | 1,446,348 | 75.1 s | 19,255 | as above | |
+
+Ticks and benchmarks equal the numbers in "Recorded, not blocking" exactly (and the old-defaults
+row equals the Sprint 3.3 review's). Wall-clock times are about twice the ones above: the old
+defaults took 51.9 s here against 24.2 s in the Sprint 3.3 review, so the machine was slower
+today, not the code. Back to back, the new defaults run 1.94× the ticks in 1.45× the time (more
+ticks per second: longer generations spread the per-generation work). Targets still met with
+4–9× headroom; the 500-generation column of §3.6 (worst case at the target speed) stays an upper
+bound.
+
+**Found and fixed**
+1. **Lock-in share overstated as "one tribe in seven".** The plan's revision note, the
+   `phase-3.md` risk row and the retro's note for 3.5 put every tribe below 1.5× down to lock-in
+   at the tuning seeds' rate. On the held-out seeds it was 10 of 40 (one in four), and only 2 of
+   those 10 are hard lock-ins. All three now give both rates and the split. (The rationale for
+   the bar change, written before the held-out run, is left as it was.)
+2. **`--config` usage text** said "a run.json's "config" works too", which reads as if a whole
+   `run.json` could be passed (it is refused: `unknown config key format`). It now says to copy
+   the `"config"` object out of a `run.json`.
+3. **Untested fallback:** with `benchmarkInterval: 0` in a `--config` file, checkpoints fall back
+   to the default interval (10) instead of using 0 as a step. New `main()` test.
+4. Plan: the Sprint 3.2 revision note choosing ±2 initial weights now points to its reversal in
+   3.4.
+
+**For Sprint 3.5**
+- Compare memory on vs off on ≥ 20 seeds, and consider scoring each tribe by more than one
+  benchmark generation (e.g. the mean of generations 80–100, or the best hall-of-fame score):
+  the generation-100 champion alone moved some tribes from ≥ 1.5× to below it.
+- §4 Sprint 3.5 still says "3 seeds" / "≥ 2 of 3 seeds"; fix that bar in the sprint file before
+  running it, as here.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (289 tests in 39 files),
+`pnpm test:browser` (6), `pnpm build`, `pnpm test:e2e` (11) pass locally after the fixes.

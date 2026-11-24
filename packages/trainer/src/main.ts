@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseConfigOverride } from '@evolution-island/shared';
+import { DEFAULT_CONFIG, hashConfig, type SimConfig } from '@evolution-island/sim-core';
 import { parseTrainArgs, runFolderName, USAGE, UsageError, type TrainOptions } from './args.js';
 import { banner } from './banner.js';
 import { runPool } from './pool.js';
@@ -10,6 +12,8 @@ export interface CliIo {
   error(line: string): void;
   /** Logical CPUs, for the default worker count. */
   readonly cpus: number;
+  /** Reads a text file (the `--config` override); throws if it can't. */
+  readTextFile(path: string): string;
 }
 
 /** How seeds are run: one seed in this thread, several on worker threads. */
@@ -73,17 +77,32 @@ function writeMultiSeedSummary(out: string, summaries: readonly SeedSummary[]): 
   writeFileSync(join(out, 'summary.csv'), `${[SUMMARY_COLUMNS.join(','), ...rows].join('\n')}\n`);
 }
 
-function jobsFor(options: TrainOptions): SeedJob[] {
+/** Checkpoints at benchmark generations unless `--save-every` says otherwise. */
+function saveInterval(options: TrainOptions, config: SimConfig): number {
+  if (options.saveEvery !== null) return options.saveEvery;
+  const interval = config.evolution.benchmarkInterval;
+  return interval > 0 ? interval : DEFAULT_CONFIG.evolution.benchmarkInterval;
+}
+
+/** `DEFAULT_CONFIG`, or the `--config` file merged onto it. Throws with the reason. */
+function loadConfig(options: TrainOptions, io: CliIo): SimConfig {
+  if (options.configPath === null) return DEFAULT_CONFIG;
+  return parseConfigOverride(io.readTextFile(options.configPath));
+}
+
+function jobsFor(options: TrainOptions, config: SimConfig): SeedJob[] {
+  const saveEvery = saveInterval(options, config);
   return options.seeds.map((seed) => ({
     preset: options.preset,
     seed,
     generations: options.generations,
-    saveEvery: options.saveEvery,
+    saveEvery,
     outDir:
       options.seeds.length === 1
         ? options.out
         : join(options.out, runFolderName(options.preset, seed)),
     force: options.force,
+    config,
   }));
 }
 
@@ -107,13 +126,25 @@ export async function main(
   }
 
   const { options } = command;
-  const jobs = jobsFor(options);
+  let config: SimConfig;
+  try {
+    config = loadConfig(options, io);
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    io.error(`Error: --config ${options.configPath ?? ''}: ${reason}`);
+    return 2;
+  }
+  const jobs = jobsFor(options, config);
   io.log(banner());
   io.log(
     `Training ${options.preset}, ${jobs.length === 1 ? 'seed' : 'seeds'} ` +
       `${options.seeds.map((s) => String(s)).join(', ')}, ${options.generations} generations` +
       (jobs.length > 1 ? ` on ${Math.min(options.workers, jobs.length)} worker threads` : '') +
       ` → ${options.out}`,
+  );
+  io.log(
+    `Config ${hashConfig(config)}` +
+      (options.configPath === null ? ' (defaults)' : ` (defaults + ${options.configPath})`),
   );
   const onProgress = (p: SeedProgress): void => {
     if (p.checkpoint && !options.quiet) io.log(formatProgress(p));

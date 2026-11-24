@@ -15,8 +15,13 @@ export interface TrainOptions {
   readonly generations: number;
   /** One seed: the run folder. Several seeds: the parent of one `<preset>-<seed>` folder each. */
   readonly out: string;
-  /** Checkpoint every N generations (plus generation 1 and the last one). */
-  readonly saveEvery: number;
+  /**
+   * Checkpoint every N generations (plus generation 1 and the last one); null = the config's
+   * `benchmarkInterval` (known once the `--config` file is read).
+   */
+  readonly saveEvery: number | null;
+  /** `--config`: a JSON file merged onto `DEFAULT_CONFIG` (null = the defaults). */
+  readonly configPath: string | null;
   /** Worker threads for several seeds. */
   readonly workers: number;
   /** Overwrite a run already in the output folder. */
@@ -50,8 +55,13 @@ export const USAGE = `Usage: pnpm train [options]
   --generations <n>                   generations to run (default ${DEFAULT_GENERATIONS})
   --out <dir>                         run folder; with --seeds the parent of one folder per seed
                                       (default runs/<preset>-<seed>, runs/<preset>-seeds-<list>)
-  --save-every <n>                    checkpoint every n generations (default ${DEFAULT_CONFIG.evolution.benchmarkInterval});
+  --save-every <n>                    checkpoint every n generations (default: the config's
+                                      benchmarkInterval, ${DEFAULT_CONFIG.evolution.benchmarkInterval});
                                       generation 1 and the last one are always saved
+  --config <file>                     JSON merged onto the default config, e.g.
+                                      {"evolution": {"mutationSigma": 0.3}}; a full config
+                                      (the "config" object copied out of a run.json) works
+                                      too. Runs store the full config.
   --workers <n>                       worker threads for --seeds (default: CPU count - 1)
   --force                             overwrite a run already in the output folder
   --quiet                             print only the summary
@@ -125,6 +135,7 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
         generations: { type: 'string' },
         out: { type: 'string' },
         'save-every': { type: 'string' },
+        config: { type: 'string' },
         workers: { type: 'string' },
         force: { type: 'boolean' },
         quiet: { type: 'boolean' },
@@ -154,11 +165,14 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
     seeds = [parseSeed(raw)];
   }
   const generations = positiveInt('--generations', values.generations, DEFAULT_GENERATIONS);
-  const saveEvery = positiveInt(
-    '--save-every',
-    values['save-every'],
-    DEFAULT_CONFIG.evolution.benchmarkInterval,
-  );
+  const saveEvery =
+    values['save-every'] === undefined
+      ? null
+      : positiveInt('--save-every', values['save-every'], 1);
+  const configPath = values.config ?? null;
+  if (configPath !== null && configPath.trim().length === 0) {
+    throw new UsageError('--config must not be empty');
+  }
   const defaultWorkers = Math.max(1, Math.min(seeds.length, cpus - 1));
   const workers = positiveInt('--workers', values.workers, defaultWorkers);
 
@@ -180,6 +194,7 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
       generations,
       out,
       saveEvery,
+      configPath,
       workers,
       force: values.force === true,
       quiet: values.quiet === true,

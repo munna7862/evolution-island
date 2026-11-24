@@ -49,17 +49,18 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 
 | Preset | Tiles   | Tribes | Creatures / tribe (start) | Total | Generation length | Purpose                       |
 |--------|---------|--------|---------------------------|-------|-------------------|-------------------------------|
-| Small  | 64×64   | 2      | 25                        | 50    | 1,500 ticks       | Dev, debugging, fast evolution |
-| Medium | 128×128 | 4      | 50                        | 200   | 2,000 ticks       | **Main show**                  |
-| Large  | 256×256 | 6      | 80                        | 480   | 3,000 ticks       | Wars, migrations, territory    |
-| Huge   | 512×512 | 8      | 150                       | 1,200 | 4,000 ticks       | Epic long runs, highlights     |
+| Small  | 64×64   | 2      | 25                        | 50    | 3,000 ticks       | Dev, debugging, fast evolution |
+| Medium | 128×128 | 4      | 50                        | 200   | 4,000 ticks       | **Main show**                  |
+| Large  | 256×256 | 6      | 80                        | 480   | 6,000 ticks       | Wars, migrations, territory    |
+| Huge   | 512×512 | 8      | 150                       | 1,200 | 8,000 ticks       | Epic long runs, highlights     |
 
 **Rules:**
-- Keep density roughly constant; scale food with map area. *Measured on the generator (Sprint 1.1):* ~29–32 **walkable** tiles per starting creature on Small/Medium, ~50 on Large, ~77 on Huge (the 80–220 first estimated counted raw grid tiles, including the deep-water ring). Accepted for now: food regrowth capacity is several times what the starting population burns (Small: ~1,170 food tiles × 0.15 regrowth/tick ≈ 175 energy/tick vs ~30/tick needed by 50 creatures). Revisit in Sprint 3.4 tuning if crowding or the population cap (2× start) makes Small/Medium too tight.
+- Keep density roughly constant; scale food with map area. *Measured on the generator (Sprint 1.1):* ~29–32 **walkable** tiles per starting creature on Small/Medium, ~50 on Large, ~77 on Huge (the 80–220 first estimated counted raw grid tiles, including the deep-water ring). Accepted for now: food regrowth capacity is several times what the starting population burns (Small: ~1,170 food tiles × 0.15 regrowth/tick ≈ 175 energy/tick vs ~30/tick needed by 50 creatures). Revisit in Sprint 3.4 tuning if crowding or the population cap (2× start) makes Small/Medium too tight. *(Sprint 3.4: left as is; the levers that mattered were metabolism, generation length and the GA settings.)*
 - Minimum **25 creatures per tribe** for genetic diversity (except in battle-royale mode).
 - **Population cap per tribe** = 2× starting size, so no tribe can flood the map. Tribe sizes are re-allocated by performance each generation (§2.5), so the *total* stays roughly constant. On Small (2 tribes × 25, minimum 25) there is no room to re-allocate, so tribe sizes stay fixed there — fine for a dev map.
 - Tribes spawn in balanced, spread-out start zones (like AoE player starts). The generator checks that all zones are connected by walkable tiles, that each zone has similar food and water within radius R (±15%), and that each zone has free walkable tiles for at least 2× the tribe's population cap (one creature per tile). If not, it retries with the next derived seed (still deterministic).
 - Generation length scales with map size so tribes have time to reach each other on big maps.
+- Generation length is several times what an untrained creature lives (~500–700 ticks), so finding food and water again and again, not starting reserves, decides fitness. Sprint 3.4 doubled the first defaults (1,500/2,000/3,000/4,000): on Small, 1,500 → 2,000 → 3,000 ticks took the seeds meeting the Sprint 3.4 bar from 1 → 9 → 15 of 20.
 
 ### 2.3 Creatures
 
@@ -132,8 +133,8 @@ Written from scratch in TypeScript (small, fast, no dependency risk).
   - Optional tribe term `+ w·tribeScore` (default 0; switched on in Sprint 4.3): shares the tribe's success with every member, which helps cooperation evolve. Useful calls only evolve when helping the tribe also pays off for the caller.
 - At generation end, per tribe:
   1. Rank creatures by fitness (ties → lower id). Dead creatures keep the fitness they earned.
-  2. Top 20% become parents (truncation; tournament selection available in config). Elitism: best 2 copied unchanged.
-  3. Fill the tribe with offspring: crossover of two parents + mutation (Gaussian noise, σ ≈ 0.2, on ~5% of weights; weights clamped to ±4). The noise is an Irwin–Hall sum of 12 uniforms (only `+`/`−`, §3.3); Box–Muller would need `Math.log`/`cos`.
+  2. Parents are picked by tournament (best of 3 random members; truncation of the top 20% available in config). Elitism: best 2 copied unchanged.
+  3. Fill the tribe with offspring: crossover of two parents + mutation (Gaussian noise, σ ≈ 0.6, on ~5% of weights; weights clamped to ±4; generation-1 weights uniform in ±1). The noise is an Irwin–Hall sum of 12 uniforms (only `+`/`−`, §3.3); Box–Muller would need `Math.log`/`cos`.
      - Crossover is **per hidden neuron** (the child takes each hidden neuron's incoming + outgoing weights from one parent), which scrambles fixed-topology nets far less than per-weight crossover. Crossover can be switched off — mutation-only is a valid baseline.
 - **Tribe sizes next generation:** the total creature budget is split between tribes in proportion to **tribe score** (survivors + food gathered + territory), clamped to [`minTribeSize`, `popCap`] with one scale factor for all tribes (size = clamp(λ·score)), so places the cap takes from a leader go to the others. Doing well as a tribe = more members next generation. *(Without this, every tribe would reset to the same size and tribes would never really win or lose.)*
 - **Extinction** (no survivors at generation end):
@@ -289,10 +290,12 @@ Lineage is kept only for hall-of-fame ancestors, so memory doesn't grow with eve
 
 | Preset | Browser: fps / fastest smooth speed | Headless trainer  | 500 generations (trainer) |
 |--------|-------------------------------------|-------------------|---------------------------|
-| Small  | 60 fps / 20×                        | > 2,000 ticks/sec | ≈ 6 min                   |
-| Medium | 60 fps / 20×                        | > 1,000 ticks/sec | ≈ 17 min                  |
-| Large  | 60 fps / 20×                        | > 400 ticks/sec   | ≈ 1 h                     |
-| Huge   | ≥ 30 fps / 5×                       | > 150 ticks/sec   | ≈ 3.7 h                   |
+| Small  | 60 fps / 20×                        | > 2,000 ticks/sec | ≈ 12 min                  |
+| Medium | 60 fps / 20×                        | > 1,000 ticks/sec | ≈ 33 min                  |
+| Large  | 60 fps / 20×                        | > 400 ticks/sec   | ≈ 2 h                     |
+| Huge   | ≥ 30 fps / 5×                       | > 150 ticks/sec   | ≈ 7.4 h                   |
+
+The 500-generation column is the worst case at the target speed with every generation running its full length (§2.2, doubled in Sprint 3.4); early generations end sooner because everyone dies.
 
 At these targets the neural networks are cheap (Huge ≈ 180k brain evaluations/sec × 330–430 multiply-adds ≈ 60–80M ops/sec). Sensors, food and rendering are the real costs, so:
 - **Terrain** is rendered once into chunked textures — never one sprite per tile (Huge has 262,144 tiles). Creatures use batched sprites; off-screen chunks are culled.
@@ -366,7 +369,7 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 
 **Sprint 3.4 — First "it learns!" milestone** 🎉
 - Tune config until creatures clearly learn to seek food and water.
-- ✅ Benchmark score clearly rising on 3 seeds (fix the exact bar in the sprint plan, e.g. gen-100 score ≥ 2× gen-1 score). Visual check + recorded GIF of gen 1 vs gen 100.
+- ✅ Benchmark score clearly rising on 20 held-out seeds (Small, 100 generations, run once): mean of the per-seed gen-100 / gen-1 ratios ≥ 2.0; ≥ 12 of 20 seeds at ≥ 2× gen 1 and ≥ 2× a STAY-only brain; ≥ 75 % of tribes at ≥ 1.5× their gen 1 (bar in `docs/sprints/sprint-3.4.md`). Visual check + recorded GIF of gen 1 vs gen 100.
 
 **Sprint 3.5 — Memory experiment**
 - 2 memory neurons (§2.3) behind a config switch; Sprint 3.4 champions migrated with zero memory weights.
@@ -538,7 +541,7 @@ Notes:
 Most should be settled before/during Phase 1; later ones say when. Defaults are proposed so work can start; change them in the sprint retro if needed.
 - [ ] Final game name
 - [x] Top-down pixel art vs simple coloured shapes for creatures: simple coloured shapes (implemented Sprint 2.3)
-- [ ] Generation length per preset (defaults in §2.2)
+- [x] Generation length per preset: 3,000 / 4,000 / 6,000 / 8,000 ticks (doubled in Sprint 3.4, see §2.2)
 - [ ] Extinction mode default: respawn (default) vs battle royale
 - [x] Tribe names & colours: Okabe-Ito-based colour-blind-safe palette plus a distinct shape per tribe; names Amber, Sky, Vermilion, Orchid, Gold, Emerald, Cobalt, Ivory (implemented Sprint 2.3)
 - [ ] Generational (default for v1, world resets each generation) vs **continuous mode** (births when energy is high, death by old age, no reset). Continuous is more alive to watch on Large/Huge but harder to tune; revisit after Phase 4.
@@ -607,7 +610,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Per-hidden-neuron crossover also flips one coin for the output biases, which belong to no hidden neuron.
 - Creature ids restart at 0 each generation (`(generation, id)` identifies a creature in a run).
 - Generations are driven by an `EvolutionRun` around `World` rather than inside `tick()`; `World.startGeneration` does the reset (food full, creatures respawned in their zones).
-- Default `initialWeightRange` = 2: with ±1, a 4-seed sweep on Small barely learned in 50 generations (sensors hardly moved the outputs); with ±2 the benchmark rose on all 4 seeds.
+- Default `initialWeightRange` = 2: with ±1, a 4-seed sweep on Small barely learned in 50 generations (sensors hardly moved the outputs); with ±2 the benchmark rose on all 4 seeds. *(Reversed in Sprint 3.4: ±1 works better together with σ 0.6 and tournament selection.)*
 
 **2026-11-21 — Sprint 3.2 review** (`simVersion` 5 → 6)
 - §2.5 extinction: an extinct tribe's next generation is its best hall-of-fame genome plus offspring of its own members. Before, the whole hall of fame was ranked ahead of the members, filled 5 of the 6 truncation parent slots and both elite slots, and a tribe that had not had a survivor yet stopped learning (Small seed 42: tribe 1 was extinct in 50 of 50 generations, benchmark 498 → 515). Over 29 Small seeds × 50 generations, tribes improving > 1.1× went from 29/58 to 37/58.
@@ -622,3 +625,10 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 **2026-11-24 — Sprint 3.3 review**
 - §2.5 hall of fame: distinct genomes only. An elite that was champion again at a later benchmark generation got the same score and a second slot (Small seed 42: 4 of 102 saved tribe halls of fame), and playing a checkpoint always did it, after benchmarking a known genome in the browser. Now a champion already in the hall of fame keeps its stored score: no benchmark run, no copy. World evolution is unchanged (the best entry never changes); `SIM_VERSION` 7 because saved halls of fame differ.
 - Refused runs say why and what to do (train again with this build). Until Sprint 5.1 migrates files, every `SIM_VERSION` bump or default-config change makes earlier runs unplayable in the viewer.
+
+**2026-11-24 — Sprint 3.4 ("it learns!" tuning)** (`simVersion` 7 → 8)
+- New defaults, config only (no rule changed): energy drain 0.25 → 0.2, generation lengths doubled (§2.2), tournament selection (best of 3) instead of truncation, generation-1 weights ±2 → ±1, mutation σ 0.2 → 0.6. Found with the trainer's new `--config` overrides (~60 sweeps on Small, 10–40 seeds × 100 generations each): seeds meeting the Sprint 3.4 bar went from 0 of 20 to 25 of 40, and the mean generation-100 / generation-1 benchmark ratio from 1.45 to ≈ 2.3 (Medium, 6 seeds: 1.50 → 2.12).
+- Why these: whole tribes used to lock into "always EAT" (eating alone added ~67 ticks of life on almost any tile, drinking only helped next to water); with energy drain 0.2 thirst kills first and that lock-in mostly disappears. Longer generations let selection reward finding water and food over thousands of ticks rather than surviving on starting reserves. Larger mutations and tournament selection get populations out of "one action forever" optima. An only-STAY creature still dies at tick 516 (§2.3 balance rule).
+- Tried and dropped: cheaper moves, faster thirst, wider vision, weight clamp 8, intake weights ×5–×20, crossover off, unit-length food/water direction sensors (a local experiment; learning got worse).
+- Every run trained before this is unplayable in the viewer (new `SIM_VERSION` and config hash).
+- §4 Sprint 3.4 acceptance: **20 held-out seeds instead of 3** (user's decision, made before any held-out seed was run). A 100-generation outcome is still partly luck per seed (the tuned defaults met the per-seed bar on ≈ 62 % of 40 tuning seeds; about one tribe in seven locks into "always EAT" or "always DRINK"), so 3 of 3 would have passed only 25–40 % of the time. The bar is now on seeds 101–120, run once: mean per-seed ratio ≥ 2.0, ≥ 12 of 20 seeds at 2× gen 1 and 2× STAY-only, ≥ 75 % of tribes at 1.5×. Result: 2.52, 16 of 20, 30 of 40 (75 %, exactly the threshold) — met. On the held-out seeds 10 of 40 tribes stayed below 1.5× (1 in 4, more than the tuning seeds' 1 in 7); 2 of them are hard "always EAT" lock-ins, the other 8 bred creatures that lived through whole generations but their generation-100 champion scored low in the arena. Lock-in and champion noise are known limitations for Sprints 3.5 and 4.2.
