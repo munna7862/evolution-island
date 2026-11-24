@@ -369,7 +369,7 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 
 **Sprint 3.4 — First "it learns!" milestone** 🎉
 - Tune config until creatures clearly learn to seek food and water.
-- ✅ Benchmark score clearly rising on 3 seeds (fix the exact bar in the sprint plan, e.g. gen-100 score ≥ 2× gen-1 score). Visual check + recorded GIF of gen 1 vs gen 100.
+- ✅ Benchmark score clearly rising on 20 held-out seeds (Small, 100 generations, run once): mean of the per-seed gen-100 / gen-1 ratios ≥ 2.0; ≥ 12 of 20 seeds at ≥ 2× gen 1 and ≥ 2× a STAY-only brain; ≥ 75 % of tribes at ≥ 1.5× their gen 1 (bar in `docs/sprints/sprint-3.4.md`). Visual check + recorded GIF of gen 1 vs gen 100.
 
 **Sprint 3.5 — Memory experiment**
 - 2 memory neurons (§2.3) behind a config switch; Sprint 3.4 champions migrated with zero memory weights.
@@ -631,3 +631,4 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Why these: whole tribes used to lock into "always EAT" (eating alone added ~67 ticks of life on almost any tile, drinking only helped next to water); with energy drain 0.2 thirst kills first and that lock-in mostly disappears. Longer generations let selection reward finding water and food over thousands of ticks rather than surviving on starting reserves. Larger mutations and tournament selection get populations out of "one action forever" optima. An only-STAY creature still dies at tick 516 (§2.3 balance rule).
 - Tried and dropped: cheaper moves, faster thirst, wider vision, weight clamp 8, intake weights ×5–×20, crossover off, unit-length food/water direction sensors (a local experiment; learning got worse).
 - Every run trained before this is unplayable in the viewer (new `SIM_VERSION` and config hash).
+- §4 Sprint 3.4 acceptance: **20 held-out seeds instead of 3** (user's decision, made before any held-out seed was run). A 100-generation outcome is still partly luck per seed (the tuned defaults met the per-seed bar on ≈ 62 % of 40 tuning seeds; about one tribe in seven locks into "always EAT" or "always DRINK"), so 3 of 3 would have passed only 25–40 % of the time. The bar is now on seeds 101–120, run once: mean per-seed ratio ≥ 2.0, ≥ 12 of 20 seeds at 2× gen 1 and 2× STAY-only, ≥ 75 % of tribes at 1.5×. Result: 2.52, 16 of 20, 30 of 40 (75 %, exactly the threshold) — met. The lock-in is a known limitation for Sprints 3.5 and 4.2.

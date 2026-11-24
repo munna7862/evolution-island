@@ -16,7 +16,7 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | 3.1 | Neural network brain | Fixed-topology 18 → 12 → 9 softsign MLP on a `Float32Array` genome (333 weights), argmax over all 9 actions (ties → lowest index), brain spec carried in genome files, brain-driven decision policy, cross-engine golden test, benchmark |
 | 3.2 | Generations & genetic algorithm | Fitness from effective intake, selection, elitism, per-hidden-neuron crossover, mutation, per-tribe gene pools, tribe-size re-allocation, extinction handling, hall of fame, benchmark arena, exploit tests |
 | 3.3 | Headless trainer CLI | `pnpm train ...`, multi-seed `worker_threads`, saved hall-of-fame genomes + stats, viewer loads a run |
-| 3.4 | "It learns!" milestone | Tuning until benchmark score clearly rises on 3 seeds (bar fixed in the sprint plan) |
+| 3.4 | "It learns!" milestone | Tuning until benchmark score clearly rises on 20 held-out seeds (bar fixed in the sprint plan) |
 | 3.5 | Memory experiment | 2 memory neurons behind a config switch, genome migration with zero weights, A/B in the arena |
 
 ## Exit criteria (Phase 3 is done when)
@@ -28,7 +28,8 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
    dies well before the generation ends) — Sprint 3.2.
 3. The trainer meets the §3.6 targets for Small and Medium, and the viewer plays genomes from a run
    — Sprint 3.3.
-4. Benchmark score clearly rising on 3 seeds, with gen 1 vs gen 100 recorded — Sprint 3.4.
+4. Benchmark score clearly rising on 20 held-out seeds (bar in the Sprint 3.4 file), with gen 1 vs
+   gen 100 recorded — Sprint 3.4.
 5. Memory experiment decided and recorded (kept only if the A/B shows it helps) — Sprint 3.5.
 
 ## Architecture decisions taken in this phase

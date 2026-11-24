@@ -188,9 +188,110 @@ the water are rare: the learned skill is "find water, stay by it, eat what grows
 "Gen 1 · small-42" on the left and "Gen 100 · small-42" on the right, played in two browser pages
 paused at the same ticks (0–800 every 20 ticks, then every 100 to 2,999), cropped to both tribes'
 start zones. Each side freezes when its own generation ends (the viewer would start the next
-one). Gen 1 (25 clones of each tribe's generation-1 champion) mostly stands where it spawned; all
-50 are dead at tick 699, the last 10 together, from hunger beside the water they drank from (they
-apparently never ate). Gen 100 (each tribe's five hall-of-fame genomes) heads for the ponds: the Amber tribe lines
-up along its pond's shores, 19 of 50 are alive at tick 700, 13 at 1,300, 10 at 1,800 and 5 at the
-end of the 3,000-tick generation. Recorded with Playwright screenshots of the preview build and a
+one). Gen 1 (25 clones of each tribe's generation-1 champion) mostly stands where it spawned;
+all 50 are dead at tick 699, the last 10 together, from hunger beside the water they drank from
+(they apparently never ate). Gen 100 (each tribe's five hall-of-fame genomes) heads for the
+ponds: the Amber tribe lines up along its pond's shores, 19 of 50 are alive at tick 700, 13 at
+1,300, 10 at 1,800 and 5 at the end of the 3,000-tick generation. Recorded with Playwright screenshots of the preview build and a
 small GIF89a encoder (scratch scripts, not committed); 63 frames, 1,286 × 405, 0.29 MB.
+
+## Acceptance (held-out seeds 101–120, run once)
+
+`pnpm train --preset small --seeds 101-120 --generations 100`, shipped defaults (config
+`7d11de5c9a8c5f9b`, `SIM_VERSION` 8), after the bar above was committed (`fa0879a`). Scores
+from each seed's `stats.csv`; STAY-only arena score 515, so condition 2 needs a gen-100 mean ≥
+1,030.
+
+| Seed | Gen 1 (tribe 0 / 1) | Gen 100 (tribe 0 / 1) | Ratio | Tribe ratios | 2× gen 1 and 2× STAY |
+|---|---|---|---|---|---|
+| 101 | 534 / 563 | 1,833 / 2,154 | 3.63 | 3.43 / 3.83 | yes |
+| 102 | 561 / 650 | 718 / 1,999 | 2.24 | 1.28 / 3.08 | yes |
+| 103 | 560 / 585 | 2,070 / 1,913 | 3.48 | 3.70 / 3.27 | yes |
+| 104 | 818 / 636 | 2,064 / 1,943 | 2.76 | 2.53 / 3.06 | yes |
+| 105 | 574 / 938 | 1,867 / 1,877 | 2.48 | 3.25 / 2.00 | yes |
+| 106 | 613 / 551 | 1,614 / 1,287 | 2.49 | 2.63 / 2.34 | yes |
+| 107 | 506 / 518 | 747 / 715 | 1.43 | 1.48 / 1.38 | **no** |
+| 108 | 523 / 625 | 1,611 / 1,077 | 2.34 | 3.08 / 1.72 | yes |
+| 109 | 568 / 586 | 2,214 / 1,915 | 3.58 | 3.90 / 3.27 | yes |
+| 110 | 542 / 523 | 808 / 521 | 1.25 | 1.49 / 1.00 | **no** |
+| 111 | 648 / 641 | 642 / 957 | 1.24 | 0.99 / 1.49 | **no** |
+| 112 | 504 / 650 | 541 / 1,902 | 2.12 | 1.07 / 2.92 | yes |
+| 113 | 541 / 947 | 1,556 / 896 | 1.65 | 2.88 / 0.95 | **no** |
+| 114 | 573 / 642 | 1,758 / 1,670 | 2.82 | 3.07 / 2.60 | yes |
+| 115 | 574 / 561 | 2,093 / 2,104 | 3.70 | 3.65 / 3.75 | yes |
+| 116 | 573 / 531 | 1,762 / 1,106 | 2.60 | 3.07 / 2.08 | yes |
+| 117 | 823 / 560 | 1,506 / 1,994 | 2.53 | 1.83 / 3.56 | yes |
+| 118 | 548 / 633 | 2,220 / 984 | 2.71 | 4.05 / 1.55 | yes |
+| 119 | 592 / 626 | 2,149 / 1,215 | 2.76 | 3.63 / 1.94 | yes |
+| 120 | 522 / 561 | 730 / 1,992 | 2.51 | 1.40 / 3.55 | yes |
+
+| Condition | Needed | Result | |
+|---|---|---|---|
+| 1. Mean of per-seed ratios | ≥ 2.0 | **2.52** | pass |
+| 2. Seeds ≥ 2× gen 1 and ≥ 2× STAY-only | ≥ 12 of 20 | **16 of 20** | pass |
+| 3. Tribes ≥ 1.5× their gen 1 | ≥ 75 % (30 of 40) | **30 of 40 (75 %)** | pass, with no margin |
+
+**The bar is met.** Condition 3 is met exactly at its threshold: one more tribe below 1.5× would
+have failed it, and three tribes ended at 1.48–1.49×. Conditions 1 and 2 have room (2.52 vs 2.0;
+16 vs 12). The tuning seeds predicted this (≈ 86 % of tribes at 1.5×, ≈ 72 % of seeds at 2×); the
+held-out set came out at 75 % and 80 %.
+
+**Known limitation: lock-in.** Ten of the 40 held-out tribes stayed below 1.5×. Two of them (seed
+110 tribe 1, seed 112 tribe 0) are hard lock-ins: in generations 91–100 their best creature never
+scored above ~550, i.e. the whole tribe still eats where it stands and dies of thirst at tick
+~533, exactly the "always EAT" optimum that the new energy drain made rarer but not impossible.
+The other eight did breed creatures that lived through whole generations in their own world, but
+their generation-100 champion (the creature with the best world fitness, which is partly spawn
+luck) scored only 521–896 in the arena, so the tribe either learned only partly or its champion
+was a lucky sitter. Leads for later sprints: memory (3.5) may help "remember where the water
+was"; more creatures per tribe or a less luck-driven fitness (e.g. fitness relative to the
+tribe's spawn conditions) would weaken lock-in and champion noise; Sprint 4.2's balance pass
+should re-measure this share.
+
+**Recorded, not blocking**
+
+- Small seed 42, 500 generations: 41.2 s, 1,446,348 ticks, 35,070 ticks/s; benchmark 541/561 →
+  1,391/2,057 (Sprint 3.3 defaults: 24.2 s, 499/498 → 948/622).
+- Medium seed 42, 500 generations: 226.9 s, 1,972,609 ticks, 8,694 ticks/s; benchmark
+  508/637/561/628 → 1,744/2,061/1,483/1,733 (Sprint 3.3 defaults: 109.9 s, 534/546/499/503 →
+  1,088/525/708/868). At generation 100: 1,028/1,550/669/1,598. Twice the time because
+  generations are twice as long and creatures live longer; ticks per second are unchanged and
+  still ~9× the §3.6 target.
+- Medium seeds 101–103, 100 generations (4 tribes, re-allocated sizes): ratios 2.36 / 2.70 /
+  2.74, gen-100 means 1,371 / 1,546 / 1,577 (all ≥ 2× STAY-only), 11 of 12 tribes ≥ 1.5× (the
+  twelfth at 1.47×); 48–62 s per seed.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (288 tests in 39 files),
+`pnpm test:browser` (6), `pnpm build`, `pnpm test:e2e` (11) pass locally.
+
+## Retro
+
+**Went well**
+- `--config` plus multi-seed `pnpm train` made ~60 sweeps fit in one session (20 seeds × 100
+  generations in 30–50 s). Small scratch scripts on top of the built packages (arena action mix,
+  survival per clone, whole-population benchmarks) found the real causes (champions never moved;
+  whole tribes locked into one action) much faster than more sweeps would have.
+- Holding seeds out and fixing the bar before looking at them kept the result honest. When the
+  bar turned out to be mostly luck, it was changed before the held-out run, not after.
+- Seed 42 now pins the milestone in `pnpm test`, so a later change that slows learning fails.
+
+**Surprises / learnings**
+- GA settings alone plateaued at a ratio of ~1.8. The decisive levers were in the world:
+  thirst killing before hunger (energy drain 0.2) and generations long enough that seeking food
+  and water pays. What creatures can learn depends as much on the environment as on the GA.
+- The "obvious" sensor fix (unit-length direction to food and water) made learning worse.
+- A single 100-generation run is a coin toss per seed and per tribe, and even the generation-1
+  champion's arena score ranges from 500 to 950, so any bar on 3 seeds measures mostly luck.
+  Multi-seed bars with thresholds on means and shares are the honest way to judge tuning.
+- The first GIF attempt showed Gen 1 with "50 of 50 alive" at tick 900: the viewer had already
+  started generation 2. Each side of the recording now freezes when its own generation ends.
+
+**Notes for Sprint 3.5 (memory)**
+- The plan's A/B is "≥ 2 of 3 seeds"; with this much per-seed luck, compare memory on vs off on
+  ≥ 20 seeds (same config otherwise) and look at means and shares, as here.
+- A sparse-water variant can be made with `--config` (map pond settings) without code changes.
+- Lock-in (about one tribe in seven, see the known limitation above) is the main source of
+  failed seeds; memory may or may not help it, so report it separately.
+- A Small generation is now 3,000 ticks (5 minutes at 1×): watch at 20× or Max.
+- The GIF recorder (Playwright + a small GIF encoder) lives in scratch scripts; if later
+  milestones need recordings again, a cleaned-up version could be committed.
