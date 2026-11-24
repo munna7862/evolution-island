@@ -59,8 +59,9 @@ export const USAGE = `Usage: pnpm train [options]
                                       benchmarkInterval, ${DEFAULT_CONFIG.evolution.benchmarkInterval});
                                       generation 1 and the last one are always saved
   --config <file>                     JSON merged onto the default config, e.g.
-                                      {"evolution": {"mutationSigma": 0.3}}; a run.json's
-                                      "config" works too. Runs store the full config.
+                                      {"evolution": {"mutationSigma": 0.3}}; a full config
+                                      (the "config" object copied out of a run.json) works
+                                      too. Runs store the full config.
   --workers <n>                       worker threads for --seeds (default: CPU count - 1)
   --force                             overwrite a run already in the output folder
   --quiet                             print only the summary

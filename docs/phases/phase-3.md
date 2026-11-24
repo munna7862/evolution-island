@@ -90,4 +90,4 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | Forward pass differs between engines | Softsign only, fixed summation order, golden hashes checked in Node and Chromium |
 | Brain cost dominates Huge maps | Allocation-free forward pass with reused scratch buffers; benchmark against the §3.6 budget in 3.1 |
 | Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried (3.4: ~60 sweeps in one session, recorded in its sprint file) |
-| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance; about 1 tribe in 7 is still below 1.5× its generation-1 score after 100 generations, often locked into "always DRINK" or "always EAT" |
+| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance. After 100 generations about 1 tribe in 7 (tuning seeds) to 1 in 4 (held-out seeds: 10 of 40) is still below 1.5× its generation-1 score; only some are hard lock-ins ("always EAT"/"always DRINK", 2 of the 10 held-out), the rest have a noisy generation-100 champion |

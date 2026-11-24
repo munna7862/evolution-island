@@ -181,6 +181,18 @@ describe('trainer CLI main()', () => {
     expect(t.out[2]).toBe(`Config ${hashConfig(DEFAULT_CONFIG)} (defaults)`);
   });
 
+  it('checkpoints at the default interval when the --config turns benchmarks off', async () => {
+    // benchmarkInterval 0 = benchmark generation 1 only; checkpoints must not use it as a step.
+    const override = { evolution: { benchmarkInterval: 0 } };
+    const t = io({ 'no-bench.json': JSON.stringify(override) });
+    const r = runners();
+    const out = join(tempDir(), 'small-1');
+    const argv = ['--preset', 'small', '--generations', '1', '--config', 'no-bench.json'];
+    expect(await main([...argv, '--out', out], t.io, r.runners)).toBe(0);
+    expect(r.calls[0]!.job.config?.evolution.benchmarkInterval).toBe(0);
+    expect(r.calls[0]!.job.saveEvery).toBe(DEFAULT_CONFIG.evolution.benchmarkInterval);
+  });
+
   it('refuses a missing or invalid --config file with exit code 2, before training', async () => {
     const missing = io();
     const r = runners();

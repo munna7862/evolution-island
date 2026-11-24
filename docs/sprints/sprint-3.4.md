@@ -290,8 +290,100 @@ should re-measure this share.
 - The plan's A/B is "≥ 2 of 3 seeds"; with this much per-seed luck, compare memory on vs off on
   ≥ 20 seeds (same config otherwise) and look at means and shares, as here.
 - A sparse-water variant can be made with `--config` (map pond settings) without code changes.
-- Lock-in (about one tribe in seven, see the known limitation above) is the main source of
-  failed seeds; memory may or may not help it, so report it separately.
+- Tribes below 1.5× (about one in seven on the tuning seeds, 10 of 40 held-out; see the known
+  limitation above) are the main source of failed seeds. Hard lock-in is only part of it (2 of
+  the 10 held-out); memory may or may not help it, so report lock-in and champion noise
+  separately.
 - A Small generation is now 3,000 ticks (5 minutes at 1×): watch at 20× or Max.
 - The GIF recorder (Playwright + a small GIF encoder) lives in scratch scripts; if later
   milestones need recordings again, a cleaned-up version could be committed.
+
+## Review (2026-11-24)
+
+A fresh session reviewed PR #12 against `CLAUDE.md`, plan §2.5, §3.3, §3.6, §4 Sprint 3.4 and
+the revision notes, `phase-3.md` and this file.
+
+**Checked, no change needed**
+- **Bar before results.** `fa0879a` (20 held-out seeds, the three conditions) is committed
+  before `1b797d9` (the results); the doc says the bar changed before any held-out run, by the
+  user, and why (per-seed success ≈ 62 % on the tuning seeds makes 3 of 3 mostly luck). The three
+  Sprint 3.4 commits are three minutes apart, so git order is the only evidence of the sequence;
+  it is consistent with the doc and the implementer's notes.
+- **Held-out run reproduced** (`pnpm train --preset small --seeds 101-120 --generations 100`, run
+  once, nothing re-tuned): config `7d11de5c9a8c5f9b`, every seed's gen-1 and gen-100 scores equal
+  the table above. From the unrounded `stats.csv` values: mean ratio 2.516, 16 of 20 seeds at 2×
+  gen 1 and 2× STAY-only (515, also re-checked), 30 of 40 tribes at ≥ 1.5×. Condition 3 passed
+  exactly at its threshold; the three closest misses are 1.477 (seed 107 tribe 0), 1.489 (110/0)
+  and 1.492 (111/1), the weakest pass 1.554 (118/1). The doc and retro say so plainly.
+- **Lock-in diagnosis** confirmed from `stats.csv`: seed 110 tribe 1 and seed 112 tribe 0 never
+  had a creature above fitness ~557 in generations 91–100 (always-EAT lock-in); the other eight
+  tribes below 1.5× bred creatures that lived through whole 3,000-tick generations (fitness
+  ~3,090). Six of those eight had scored ≥ 1.5× at an earlier benchmark generation (e.g. seed 107
+  tribe 0: 1,564 at generation 60, 747 at 100): the generation-100 champion is picked by world
+  fitness, so a single benchmark generation is noisy.
+- **`--config`** (`shared/config-override.ts`): unknown keys (including `__proto__`), wrong
+  types, non-finite numbers, enum values, array lengths and preset ids are refused with the key
+  path; the whole-number list matches exactly the fields `hashConfig` writes as 32-bit integers,
+  so two different configs can't share a hash. Worker threads receive the merged config;
+  `run.json` stores it and its hash (tested). Range checks (e.g. a negative σ) are not done; for a
+  tuning tool that is acceptable, sim-core clamps counts and sizes.
+- **Tuned defaults** are all in `config.ts` with their reasons; `SIM_VERSION` 8 and the golden
+  hashes were re-recorded per `golden-hashes.ts` (map hash unchanged, as expected for a
+  config-only change). The new brain-scenario comment is right: 26 of 50 dead at tick 600, all 50
+  by 700. Old defaults through `--config` on this build give the Sprint 3.3 config hash
+  `74a8938d4a3f2e8c` and Sprint 3.3's seed-42 numbers (see timings below), so nothing but the
+  config changed.
+- **Exploit tests** still prove their claims: an only-STAY creature dies at tick 516 (≤ 600 and
+  < half the shortest generation, now 3,000); EAT/DRINK spam is checked with drain switched off
+  (earns nothing) and with the real drain (credited only what metabolism burned); no new fitness
+  term.
+- **GIF** (`docs/media/sprint-3.4-gen1-vs-gen100.gif`, 0.29 MB, 63 frames, 1,286 × 405):
+  frames decoded and checked against Node. Playing the seed-42 generation-1 and generation-100
+  checkpoints in Node gives exactly the counts the frames show and the text above claims:
+  generation 1 has 10 alive at tick 698 and all dead at 699; generation 100 has 19 / 13 / 10 / 5
+  alive at ticks 700 / 1,300 / 1,800 / 2,999, the Amber tribe along its pond's shore. Committed
+  size is sensible.
+- sim-core determinism rules, no `any`, docs (plan §2.2, §2.5, §3.6, §4, open decision, revision
+  note; `phase-3.md`) updated.
+
+**§3.6 timings re-measured** (seed 42, 500 generations, this machine, one session, one run at a
+time)
+
+| Run | Ticks | Time | Ticks/s | Benchmark gen 1 → 500 | §3.6 target |
+|---|---|---|---|---|---|
+| Small, new defaults | 1,446,348 | 83.1 s | 17,412 | 541/561 → 1,391/2,057 | > 2,000 ticks/s |
+| Medium, new defaults | 1,972,609 | 454.3 s | 4,342 | 508/637/561/628 → 1,744/2,061/1,483/1,733 | > 1,000 ticks/s |
+| Small, old defaults via `--config` (A/B) | 746,703 | 51.9 s | 14,392 | 499/498 → 948/622 | |
+| Small, new defaults again (A/B) | 1,446,348 | 75.1 s | 19,255 | as above | |
+
+Ticks and benchmarks equal the numbers in "Recorded, not blocking" exactly (and the old-defaults
+row equals the Sprint 3.3 review's). Wall-clock times are about twice the ones above: the old
+defaults took 51.9 s here against 24.2 s in the Sprint 3.3 review, so the machine was slower
+today, not the code. Back to back, the new defaults run 1.94× the ticks in 1.45× the time (more
+ticks per second: longer generations spread the per-generation work). Targets still met with
+4–9× headroom; the 500-generation column of §3.6 (worst case at the target speed) stays an upper
+bound.
+
+**Found and fixed**
+1. **Lock-in share overstated as "one tribe in seven".** The plan's revision note, the
+   `phase-3.md` risk row and the retro's note for 3.5 put every tribe below 1.5× down to lock-in
+   at the tuning seeds' rate. On the held-out seeds it was 10 of 40 (one in four), and only 2 of
+   those 10 are hard lock-ins. All three now give both rates and the split. (The rationale for
+   the bar change, written before the held-out run, is left as it was.)
+2. **`--config` usage text** said "a run.json's "config" works too", which reads as if a whole
+   `run.json` could be passed (it is refused: `unknown config key format`). It now says to copy
+   the `"config"` object out of a `run.json`.
+3. **Untested fallback:** with `benchmarkInterval: 0` in a `--config` file, checkpoints fall back
+   to the default interval (10) instead of using 0 as a step. New `main()` test.
+4. Plan: the Sprint 3.2 revision note choosing ±2 initial weights now points to its reversal in
+   3.4.
+
+**For Sprint 3.5**
+- Compare memory on vs off on ≥ 20 seeds, and consider scoring each tribe by more than one
+  benchmark generation (e.g. the mean of generations 80–100, or the best hall-of-fame score):
+  the generation-100 champion alone moved some tribes from ≥ 1.5× to below it.
+- §4 Sprint 3.5 still says "3 seeds" / "≥ 2 of 3 seeds"; fix that bar in the sprint file before
+  running it, as here.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (289 tests in 39 files),
+`pnpm test:browser` (6), `pnpm build`, `pnpm test:e2e` (11) pass locally after the fixes.
