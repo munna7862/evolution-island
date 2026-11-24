@@ -327,7 +327,13 @@ export interface CheckpointExpectations {
   readonly simVersion?: number;
 }
 
-/** Refuses checkpoints made by another simulation version or config (plan §3.3). */
+/** What to do about a run this build can't play (until Sprint 5.1 migrates old files). */
+const RETRAIN_HINT = 'Train it again with this build (pnpm train) to watch it.';
+
+/**
+ * Refuses checkpoints made by another simulation version or config (plan §3.3). The messages are
+ * shown to the user as they are, so they say why and what to do.
+ */
 export function assertCheckpointCompatible(
   checkpoint: CheckpointFile,
   expected: CheckpointExpectations,
@@ -336,13 +342,17 @@ export function assertCheckpointCompatible(
   if (checkpoint.simVersion !== simVersion) {
     throw new RunFileError(
       'sim-version-mismatch',
-      `Checkpoint was made by simVersion ${checkpoint.simVersion}, this build is simVersion ${simVersion}`,
+      `the run was made by simVersion ${checkpoint.simVersion}, this build is simVersion ` +
+        `${simVersion}: the simulation rules changed since, so its champions would not behave ` +
+        `as they were trained. ${RETRAIN_HINT}`,
     );
   }
   if (checkpoint.configHash !== expected.configHash) {
     throw new RunFileError(
       'config-hash-mismatch',
-      `Checkpoint was made under config ${checkpoint.configHash}, this build uses config ${expected.configHash}`,
+      `the run was trained with other settings (config ${checkpoint.configHash}; this build's ` +
+        `default config is ${expected.configHash}): a balance value in config.ts changed since. ` +
+        RETRAIN_HINT,
     );
   }
 }

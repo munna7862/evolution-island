@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fc from 'fast-check';
 import {
   Action,
@@ -15,6 +15,7 @@ import {
   createZeroGenome,
   DEFAULT_CONFIG,
   EMPTY_GENOME,
+  findInHallOfFame,
   inputWeightIndex,
   isBenchmarkGeneration,
   outputBiasIndex,
@@ -23,6 +24,7 @@ import {
   rankByFitness,
   respawnGenomes,
   runBenchmark,
+  sameGenome,
   SensorIndex,
   weightCount,
   type EvolutionConfig,
@@ -267,7 +269,7 @@ describe('hall of fame', () => {
   it('keeps the best K by benchmark score, ties to the earlier generation', () => {
     const hof: HallOfFameEntry[] = [];
     const entry = (generation: number, benchmarkScore: number) => ({
-      genome: EMPTY_GENOME,
+      genome: genomeOf(generation / 100),
       benchmarkScore,
       generation,
     });
@@ -276,6 +278,30 @@ describe('hall of fame', () => {
     addToHallOfFame(hof, entry(20, 10), 3);
     addToHallOfFame(hof, entry(30, 20), 3);
     expect(hof.map((e) => e.generation)).toEqual([10, 30, 1]);
+  });
+
+  it('holds distinct genomes: a champion already in it is not added again', () => {
+    const hof: HallOfFameEntry[] = [];
+    addToHallOfFame(hof, { genome: genomeOf(0.5), benchmarkScore: 557, generation: 10 }, 3);
+    addToHallOfFame(hof, { genome: genomeOf(0.1), benchmarkScore: 550, generation: 30 }, 3);
+    addToHallOfFame(hof, { genome: genomeOf(0.5), benchmarkScore: 557, generation: 40 }, 3);
+    addToHallOfFame(hof, { genome: genomeOf(0.2), benchmarkScore: 540, generation: 50 }, 3);
+    expect(hof.map((e) => [e.generation, e.benchmarkScore])).toEqual([
+      [10, 557],
+      [30, 550],
+      [50, 540],
+    ]);
+    expect(findInHallOfFame(hof, genomeOf(0.1))?.generation).toBe(30);
+    expect(findInHallOfFame(hof, genomeOf(0.3))).toBeUndefined();
+  });
+
+  it('compares genomes weight by weight', () => {
+    const a = genomeOf(0.5);
+    const b = Float32Array.from(a);
+    expect(sameGenome(a, b)).toBe(true);
+    b[b.length - 1] = 0.25;
+    expect(sameGenome(a, b)).toBe(false);
+    expect(sameGenome(a, a.subarray(1))).toBe(false);
   });
 
   it('benchmarks at generation 1 and every N generations', () => {
@@ -418,6 +444,46 @@ describe('EvolutionRun', () => {
       // 30 is a benchmark generation; the given hall of fame is kept and extended.
       expect(run.tribes[0]!.hallOfFame.length).toBeGreaterThanOrEqual(2);
       expect(run.world.creatures.length).toBe(run.tribes[0]!.size + run.tribes[1]!.size);
+    });
+
+    it('does not benchmark a champion again that is already in the hall of fame', () => {
+      // Tribe 1 plays only its hall-of-fame genomes (like a played checkpoint), so its champion
+      // is one of them; tribe 0 plays new genomes, so its champion is benchmarked as usual.
+      const run = createEvolutionRun({
+        preset: 'small',
+        seed: 5,
+        config: smallConfig({ generationLength: 20 }),
+        start: start(),
+      });
+      const benchmark = vi.spyOn(run, 'benchmark');
+      run.runGeneration();
+      expect(benchmark).toHaveBeenCalledTimes(1);
+      const tribe1 = run.tribes[1]!;
+      expect(tribe1.hallOfFame.map((e) => [e.benchmarkScore, e.generation])).toEqual([
+        [700, 20],
+        [650, 10],
+      ]);
+      expect([700, 650]).toContain(tribe1.history[0]!.benchmarkScore);
+      expect(run.tribes[0]!.hallOfFame.length).toBe(3);
+    });
+
+    it('keeps at most hallOfFameSize distinct entries of a given hall of fame', () => {
+      const s = start();
+      const many = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6].map((v, i) => hofEntry(v, 100 + i, i + 1));
+      many.push(hofEntry(0.6, 105, 9)); // the same champion saved twice (a pre-review file)
+      const run = createEvolutionRun({
+        preset: 'small',
+        seed: 5,
+        start: { ...s, tribes: [s.tribes[0]!, { ...s.tribes[1]!, hallOfFame: many }] },
+      });
+      expect(run.tribes[0]!.hallOfFame.map((e) => [e.benchmarkScore, e.generation])).toEqual([
+        [105, 6],
+        [104, 5],
+        [103, 4],
+        [102, 3],
+        [101, 2],
+      ]);
+      expect(DEFAULT_CONFIG.evolution.hallOfFameSize).toBe(5);
     });
 
     it('is deterministic, so a checkpoint plays the same in Node and the browser', () => {

@@ -246,12 +246,35 @@ export interface HallOfFameEntry {
   readonly generation: number;
 }
 
-/** Inserts `entry` and keeps the best `size` by benchmark score (ties → earlier generation). */
+/** Same weights, bit for bit (as far as the brain can tell: `0 === -0`). */
+export function sameGenome(a: Float32Array, b: Float32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/** The hall-of-fame entry holding exactly this genome, if any. */
+export function findInHallOfFame(
+  hallOfFame: readonly HallOfFameEntry[],
+  genome: Float32Array,
+): HallOfFameEntry | undefined {
+  return hallOfFame.find((e) => sameGenome(e.genome, genome));
+}
+
+/**
+ * Inserts `entry` and keeps the best `size` by benchmark score (ties → earlier generation).
+ * A genome already in the hall of fame is not added twice (Sprint 3.3 review): an elite can be
+ * champion again later, and its benchmark score is the same, so the copy would only take the
+ * place of another champion.
+ */
 export function addToHallOfFame(
   hallOfFame: HallOfFameEntry[],
   entry: HallOfFameEntry,
   size: number,
 ): void {
+  if (findInHallOfFame(hallOfFame, entry.genome) !== undefined) return;
   hallOfFame.push(entry);
   hallOfFame.sort((a, b) => {
     if (a.benchmarkScore !== b.benchmarkScore) return b.benchmarkScore - a.benchmarkScore;
@@ -490,12 +513,19 @@ export class EvolutionRun {
       let benchmarkScore: number | null = null;
       if (benchmarkDue && ranked.length > 0) {
         const champion = ranked[0]!.genome;
-        benchmarkScore = this.benchmark(champion);
-        addToHallOfFame(
-          tribe.hallOfFame,
-          { genome: Float32Array.from(champion), benchmarkScore, generation },
-          evo.hallOfFameSize,
-        );
+        // The arena is deterministic: a champion already in the hall of fame keeps its score
+        // (e.g. every creature of a played checkpoint is a hall-of-fame genome).
+        const known = findInHallOfFame(tribe.hallOfFame, champion);
+        if (known !== undefined) {
+          benchmarkScore = known.benchmarkScore;
+        } else {
+          benchmarkScore = this.benchmark(champion);
+          addToHallOfFame(
+            tribe.hallOfFame,
+            { genome: Float32Array.from(champion), benchmarkScore, generation },
+            evo.hallOfFameSize,
+          );
+        }
       }
       let fitnessSum = 0;
       let kills = 0;

@@ -159,3 +159,77 @@ running, so conservative.)
   are watchable once the tuned values become the defaults.
 - For "gen 1 vs gen 100" recordings: every run has a generation-1 checkpoint; load the run and pick
   "Gen 1" / "Gen 100" from the menu.
+
+---
+
+## Review (2026-11-24)
+
+A fresh session reviewed PR #11 against plan §3.3, §3.6 and §4 Sprint 3.3, `phase-3.md` and
+`CLAUDE.md`, with the implementer's list of things to look at closely.
+
+**Checked, no change needed**
+- §3.6 claims re-measured (seed 42, same machine): Small 500 generations in 24.2 s
+  (30,917 ticks/s), Medium in 109.9 s (9,013 ticks/s); benchmark figures identical to the ones
+  above, so the numbers in "What was done" stand.
+- `EvolutionRun` `start`: every map tribe must be listed once, genomes are validated against the
+  brain spec, an eliminated tribe can't have creatures, the hall of fame is copied, re-sorted and
+  capped, and nothing is drawn from `rng.evolution`. `startGeneration` sorts spawns by tribe id,
+  so the order of `start.tribes` can't change the world. Creatures share the caller's genome
+  arrays (creature i and i + K even share one); that is safe because genomes are never written in
+  place (elites and hall-of-fame entries are copies, mutation only touches new children).
+- Checkpoint semantics are described honestly (state after generation N, played as "Gen N",
+  creature i → hall-of-fame genome i mod K, fresh spawns and tick order, not a replay). The
+  "Saved" menu now also says so in its tooltip.
+- `sim-core` determinism rules, config-driven numbers, no `any`; run files carry `simVersion` and
+  the config hash (`checkpoint.json`, genome files) and the brain spec (`run.json`, genome files);
+  CLI arguments are validated strictly with exit code 2; write order (genome files →
+  `checkpoint.json` → stats → `run.json`) leaves a consistent folder when a run is killed.
+- `worker_threads`: vitest can't load the built `seed-worker.js`, so `main()` is unit-tested with
+  in-thread runners and the real worker path runs in the e2e job on every PR. That is enough
+  for the success path; the failure path was untested (fixed below).
+- Viewer default mode is still the random policy (the golden e2e test needs it); benchmark
+  generations still run the arena inside the worker (see notes for 3.4).
+
+**Found and fixed**
+1. **The hall of fame could hold the same genome twice** (rule from Sprint 3.2, surfaced by
+   checkpoints). The arena is deterministic, so an elite that is champion again at a later
+   benchmark generation gets the same score and took a second slot: Small seed 42 had a duplicate
+   in 4 of its 102 saved tribe halls of fame (tribe 0, generations 40–70: `10:557.62` and
+   `40:557.62`). Playing a checkpoint made it certain: every creature is a hall-of-fame genome
+   and the played generation N is a benchmark generation, so its first generation end
+   benchmarked a known genome in the browser (a hitch on Medium) and stored it again. Now
+   `addToHallOfFame` skips a genome already present and `endGeneration` reuses a known champion's
+   stored score (no arena run). The best entry never changes, so world evolution is identical:
+   with the old version number every golden hash still matched, and Small seed 42 retrained over
+   500 generations gives the same stats with no duplicates. Saved halls of fame differ, so
+   `SIM_VERSION` 6 → 7 and the golden hashes were re-recorded (only the version stamp moved them).
+2. **Refusal messages didn't say what to do.** A run from another `simVersion` or config now
+   reads e.g. "the run was trained with other settings (config …; this build's default config is
+   …): a balance value in config.ts changed since. Train it again with this build (pnpm train) to
+   watch it." Important for Sprint 3.4: any `DEFAULT_CONFIG` change makes older runs unplayable.
+3. **The "Saved" menu showed a refused generation as selected**, and picking it again fired no
+   `change`. Nothing is selected now until a checkpoint actually plays (e2e asserts it).
+4. **Test gaps closed.** `test/run-drop.test.ts` (5 tests) walks dropped folders with stand-in
+   `FileSystemEntry` trees (nested folders, `readEntries` batches, non-JSON skipped, mixed items,
+   fallback to the file list, folder-picker paths) and feeds the result through the loader. The
+   e2e suite now runs the built CLI a second time on the same folders without `--force`: both
+   worker threads fail and the CLI exits 1 naming each seed.
+5. **Race in the e2e test.** It read the state as soon as the checkpoint label appeared, but the
+   label is set at once while the map and snapshot arrive with the worker's reply; once it saw
+   the old Medium map (`preset` "medium"). It now waits for the label, the preset and the saved
+   generation together.
+
+New tests: `EvolutionRun` (champion already in the hall of fame is not benchmarked again; a given
+hall of fame is deduplicated and capped), hall of fame (distinct genomes, `sameGenome`), refusal
+messages (`run-files`), `run-drop` (5), e2e (CLI worker failure; menu after a refusal).
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (273 tests in 38 files),
+`pnpm test:browser` (6), `pnpm build`, `pnpm test:e2e` (11) pass locally.
+
+**Notes for Sprint 3.4**
+- `SIM_VERSION` is 7: runs made before this review must be trained again to be watched.
+- In the viewer, generation ends at benchmark generations still run the arena in the worker for
+  every tribe whose champion is new (a short hitch on Medium). Fine for now; Phase 6 could move it
+  off the tick loop or skip it in the viewer.
+- Tuning needs `--config` overrides; tuned runs are watchable once the tuned values become the
+  defaults (strict config-hash matching, plan §3.3).

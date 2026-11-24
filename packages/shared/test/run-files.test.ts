@@ -8,6 +8,7 @@ import {
 } from '@evolution-island/sim-core';
 import { describe, expect, it } from 'vitest';
 import {
+  assertCheckpointCompatible,
   checkpointDirName,
   checkpointStart,
   GenomeFileError,
@@ -218,6 +219,15 @@ describe('checkpointStart (what the viewer plays)', () => {
       () => checkpointStart({ ...checkpoint, configHash: '0123456789abcdef' }, genomes(), EXPECTED),
       'config-hash-mismatch',
     );
+    // The viewer shows these messages as they are: they say why and what to do.
+    expect(() => {
+      assertCheckpointCompatible({ ...checkpoint, simVersion: 1 }, EXPECTED);
+    }).toThrow(
+      new RegExp(`simVersion 1, this build is simVersion ${SIM_VERSION}.*pnpm train`, 's'),
+    );
+    expect(() => {
+      assertCheckpointCompatible({ ...checkpoint, configHash: '0123456789abcdef' }, EXPECTED);
+    }).toThrow(/other settings \(config 0123456789abcdef.*config\.ts changed.*pnpm train/s);
     const missing = genomes();
     missing.delete(hallOfFameFileName(0, 2));
     expectReason(() => checkpointStart(checkpoint, missing, EXPECTED), 'missing-file');

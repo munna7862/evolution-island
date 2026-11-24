@@ -59,7 +59,8 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 7. **Benchmark arena = champion clones on a fixed map.** A fixed-seed map of the run's preset,
    `startingCreaturesPerTribe` clones in tribe 0's start zone, alone, one generation; score = mean
    clone fitness. Runs at generation 1 and every `benchmarkInterval` generations; the hall of fame
-   keeps the top K champions by this score.
+   keeps the top K distinct champions by this score (a champion already in it keeps its stored
+   score and is not benchmarked again; Sprint 3.3 review).
 
 8. **Run folders (Sprint 3.3).** `run.json` (manifest with the full config), `stats.json` /
    `stats.csv` (per generation and tribe), `checkpoints/gen-NNNN/` with `checkpoint.json` and one

@@ -101,6 +101,23 @@ async function runTo(page: Page, tick: number): Promise<string> {
   return reply.worldHash;
 }
 
+/**
+ * Waits until the checkpoint plays: the label is set at once, but the map and snapshot arrive
+ * with the worker's reply, so also wait for the new world (Small preset, the saved generation).
+ */
+async function waitForCheckpoint(page: Page, label: string, generation: number): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const ei = window.__ei;
+        if (ei?.checkpoint === null || ei?.checkpoint === undefined) return null;
+        const s = ei.getState();
+        return { label: ei.checkpoint.label, preset: s.preset, generation: s.generation };
+      }),
+    )
+    .toEqual({ label, preset: 'small', generation });
+}
+
 /** Drops loose files on the map, as the browser would after a drag from the file manager. */
 async function dropFiles(page: Page, files: readonly { name: string; text: string }[]) {
   await page.evaluate((list) => {
@@ -120,6 +137,30 @@ function filesOf(dir: string): { name: string; text: string }[] {
   return readdirSync(dir).map((name) => ({ name, text: readFileSync(join(dir, name), 'utf8') }));
 }
 
+test('the built CLI reports seeds that fail on worker threads with exit code 1', () => {
+  // Same folders again without --force: each worker throws, and the CLI must report both seeds.
+  let status: number | null = 0;
+  let stderr = '';
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        TRAINER_CLI,
+        ...['--preset', 'small', '--seeds', '1-2', '--generations', '3'],
+        ...['--out', runsDir, '--workers', '2', '--quiet'],
+      ],
+      { encoding: 'utf8', stdio: 'pipe' },
+    );
+  } catch (error: unknown) {
+    const failed = error as { status: number | null; stderr: string };
+    status = failed.status;
+    stderr = failed.stderr;
+  }
+  expect(status).toBe(1);
+  expect(stderr).toMatch(/\[seed 1\] failed: .*already holds a run/);
+  expect(stderr).toMatch(/\[seed 2\] failed: .*already holds a run/);
+});
+
 test.describe('Loading a trained run (Sprint 3.3)', () => {
   test('plays a run folder picked with "Load run…", exactly as Node does', async ({ page }) => {
     const errors = trackErrors(page);
@@ -127,9 +168,7 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     await expect.poll(() => page.evaluate(() => window.__ei?.mode)).toBe('random');
 
     await page.locator('#run-input').setInputFiles(join(runsDir, 'small-1'));
-    await expect
-      .poll(() => page.evaluate(() => window.__ei?.checkpoint?.label))
-      .toBe('Gen 3 · small-1');
+    await waitForCheckpoint(page, 'Gen 3 · small-1', 3);
     const state = await page.evaluate(() => window.__ei!.getState());
     expect(state.mode).toBe('checkpoint');
     expect(state.checkpointOptions).toEqual([
@@ -167,9 +206,7 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     await expect.poll(() => page.evaluate(() => window.__ei?.mode)).toBe('random');
 
     await dropFiles(page, filesOf(checkpointDir(2, 2)));
-    await expect
-      .poll(() => page.evaluate(() => window.__ei?.checkpoint?.label))
-      .toBe('Gen 2 · small-2');
+    await waitForCheckpoint(page, 'Gen 2 · small-2', 2);
     await expect(page.locator('#drop-overlay')).toBeHidden();
     expect(await runTo(page, 80)).toBe(nodeHashAfter(checkpointDir(2, 2), 80));
     expect(errors).toEqual([]);
@@ -191,10 +228,12 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     await dropFiles(page, files);
     await expect.poll(() => page.evaluate(() => window.__ei?.runMessageIsError)).toBe(true);
     const state = await page.evaluate(() => window.__ei!.getState());
-    expect(state.runMessage).toMatch(/simVersion 1/);
+    expect(state.runMessage).toMatch(/simVersion 1, this build is simVersion \d+.*pnpm train/);
     expect(state.mode).toBe('random');
     expect(state.mapHash).toBe(mapHash);
     await expect(page.locator('#run-info')).toHaveClass(/is-error/);
+    // The refused generation is listed but not shown as the one playing.
+    await expect(page.locator('#checkpoint-select')).toHaveValue('');
 
     await dropFiles(page, [{ name: 'notes.json', text: '{}' }]);
     await expect

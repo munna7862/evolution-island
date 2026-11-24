@@ -637,6 +637,9 @@ async function boot(): Promise<void> {
         return option;
       }),
     );
+    // Nothing selected until a checkpoint actually plays (playCheckpoint selects it); otherwise a
+    // refused first option would look selected, and picking it again would fire no 'change'.
+    checkpointSelect.selectedIndex = -1;
     checkpointField.hidden = false;
     await playCheckpoint(first);
   };

@@ -15,5 +15,7 @@
  * 6 = Sprint 3.2 review: an extinct tribe respawns as its hall-of-fame champion plus offspring of
  *     its own members (the hall of fame no longer fills the parent pool); tribe sizes use an exact
  *     clamped proportional split (the whole budget whenever min/popCap allow it).
+ * 7 = Sprint 3.3 review: the hall of fame holds distinct genomes; a champion already in it keeps
+ *     its stored benchmark score instead of being benchmarked and added again.
  */
-export const SIM_VERSION = 6;
+export const SIM_VERSION = 7;
