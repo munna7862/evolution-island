@@ -72,6 +72,15 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
    `checkpointStart()` (shared) serves the viewer worker and Node, so tests compare hashes across
    engines. It is not a replay: spawns and tick order come from a fresh world (replays: 5.2).
 
+10. **Config overrides for tuning (Sprint 3.4).** `pnpm train --config <file>` merges a partial
+    config JSON onto `DEFAULT_CONFIG` (`shared/config-override.ts`), refusing unknown keys and wrong
+    types by path. Runs store the full config and its hash, so a tuned run is watchable in the viewer
+    once its values become the defaults. Tuning changed config values only (`SIM_VERSION` 8): energy
+    drain, generation lengths, tournament selection, ±1 initial weights, σ 0.6.
+11. **"It learns" is pinned on seed 42.** `evolution-learns.test.ts` runs Small seed 42 for 100
+    generations and requires the Sprint 3.4 bar there (mean ≥ 2× generation 1 and ≥ 2× a STAY-only
+    brain, every tribe ≥ 1.5×), so a change that slows learning fails `pnpm test`.
+
 ## Risks
 
 | Risk | Mitigation |
@@ -79,4 +88,5 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | Creatures don't learn anything (plan §8) | Food sensor fixed in the Phase 2 close-out; benchmark arena as the progress metric; tuning in 3.4 with the trainer from 3.3 |
 | Forward pass differs between engines | Softsign only, fixed summation order, golden hashes checked in Node and Chromium |
 | Brain cost dominates Huge maps | Allocation-free forward pass with reused scratch buffers; benchmark against the §3.6 budget in 3.1 |
-| Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried |
+| Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried (3.4: ~60 sweeps in one session, recorded in its sprint file) |
+| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance; about 1 tribe in 7 is still below 1.5× its generation-1 score after 100 generations, often locked into "always DRINK" or "always EAT" |

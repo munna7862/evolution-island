@@ -21,17 +21,18 @@ describe('applyConfigOverride', () => {
   });
 
   it('changes only the keys it names, nested objects key by key', () => {
+    const baseSigma = DEFAULT_CONFIG.evolution.mutationSigma;
     const merged = applyConfigOverride({
-      evolution: { mutationSigma: 0.3, fitness: { foodEaten: 4 }, selection: 'tournament' },
+      evolution: { mutationSigma: 0.35, fitness: { foodEaten: 4 }, selection: 'truncation' },
       creature: { baseHydrationDrain: 0.25 },
     });
-    expect(merged.evolution.mutationSigma).toBe(0.3);
+    expect(merged.evolution.mutationSigma).toBe(0.35);
     expect(merged.evolution.fitness).toEqual({ ...DEFAULT_CONFIG.evolution.fitness, foodEaten: 4 });
-    expect(merged.evolution.selection).toBe('tournament');
+    expect(merged.evolution.selection).toBe('truncation');
     expect(merged.evolution.mutationRate).toBe(DEFAULT_CONFIG.evolution.mutationRate);
     expect(merged.creature).toEqual({ ...DEFAULT_CONFIG.creature, baseHydrationDrain: 0.25 });
     expect(merged.map).toEqual(DEFAULT_CONFIG.map);
-    expect(DEFAULT_CONFIG.evolution.mutationSigma).toBe(0.2); // base untouched
+    expect(DEFAULT_CONFIG.evolution.mutationSigma).toBe(baseSigma); // base untouched
     expect(hashConfig(merged)).not.toBe(hashConfig(DEFAULT_CONFIG));
   });
 

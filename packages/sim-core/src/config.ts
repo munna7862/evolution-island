@@ -162,6 +162,14 @@ export interface SimConfig {
   readonly evolution: EvolutionConfig;
 }
 
+/**
+ * Generation lengths were doubled in Sprint 3.4 (1,500/2,000/3,000/4,000 before). An untrained
+ * creature dies by tick ~500–700 whatever the length, while one that has learned to reach water
+ * and eat keeps living, so a longer generation gives selection more ticks in which seeking food
+ * and water pays, and lets the benchmark arena tell learners from non-learners well above the
+ * noise (Small sweep, 100 generations: 1,500 → 2,000 → 3,000 ticks met the Sprint 3.4 bar on
+ * 1 → 9 → 15 of 20 seeds).
+ */
 export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
   small: {
     id: 'small',
@@ -171,7 +179,7 @@ export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
     startingCreaturesPerTribe: 25,
     minTribeSize: 25,
     popCapPerTribe: 50,
-    generationLength: 1500,
+    generationLength: 3000,
     spawnRingRadius: 14,
     spawnZoneRadius: 8,
     fairnessRadius: 11,
@@ -186,7 +194,7 @@ export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
     startingCreaturesPerTribe: 50,
     minTribeSize: 25,
     popCapPerTribe: 100,
-    generationLength: 2000,
+    generationLength: 4000,
     spawnRingRadius: 30,
     spawnZoneRadius: 12,
     fairnessRadius: 18,
@@ -201,7 +209,7 @@ export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
     startingCreaturesPerTribe: 80,
     minTribeSize: 25,
     popCapPerTribe: 160,
-    generationLength: 3000,
+    generationLength: 6000,
     spawnRingRadius: 62,
     spawnZoneRadius: 16,
     fairnessRadius: 25,
@@ -216,7 +224,7 @@ export const MAP_PRESETS: Readonly<Record<MapPresetId, MapPreset>> = {
     startingCreaturesPerTribe: 150,
     minTribeSize: 25,
     popCapPerTribe: 300,
-    generationLength: 4000,
+    generationLength: 8000,
     spawnRingRadius: 128,
     spawnZoneRadius: 22,
     fairnessRadius: 36,
@@ -267,7 +275,10 @@ export const DEFAULT_CONFIG: SimConfig = {
     maxHealth: 100,
     maxEnergy: 100,
     maxHydration: 100,
-    baseEnergyDrain: 0.25,
+    // Sprint 3.4: 0.25 → 0.2, so thirst is what kills first. At 0.25, eating alone added ~67 ticks
+    // of life on almost any tile and whole tribes locked into "always EAT", never drinking. An
+    // only-STAY creature still dies by tick ~520 (balance rule, plan §2.3).
+    baseEnergyDrain: 0.2,
     baseHydrationDrain: 0.3,
     moveEnergyCost: 0.35,
     slowTileMoveMultiplier: 2,
@@ -297,15 +308,18 @@ export const DEFAULT_CONFIG: SimConfig = {
   evolution: {
     fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },
     maxAlliesHelped: 10,
-    selection: 'truncation',
+    // Sprint 3.4 sweeps (Small, 100 generations): tournament selection, ±1 initial weights and
+    // σ 0.6 each beat truncation, ±2 and σ 0.2; together with the drain and generation-length
+    // changes they took the share of seeds meeting the bar from 0/20 to 25/40.
+    selection: 'tournament',
     parentFraction: 0.2,
     tournamentSize: 3,
     eliteCount: 2,
     crossover: true,
     mutationRate: 0.05,
-    mutationSigma: 0.2,
+    mutationSigma: 0.6,
     weightClamp: 4,
-    initialWeightRange: 2,
+    initialWeightRange: 1,
     tribeScore: { survivors: 1, foodGathered: 1, territory: 0 },
     extinction: 'respawn',
     hallOfFameSize: 5,

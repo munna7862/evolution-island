@@ -63,8 +63,8 @@ function checkpointDir(seed: number, generation: number): string {
   );
 }
 
-/** What Node computes for the same checkpoint: the world hash after `ticks` ticks. */
-function nodeHashAfter(dir: string, ticks: number): string {
+/** The same run Node starts from a saved checkpoint (what the viewer's worker plays). */
+function nodeRunFrom(dir: string) {
   const checkpoint = parseCheckpoint(readFileSync(join(dir, 'checkpoint.json'), 'utf8'));
   const genomes = new Map<string, LoadedGenome>();
   for (const tribe of checkpoint.tribes) {
@@ -76,9 +76,26 @@ function nodeHashAfter(dir: string, ticks: number): string {
     brain: brainSpecFromConfig(DEFAULT_CONFIG),
     configHash: hashConfig(DEFAULT_CONFIG),
   });
-  const run = createEvolutionRun({ preset: checkpoint.preset, seed: checkpoint.seed, start });
+  return createEvolutionRun({ preset: checkpoint.preset, seed: checkpoint.seed, start });
+}
+
+/** What Node computes for the same checkpoint: the world hash after `ticks` ticks. */
+function nodeHashAfter(dir: string, ticks: number): string {
+  const run = nodeRunFrom(dir);
   for (let i = 0; i < ticks; i++) run.tick();
   return run.world.hash();
+}
+
+/** Ticks until the played generation ends (its length, or earlier when every creature died). */
+function nodeTicksToGenerationEnd(dir: string): number {
+  const run = nodeRunFrom(dir);
+  const generation = run.generation;
+  let ticks = 0;
+  while (run.generation === generation) {
+    run.tick();
+    ticks++;
+  }
+  return ticks;
 }
 
 async function runTo(page: Page, tick: number): Promise<string> {
@@ -184,9 +201,11 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     await expect(page.locator('#run-info')).toHaveText('Watching Gen 3 · small-1 champions');
     await expect(page.locator('#hud-generation')).toHaveText('Gen 3');
 
-    // Past the end of generation 3 (1,500 ticks on Small): breeding in the browser matches too.
-    const browserHash = await runTo(page, 1600);
-    expect(browserHash).toBe(nodeHashAfter(checkpointDir(1, 3), 1600));
+    // Past the end of generation 3: breeding in the browser matches too. (Every creature of a
+    // generation lives ≥ ~400 ticks, so 100 ticks later generation 4 is still running.)
+    const pastEnd = nodeTicksToGenerationEnd(checkpointDir(1, 3)) + 100;
+    const browserHash = await runTo(page, pastEnd);
+    expect(browserHash).toBe(nodeHashAfter(checkpointDir(1, 3), pastEnd));
     expect(await page.evaluate(() => window.__ei!.generation)).toBe(4);
 
     // Another saved generation from the menu.
