@@ -2,6 +2,16 @@ import type { SimSpeed } from '@evolution-island/shared';
 import type { MapPresetId, Seed } from '@evolution-island/sim-core';
 import type { CameraState } from './renderer/camera.js';
 
+/** The saved checkpoint being played (Sprint 3.3). */
+export interface PlayingCheckpoint {
+  readonly label: string;
+  readonly generation: number;
+  readonly preset: MapPresetId;
+  readonly seed: Seed;
+  /** Creatures per tribe at the start of the played generation. */
+  readonly tribeSizes: readonly number[];
+}
+
 export interface EvolutionIslandDebugState {
   readonly simVersion: number;
   readonly preset: MapPresetId;
@@ -28,6 +38,14 @@ export interface EvolutionIslandDebugState {
   readonly rendererType: string;
   readonly overlaysVisible: boolean;
   readonly camera: CameraState;
+  /** `random`: random-policy creatures; `checkpoint`: a loaded run's champions, evolving on. */
+  readonly mode: 'random' | 'checkpoint';
+  readonly checkpoint: PlayingCheckpoint | null;
+  /** Labels of the saved generations found in the loaded files. */
+  readonly checkpointOptions: readonly string[];
+  /** Last message about loading a run ('' if none); `runMessageIsError` marks refusals. */
+  readonly runMessage: string;
+  readonly runMessageIsError: boolean;
 }
 
 export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {

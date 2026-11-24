@@ -1,5 +1,5 @@
 import { createBenchmarkArena, runBenchmark, type BenchmarkArena } from './benchmark.js';
-import { brainSpecFromConfig, createBrainPolicy, type BrainSpec } from './brain.js';
+import { brainSpecFromConfig, createBrainPolicy, validateGenome, type BrainSpec } from './brain.js';
 import {
   DEFAULT_CONFIG,
   type EvolutionConfig,
@@ -246,12 +246,35 @@ export interface HallOfFameEntry {
   readonly generation: number;
 }
 
-/** Inserts `entry` and keeps the best `size` by benchmark score (ties → earlier generation). */
+/** Same weights, bit for bit (as far as the brain can tell: `0 === -0`). */
+export function sameGenome(a: Float32Array, b: Float32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/** The hall-of-fame entry holding exactly this genome, if any. */
+export function findInHallOfFame(
+  hallOfFame: readonly HallOfFameEntry[],
+  genome: Float32Array,
+): HallOfFameEntry | undefined {
+  return hallOfFame.find((e) => sameGenome(e.genome, genome));
+}
+
+/**
+ * Inserts `entry` and keeps the best `size` by benchmark score (ties → earlier generation).
+ * A genome already in the hall of fame is not added twice (Sprint 3.3 review): an elite can be
+ * champion again later, and its benchmark score is the same, so the copy would only take the
+ * place of another champion.
+ */
 export function addToHallOfFame(
   hallOfFame: HallOfFameEntry[],
   entry: HallOfFameEntry,
   size: number,
 ): void {
+  if (findInHallOfFame(hallOfFame, entry.genome) !== undefined) return;
   hallOfFame.push(entry);
   hallOfFame.sort((a, b) => {
     if (a.benchmarkScore !== b.benchmarkScore) return b.benchmarkScore - a.benchmarkScore;
@@ -286,10 +309,32 @@ export interface TribeState {
   readonly history: GenerationStats[];
 }
 
+/** One tribe of an `EvolutionStart`. */
+export interface TribeStart {
+  readonly tribeId: number;
+  /** False for a tribe already eliminated (battle royale); it then needs no genomes. */
+  readonly alive: boolean;
+  /** One creature per genome, spawned in this order. */
+  readonly genomes: readonly Float32Array[];
+  /** Taken over as the tribe's hall of fame (best benchmark score first). */
+  readonly hallOfFame: readonly HallOfFameEntry[];
+}
+
+/**
+ * Starts a run from given genomes instead of random generation-1 genomes, e.g. a saved
+ * checkpoint's champions (Sprint 3.3). Lists every tribe of the map, in any order.
+ */
+export interface EvolutionStart {
+  readonly generation: number;
+  readonly tribes: readonly TribeStart[];
+}
+
 export interface EvolutionRunOptions {
   readonly preset: MapPresetId;
   readonly seed: Seed;
   readonly config?: SimConfig;
+  /** Omitted: generation 1 with random genomes drawn from `rng.evolution`. */
+  readonly start?: EvolutionStart;
 }
 
 /** Benchmark at generation 1 and every `interval` generations. */
@@ -324,8 +369,12 @@ export class EvolutionRun {
       populate: false,
       policy: createBrainPolicy(this.spec, (c) => c.genome),
     });
-    const startSize = this.config.presets[options.preset].startingCreaturesPerTribe;
     const tribeIds = this.world.map.spawnZones.map((z) => z.tribeId).sort((a, b) => a - b);
+    if (options.start !== undefined) {
+      this.tribes = this.startFrom(options.start, tribeIds);
+      return;
+    }
+    const startSize = this.config.presets[options.preset].startingCreaturesPerTribe;
     this.tribes = tribeIds.map((id) => ({
       id,
       size: startSize,
@@ -342,6 +391,43 @@ export class EvolutionRun {
         genomes: Array.from({ length: t.size }, () => randomGenome(this.spec, rng, range)),
       })),
     );
+  }
+
+  /** Validates `start` against the map and brain, then spawns its genomes (no RNG draws). */
+  private startFrom(start: EvolutionStart, tribeIds: readonly number[]): TribeState[] {
+    const byId = new Map<number, TribeStart>();
+    for (const t of start.tribes) {
+      if (!tribeIds.includes(t.tribeId)) {
+        throw new RangeError(`Start lists tribe ${t.tribeId}, which this map does not have`);
+      }
+      if (byId.has(t.tribeId)) {
+        throw new RangeError(`Start lists tribe ${t.tribeId} twice`);
+      }
+      byId.set(t.tribeId, t);
+    }
+    const tribes = tribeIds.map((id): TribeState => {
+      const t = byId.get(id);
+      if (t === undefined) {
+        throw new RangeError(`Start is missing tribe ${id}`);
+      }
+      for (const genome of [...t.genomes, ...t.hallOfFame.map((e) => e.genome)]) {
+        validateGenome(this.spec, genome);
+      }
+      if (!t.alive && t.genomes.length > 0) {
+        throw new RangeError(`Eliminated tribe ${id} cannot have creatures`);
+      }
+      const hallOfFame: HallOfFameEntry[] = [];
+      for (const e of t.hallOfFame) {
+        const entry = { ...e, genome: Float32Array.from(e.genome) };
+        addToHallOfFame(hallOfFame, entry, this.config.evolution.hallOfFameSize);
+      }
+      return { id, size: t.genomes.length, alive: t.alive, hallOfFame, history: [] };
+    });
+    this.world.startGeneration(
+      start.generation,
+      start.tribes.filter((t) => t.alive).map((t) => ({ tribeId: t.tribeId, genomes: t.genomes })),
+    );
+    return tribes;
   }
 
   get generation(): number {
@@ -427,12 +513,19 @@ export class EvolutionRun {
       let benchmarkScore: number | null = null;
       if (benchmarkDue && ranked.length > 0) {
         const champion = ranked[0]!.genome;
-        benchmarkScore = this.benchmark(champion);
-        addToHallOfFame(
-          tribe.hallOfFame,
-          { genome: Float32Array.from(champion), benchmarkScore, generation },
-          evo.hallOfFameSize,
-        );
+        // The arena is deterministic: a champion already in the hall of fame keeps its score
+        // (e.g. every creature of a played checkpoint is a hall-of-fame genome).
+        const known = findInHallOfFame(tribe.hallOfFame, champion);
+        if (known !== undefined) {
+          benchmarkScore = known.benchmarkScore;
+        } else {
+          benchmarkScore = this.benchmark(champion);
+          addToHallOfFame(
+            tribe.hallOfFame,
+            { genome: Float32Array.from(champion), benchmarkScore, generation },
+            evo.hallOfFameSize,
+          );
+        }
       }
       let fitnessSum = 0;
       let kills = 0;

@@ -6,7 +6,7 @@ import {
   type SimSpeed,
   type WorkerToMainMessage,
 } from '@evolution-island/shared';
-import { createWorld, type World } from '@evolution-island/sim-core';
+import { createEvolutionRun, createWorld, type World } from '@evolution-island/sim-core';
 
 export interface SimRunnerHost {
   now(): number;
@@ -26,6 +26,10 @@ export class SimRunner {
   private readonly host: SimRunnerHost;
 
   private world: World | null = null;
+  /** Advances one tick; false once nothing can advance (a finished battle-royale run). */
+  private advance: () => boolean = () => false;
+  /** Set once `advance` returned false: the run is over, so it behaves like a pause target. */
+  private ended = false;
   private runId = -1;
   private lastAckSeq = 0;
   private running = false;
@@ -111,11 +115,27 @@ export class SimRunner {
     this.stopTimer();
     this.runId = msg.runId;
     this.lastAckSeq = msg.seq ?? 0;
+    this.ended = false;
     this.speed = msg.speed;
     this.pauseAtTick = msg.pauseAtTick;
-    this.world = createWorld({ preset: msg.preset, seed: msg.seed });
+    if (msg.start === undefined) {
+      const world = createWorld({ preset: msg.preset, seed: msg.seed });
+      this.world = world;
+      this.advance = () => {
+        world.tick();
+        return true;
+      };
+    } else {
+      const run = createEvolutionRun({ preset: msg.preset, seed: msg.seed, start: msg.start });
+      this.world = run.world;
+      this.advance = () => {
+        if (run.finished) return false;
+        run.tick();
+        return true;
+      };
+    }
 
-    const atPauseTarget = this.pauseAtTick !== null && this.world.tickCount >= this.pauseAtTick;
+    const atPauseTarget = this.atStop(this.world);
     this.running = msg.running && !atPauseTarget;
     this.resetTiming();
 
@@ -142,7 +162,7 @@ export class SimRunner {
 
   private handleSetRunning(nextRunning: boolean): void {
     if (this.world === null) return;
-    const atPauseTarget = this.pauseAtTick !== null && this.world.tickCount >= this.pauseAtTick;
+    const atPauseTarget = this.atStop(this.world);
     const targetRunning = nextRunning && !atPauseTarget;
 
     if (targetRunning === this.running) {
@@ -203,7 +223,7 @@ export class SimRunner {
       if (this.pauseAtTick !== null && this.world.tickCount >= this.pauseAtTick) {
         break;
       }
-      this.world.tick();
+      if (!this.tickOnce()) break;
     }
 
     this.emitSnapshot(true, 0);
@@ -257,12 +277,15 @@ export class SimRunner {
       ticksRun < MAX_TICKS_PER_FIXED_SLICE &&
       (this.pauseAtTick === null || world.tickCount < this.pauseAtTick)
     ) {
-      world.tick();
+      if (!this.tickOnce()) {
+        this.accumulatorMs = 0;
+        break;
+      }
       this.accumulatorMs -= stepMs;
       ticksRun++;
     }
 
-    const hitPauseTarget = this.pauseAtTick !== null && world.tickCount >= this.pauseAtTick;
+    const hitPauseTarget = this.atStop(world);
     const nowAfter = this.host.now();
     this.updateTps(ticksRun, nowAfter);
 
@@ -294,14 +317,14 @@ export class SimRunner {
     const sliceStart = this.host.now();
     let ticksRun = 0;
     while (ticksRun < 256 && (this.pauseAtTick === null || world.tickCount < this.pauseAtTick)) {
-      world.tick();
+      if (!this.tickOnce()) break;
       ticksRun++;
       if (this.host.now() - sliceStart >= MAX_SPEED_SLICE_BUDGET_MS) {
         break;
       }
     }
 
-    const hitPauseTarget = this.pauseAtTick !== null && world.tickCount >= this.pauseAtTick;
+    const hitPauseTarget = this.atStop(world);
     const nowAfter = this.host.now();
     this.updateTps(ticksRun, nowAfter);
 
@@ -317,6 +340,19 @@ export class SimRunner {
     if (this.running) {
       this.scheduleNextSlice(0);
     }
+  }
+
+  /** One tick; false (and `ended`) when the run cannot advance any more. */
+  private tickOnce(): boolean {
+    if (this.ended || !this.advance()) {
+      this.ended = true;
+      return false;
+    }
+    return true;
+  }
+
+  private atStop(world: World): boolean {
+    return this.ended || (this.pauseAtTick !== null && world.tickCount >= this.pauseAtTick);
   }
 
   private resetTiming(): void {

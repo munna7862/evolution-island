@@ -8,11 +8,32 @@ import {
   type TransferableMapData,
   type WorkerToMainMessage,
 } from '@evolution-island/shared';
-import { MAP_PRESETS, SIM_VERSION, type MapPresetId, type Seed } from '@evolution-island/sim-core';
-import type { EvolutionIslandDebugHook, EvolutionIslandDebugState } from './debug-hook.js';
+import {
+  brainSpecFromConfig,
+  DEFAULT_CONFIG,
+  hashConfig,
+  MAP_PRESETS,
+  SIM_VERSION,
+  type EvolutionStart,
+  type MapPresetId,
+  type Seed,
+} from '@evolution-island/sim-core';
+import type {
+  EvolutionIslandDebugHook,
+  EvolutionIslandDebugState,
+  PlayingCheckpoint,
+} from './debug-hook.js';
 import type { TileCoord } from './renderer/camera.js';
 import { MapView } from './renderer/map-view.js';
 import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
+import { sourcesFromDrop, sourcesFromFileList } from './run-drop.js';
+import {
+  defaultCheckpoint,
+  loadCheckpoint,
+  scanRunFiles,
+  type FoundCheckpoint,
+  type RunFileSource,
+} from './run-loader.js';
 import { statusLine } from './status.js';
 import './styles.css';
 
@@ -92,6 +113,10 @@ function renderLegend(legendEl: HTMLElement): void {
   legendEl.replaceChildren(...items);
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function showFatalError(message: string): void {
   const host = document.querySelector('#viewport') ?? document.body;
   const banner = document.createElement('div');
@@ -123,6 +148,12 @@ async function boot(): Promise<void> {
   const hudTpsEl = requireEl('#hud-tps', HTMLElement);
   const hudPopEl = requireEl('#hud-population', HTMLElement);
   const hudTribesEl = requireEl('#hud-tribes', HTMLElement);
+  const loadRunBtn = requireEl('#load-run-btn', HTMLButtonElement);
+  const runInput = requireEl('#run-input', HTMLInputElement);
+  const checkpointField = requireEl('#checkpoint-field', HTMLElement);
+  const checkpointSelect = requireEl('#checkpoint-select', HTMLSelectElement);
+  const runInfoEl = requireEl('#run-info', HTMLElement);
+  const dropOverlay = requireEl('#drop-overlay', HTMLElement);
 
   statusBadge.textContent = statusLine();
   renderLegend(legendEl);
@@ -142,6 +173,18 @@ async function boot(): Promise<void> {
   let nextHashRequestId = 1;
   const pendingHashRequests = new Map<number, HashRequestEntry>();
   let hudTribeNodes: HudTribeNode[] = [];
+
+  // Loaded run (Sprint 3.3): the picked/dropped files, the checkpoints found in them, and the
+  // one being played (null in random mode).
+  const expectedCheckpoint = {
+    brain: brainSpecFromConfig(DEFAULT_CONFIG),
+    configHash: hashConfig(DEFAULT_CONFIG),
+  };
+  let runSources: readonly RunFileSource[] = [];
+  let runCheckpoints: readonly FoundCheckpoint[] = [];
+  let playing: PlayingCheckpoint | null = null;
+  let runMessage = '';
+  let runMessageIsError = false;
 
   let rafId: number | null = null;
   let fpsWindowStart = performance.now();
@@ -306,6 +349,11 @@ async function boot(): Promise<void> {
       rendererType: mapView.getRendererType(),
       overlaysVisible: mapView.getOverlaysVisible(),
       camera: mapView.getCamera(),
+      mode: playing === null ? 'random' : 'checkpoint',
+      checkpoint: playing,
+      checkpointOptions: runCheckpoints.map((c) => c.label),
+      runMessage,
+      runMessageIsError,
     };
   };
 
@@ -384,6 +432,21 @@ async function boot(): Promise<void> {
     },
     get camera() {
       return getState().camera;
+    },
+    get mode() {
+      return getState().mode;
+    },
+    get checkpoint() {
+      return getState().checkpoint;
+    },
+    get checkpointOptions() {
+      return getState().checkpointOptions;
+    },
+    get runMessage() {
+      return getState().runMessage;
+    },
+    get runMessageIsError() {
+      return getState().runMessageIsError;
     },
     getState,
     pauseAtTick(targetTick: number | null) {
@@ -495,8 +558,7 @@ async function boot(): Promise<void> {
     showFatalError(errMsg);
   });
 
-  const generateAndRun = (preset: MapPresetId, rawSeed: string | Seed): void => {
-    const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
+  const startWorld = (preset: MapPresetId, seed: Seed, start?: EvolutionStart): void => {
     seedInput.value = String(seed);
     presetSelect.value = preset;
     syncUrlParams(preset, seed);
@@ -512,7 +574,82 @@ async function boot(): Promise<void> {
       speed: desiredSpeed,
       running: desiredRunning,
       pauseAtTick: null,
+      ...(start === undefined ? {} : { start }),
     });
+  };
+
+  const setRunMessage = (text: string, isError: boolean): void => {
+    runMessage = text;
+    runMessageIsError = isError;
+    runInfoEl.textContent = text;
+    runInfoEl.classList.toggle('is-error', isError);
+  };
+
+  /** Random-policy world on a generated map (the default mode). */
+  const generateAndRun = (preset: MapPresetId, rawSeed: string | Seed): void => {
+    const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
+    if (playing !== null) {
+      playing = null;
+      checkpointSelect.selectedIndex = -1;
+      setRunMessage('', false);
+    }
+    startWorld(preset, seed);
+  };
+
+  /** Plays a saved checkpoint: its map (preset + seed) and its tribes' hall-of-fame genomes. */
+  const playCheckpoint = async (found: FoundCheckpoint): Promise<void> => {
+    let start: EvolutionStart;
+    try {
+      start = await loadCheckpoint(found, runSources, expectedCheckpoint);
+    } catch (error: unknown) {
+      setRunMessage(`Can't play ${found.label}: ${errorMessage(error)}`, true);
+      return;
+    }
+    const { preset, seed, generation } = found.checkpoint;
+    playing = {
+      label: found.label,
+      generation,
+      preset,
+      seed,
+      tribeSizes: start.tribes.map((t) => t.genomes.length),
+    };
+    checkpointSelect.selectedIndex = runCheckpoints.indexOf(found);
+    setRunMessage(`Watching ${found.label} champions`, false);
+    startWorld(preset, seed, start);
+  };
+
+  /** New files picked or dropped: list their checkpoints and play the latest. */
+  const loadRunSources = async (sources: readonly RunFileSource[]): Promise<void> => {
+    const scan = await scanRunFiles(sources);
+    const first = defaultCheckpoint(scan);
+    if (first === null) {
+      const why = scan.problems[0] ?? 'no checkpoint.json among the files (pick a run folder)';
+      setRunMessage(`No saved generation found: ${why}`, true);
+      return;
+    }
+    runSources = sources;
+    runCheckpoints = scan.checkpoints;
+    checkpointSelect.replaceChildren(
+      ...runCheckpoints.map((c, i) => {
+        const option = document.createElement('option');
+        option.value = String(i);
+        option.textContent = c.label;
+        return option;
+      }),
+    );
+    // Nothing selected until a checkpoint actually plays (playCheckpoint selects it); otherwise a
+    // refused first option would look selected, and picking it again would fire no 'change'.
+    checkpointSelect.selectedIndex = -1;
+    checkpointField.hidden = false;
+    await playCheckpoint(first);
+  };
+
+  const loadRunSafely = (sources: Promise<readonly RunFileSource[]>): void => {
+    sources
+      .then((list) => loadRunSources(list))
+      .catch((error: unknown) => {
+        setRunMessage(`Could not read the run: ${errorMessage(error)}`, true);
+      });
   };
 
   const togglePlayPause = (): void => {
@@ -605,6 +742,43 @@ async function boot(): Promise<void> {
     if (isMapPresetId(val)) {
       generateAndRun(val, nextSeed);
     }
+  });
+
+  loadRunBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    runInput.click();
+  });
+
+  runInput.addEventListener('change', () => {
+    const files = runInput.files === null ? [] : Array.from(runInput.files);
+    runInput.value = ''; // picking the same folder again still fires 'change'
+    loadRunSafely(Promise.resolve(sourcesFromFileList(files)));
+  });
+
+  checkpointSelect.addEventListener('change', () => {
+    checkpointSelect.blur();
+    const found = runCheckpoints[Number(checkpointSelect.value)];
+    if (found !== undefined) void playCheckpoint(found);
+  });
+
+  const isFileDrag = (event: DragEvent): boolean =>
+    event.dataTransfer !== null && Array.from(event.dataTransfer.types).includes('Files');
+
+  window.addEventListener('dragover', (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dropOverlay.hidden = false;
+  });
+
+  window.addEventListener('dragleave', (event) => {
+    if (event.relatedTarget === null) dropOverlay.hidden = true;
+  });
+
+  window.addEventListener('drop', (event) => {
+    dropOverlay.hidden = true;
+    if (event.dataTransfer === null) return;
+    event.preventDefault();
+    loadRunSafely(sourcesFromDrop(event.dataTransfer));
   });
 
   overlaysToggle.addEventListener('change', () => {

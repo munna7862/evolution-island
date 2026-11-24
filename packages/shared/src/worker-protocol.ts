@@ -1,5 +1,6 @@
 import {
   SIM_VERSION,
+  type EvolutionStart,
   type Hotspot,
   type MapPresetId,
   type Seed,
@@ -81,6 +82,11 @@ export type MainToWorkerMessage =
       readonly speed: SimSpeed;
       readonly running: boolean;
       readonly pauseAtTick: number | null;
+      /**
+       * Play a saved checkpoint (Sprint 3.3): an `EvolutionRun` starts from these genomes and
+       * keeps evolving. Omitted: the random policy (no brains), as before.
+       */
+      readonly start?: EvolutionStart;
     }
   | {
       readonly type: 'setRunning';

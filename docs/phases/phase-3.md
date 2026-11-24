@@ -59,7 +59,18 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 7. **Benchmark arena = champion clones on a fixed map.** A fixed-seed map of the run's preset,
    `startingCreaturesPerTribe` clones in tribe 0's start zone, alone, one generation; score = mean
    clone fitness. Runs at generation 1 and every `benchmarkInterval` generations; the hall of fame
-   keeps the top K champions by this score.
+   keeps the top K distinct champions by this score (a champion already in it keeps its stored
+   score and is not benchmarked again; Sprint 3.3 review).
+
+8. **Run folders (Sprint 3.3).** `run.json` (manifest with the full config), `stats.json` /
+   `stats.csv` (per generation and tribe), `checkpoints/gen-NNNN/` with `checkpoint.json` and one
+   genome file per hall-of-fame entry, written at generation 1, every N generations and the end.
+   Checkpoints and stats are deterministic (timing only in `run.json`); every file carries
+   `simVersion` and the config hash and is refused when they don't match.
+9. **Playing a checkpoint = an `EvolutionRun` started from it.** Each tribe gets its saved size,
+   creature i running hall-of-fame genome i mod K; the run evolves on afterwards. The same
+   `checkpointStart()` (shared) serves the viewer worker and Node, so tests compare hashes across
+   engines. It is not a replay: spawns and tick order come from a fresh world (replays: 5.2).
 
 ## Risks
 
