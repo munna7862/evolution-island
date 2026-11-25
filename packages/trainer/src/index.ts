@@ -35,6 +35,7 @@ export {
 export { banner } from './banner.js';
 export { formatProgress, formatSummary, main, type CliIo, type SeedRunners } from './main.js';
 export { runPool, type Settled } from './pool.js';
+export { replayMain } from './replay-command.js';
 export {
   STATS_FILE_FORMAT,
   statsRowsFor,

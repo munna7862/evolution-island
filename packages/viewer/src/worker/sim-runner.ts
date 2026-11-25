@@ -3,7 +3,6 @@ import {
   buildReadyMessage,
   buildSimSnapshot,
   DEFAULT_REPLAY_HASH_EVERY,
-  isReplayHashTick,
   parseReplay,
   serializeReplay,
   startReplayRun,
@@ -451,12 +450,8 @@ export class SimRunner {
     }
     if (ticks < 1) return { ...base, text: null, error: 'Play at least one tick first' };
     const hashes = p.hashes.filter((h) => h.tick <= ticks);
-    if (
-      !isReplayHashTick(ticks, DEFAULT_REPLAY_HASH_EVERY, ticks) ||
-      hashes.at(-1)?.tick !== ticks
-    ) {
-      hashes.push({ tick: ticks, hash: p.run.hash() });
-    }
+    // Always end with the hash after the last tick played.
+    if (hashes.at(-1)?.tick !== ticks) hashes.push({ tick: ticks, hash: p.run.hash() });
     const text = serializeReplay({
       simVersion: SIM_VERSION,
       configHash: hashConfig(p.run.config),

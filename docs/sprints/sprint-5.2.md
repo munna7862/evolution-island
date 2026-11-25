@@ -74,8 +74,8 @@ Outside input between ticks today is only play/pause/speed/step, which never cha
   user's OK.)
 - No rule changed: `SIM_VERSION` stays 13.
 
-**Tests:** 387 unit tests in 48 files (+8: replay format 4, cross-engine replay 1 in Node, worker
-replays 3), browser 30 (golden + replay in three engines), e2e 13 (+1: a replay exported from a
+**Tests:** 390 unit tests in 49 files (+11: replay format 4, cross-engine replay 1 in Node, worker
+replays 3, `pnpm replay` 3), browser 30 (golden + replay in three engines), e2e 13 (+1: a replay exported from a
 checkpoint played in Chromium, verified in Node, loaded back and played to its end with every hash
 matched). The built CLI exported a 1,200-tick replay from a saved run and verified it; a tampered
 copy was reported at tick 100 with exit code 1.
@@ -103,3 +103,20 @@ hash for hash in Node and in the viewer (e2e).
 **Notes for later**
 - Sprint 7.2 (disasters): add event types to `ReplayEvent`, apply them between ticks in
   `playReplay` and the worker, and record them on export.
+
+## Reviews (2026-11-25)
+
+Two passes in the implementing session (the app does not let it start sessions from an automated
+turn) over `git diff a39d2e5...sprint-5.2`.
+
+**Review 1 — correctness and tests.** Checked: a replay stops before its last tick is exceeded and
+at the first mismatch; exporting while a replay plays starts from the replay's own start; dropping
+a single `*.replay.json` plays it, folders still load as runs. **Fixed:** (1) the backlog promised
+CLI tests but the CLI ran on import and had none: its logic moved to `replay-command.ts`
+(`replayMain`), with 3 tests (export from a run folder and from generation 1, verify, divergence
+exit 1, bad input exit 2); (2) the worker's "end with the final hash" condition was written as an
+always-true check plus the real one; now just the real one.
+
+**Review 2 — docs and consistency.** Checked: plan revision note, phase decision and sprint text
+agree; the pinned replay hash is pinned like the golden hashes (re-record only with a
+`SIM_VERSION` bump). **Fixed:** the test counts above (390 in 49 files).
