@@ -17,6 +17,8 @@ export interface RngStreams {
   readonly tick: RngStream;
   /** Decision policies that need randomness (Phase 2's random policy); brains use none. */
   readonly policy: RngStream;
+  /** Climate (Sprint 7.2): natural disasters and the food zone's start and moves. */
+  readonly climate: RngStream;
 }
 
 const UINT32_SPAN = 4294967296; // 2^32
@@ -202,5 +204,6 @@ export function createRngStreams(masterSeed: Seed): RngStreams {
     evolution: deriveRngStream(masterSeed, 'evolution'),
     tick: deriveRngStream(masterSeed, 'tick'),
     policy: deriveRngStream(masterSeed, 'policy'),
+    climate: deriveRngStream(masterSeed, 'climate'),
   };
 }

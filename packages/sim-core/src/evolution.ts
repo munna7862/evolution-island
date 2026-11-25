@@ -387,7 +387,7 @@ export interface EvolutionStart {
 
 /** The RNG streams a run's world uses, by name (Sprint 5.1). */
 export type RunRngStates = Readonly<
-  Record<'map' | 'spawn' | 'evolution' | 'tick' | 'policy', RngState>
+  Record<'map' | 'spawn' | 'evolution' | 'tick' | 'policy' | 'climate', RngState>
 >;
 
 /**
@@ -635,6 +635,7 @@ export class EvolutionRun {
         evolution: rng.evolution.getState(),
         tick: rng.tick.getState(),
         policy: rng.policy.getState(),
+        climate: rng.climate.getState(),
       },
       spawns: spawns.map((s) => ({
         tribeId: s.tribeId,
@@ -702,6 +703,7 @@ export class EvolutionRun {
     rng.evolution.setState(state.rng.evolution);
     rng.tick.setState(state.rng.tick);
     rng.policy.setState(state.rng.policy);
+    rng.climate.setState(state.rng.climate);
     this.world.tickCount = state.tickCount;
     this.beginGeneration(state.generation, state.spawns);
     this.recordBirths(state.generation, () => null);

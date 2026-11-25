@@ -34,7 +34,7 @@ export class RunStateError extends Error {
   }
 }
 
-const RNG_NAMES = ['map', 'spawn', 'evolution', 'tick', 'policy'] as const;
+const RNG_NAMES = ['map', 'spawn', 'evolution', 'tick', 'policy', 'climate'] as const;
 
 /** A run state as plain JSON data (genomes as number arrays), for run-state and replay files. */
 export function runStateToJson(state: EvolutionRunState): unknown {

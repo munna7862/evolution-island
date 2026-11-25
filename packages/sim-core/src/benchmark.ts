@@ -38,6 +38,16 @@ export interface BenchmarkResult {
   readonly actions: readonly number[];
 }
 
+/**
+ * The arena is a fixed yardstick (Sprint 7.2): no natural climate — no seasons, disasters or
+ * food zone — so a champion's score never depends on where a flood happened to land.
+ */
+export function arenaConfig(config: SimConfig): SimConfig {
+  return config.climate.enabled
+    ? { ...config, climate: { ...config.climate, enabled: false } }
+    : config;
+}
+
 /** Mean fitness of the genome's clones in the arena. Deterministic; uses no run RNG stream. */
 export function runBenchmark(arena: BenchmarkArena, genome: Float32Array): number {
   return runBenchmarkDetailed(arena, genome).score;
@@ -51,7 +61,7 @@ export function runBenchmarkDetailed(arena: BenchmarkArena, genome: Float32Array
   const world = createWorld({
     preset,
     seed: config.evolution.benchmarkSeed,
-    config,
+    config: arenaConfig(config),
     map,
     populate: false,
     policy: brainPolicyForConfig(config, (c) => c.genome),

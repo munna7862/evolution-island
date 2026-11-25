@@ -1,6 +1,7 @@
 import {
   BASE_TICKS_PER_SECOND,
   buildReadyMessage,
+  applyDueEvents,
   buildSimSnapshot,
   DEFAULT_REPLAY_HASH_EVERY,
   parseReplay,
@@ -12,6 +13,7 @@ import {
   type GenerationReport,
   type InspectTarget,
   type MainToWorkerMessage,
+  type ReplayEvent,
   type ReplayHash,
   type ReplayStatus,
   type SimSpeed,
@@ -25,6 +27,7 @@ import {
   type EvolutionRun,
   type EvolutionRunState,
   type World,
+  type WorldEvent,
 } from '@evolution-island/sim-core';
 
 /** What the worker played since its start, for "Export replay" (Sprint 5.2). */
@@ -34,11 +37,16 @@ interface PlayedRun {
   readonly startTick: number;
   /** run.hash() every DEFAULT_REPLAY_HASH_EVERY ticks played. */
   readonly hashes: ReplayHash[];
+  /** World events applied, with the ticks played before each (Sprint 7.2). */
+  readonly events: ReplayEvent[];
 }
 
 /** A replay being played (Sprint 5.2). */
 interface PlayingReplay {
   readonly ticks: number;
+  /** The file's spectator events, and the first one not applied yet (Sprint 7.2). */
+  readonly events: readonly ReplayEvent[];
+  nextEvent: number;
   readonly expected: ReadonlyMap<number, string>;
   checked: number;
   matched: number;
@@ -142,6 +150,9 @@ export class SimRunner {
             [],
           );
           break;
+        case 'worldEvent':
+          this.handleWorldEvent(msg.event);
+          break;
         case 'inspect':
           this.inspectTarget = msg.target;
           this.inspectGeneration = this.world.generation;
@@ -201,6 +212,8 @@ export class SimRunner {
       this.trackPlayed(run, file.start);
       const replay: PlayingReplay = {
         ticks: file.ticks,
+        events: file.events,
+        nextEvent: 0,
         expected: new Map(file.hashes.map((h) => [h.tick, h.hash])),
         checked: 0,
         matched: 0,
@@ -258,6 +271,25 @@ export class SimRunner {
     if (this.running) {
       this.scheduleNextSlice(this.initialDelayMs());
     }
+  }
+
+  /**
+   * A spectator's world event (Sprint 7.2): applied now, before the next tick, and recorded for
+   * "Export replay". Ignored while a replay plays: the file's own events drive it.
+   */
+  private handleWorldEvent(event: WorldEvent): void {
+    const world = this.world;
+    if (world === null || this.replay !== null) return;
+    const played = this.played;
+    const ticks = this.playedTicks();
+    // Pin the world before the event: an export ending at this tick must end on this hash.
+    if (played !== null && ticks > 0 && played.hashes.at(-1)?.tick !== ticks) {
+      played.hashes.push({ tick: ticks, hash: played.run.hash() });
+    }
+    if (world.applyWorldEvent(event) && played !== null) {
+      played.events.push({ tick: ticks, kind: event.kind, x: event.x, y: event.y });
+    }
+    this.emitSnapshot(!this.running, 0);
   }
 
   private handleSetRunning(nextRunning: boolean): void {
@@ -444,7 +476,7 @@ export class SimRunner {
 
   /** One tick; false (and `ended`) when the run cannot advance any more. */
   private trackPlayed(run: EvolutionRun, start: EvolutionRunState): void {
-    this.played = { run, start, startTick: run.world.tickCount, hashes: [] };
+    this.played = { run, start, startTick: run.world.tickCount, hashes: [], events: [] };
     this.reportedThrough = 0;
   }
 
@@ -492,11 +524,16 @@ export class SimRunner {
   /** One run tick, then the replay bookkeeping: recorded hashes for export, and checks. */
   private tickRun(run: EvolutionRun): void {
     const generation = run.generation;
+    const replay = this.replay;
+    if (replay !== null) {
+      const from = replay.nextEvent;
+      replay.nextEvent = applyDueEvents(run, replay.events, from, this.playedTicks());
+      this.played!.events.push(...replay.events.slice(from, replay.nextEvent));
+    }
     run.tick();
     if (run.generation !== generation || run.finished) this.reportGenerations(run);
     const played = this.playedTicks();
     const due = played % DEFAULT_REPLAY_HASH_EVERY === 0;
-    const replay = this.replay;
     const want = replay?.expected.get(played);
     if (!due && want === undefined) return;
     const hash = run.hash();
@@ -557,7 +594,8 @@ export class SimRunner {
       ticks,
       hashEvery: DEFAULT_REPLAY_HASH_EVERY,
       hashes,
-      events: [],
+      // An event applied after the last tick played has changed nothing yet: left out.
+      events: p.events.filter((e) => e.tick < ticks),
     });
     return { ...base, text, error: null };
   }

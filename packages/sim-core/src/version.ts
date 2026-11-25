@@ -32,5 +32,8 @@
  * 13 = Sprint 4.3: signals (`signals.enabled`, off by default): call output and 3 "loudest ally
  *     call" inputs; calls committed after metabolism and heard next tick, with a per-tick cost;
  *     creatures' calls in the world hash.
+ * 14 = Sprint 7.2: climate (`climate.enabled`, on by default): winters slow regrowth, droughts and
+ *     floods change terrain (and the water field) for a while, a food zone regrows faster and
+ *     wanders; spectator events; a `climate` RNG stream; terrain and climate in the world hash.
  */
-export const SIM_VERSION = 13;
+export const SIM_VERSION = 14;

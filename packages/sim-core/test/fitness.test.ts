@@ -40,7 +40,13 @@ const NO_DRAIN: SimConfig = {
 };
 
 /** One creature on grass (lots of food) next to shallow water. */
-function oasisWorld(policy: DecisionPolicy, config: SimConfig = DEFAULT_CONFIG) {
+/** A one-grass, one-water world; no climate (a single flood or drought would end it). */
+const NO_CLIMATE: SimConfig = {
+  ...DEFAULT_CONFIG,
+  climate: { ...DEFAULT_CONFIG.climate, enabled: false },
+};
+
+function oasisWorld(policy: DecisionPolicy, config: SimConfig = NO_CLIMATE) {
   const map = makeMiniMap([[Biome.Grass, Biome.ShallowWater]], 100_000);
   const world = createWorld({ preset: 'small', seed: 1, map, populate: false, policy, config });
   const creature = world.spawnCreature(0, 0, 0)!;

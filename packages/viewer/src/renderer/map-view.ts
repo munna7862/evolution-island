@@ -1,4 +1,4 @@
-import type { CreatureBuffer } from '@evolution-island/shared';
+import type { ClimateStatus, CreatureBuffer } from '@evolution-island/shared';
 import { DEFAULT_CONFIG, type SimConfig, type WorldMap } from '@evolution-island/sim-core';
 import {
   Application,
@@ -24,6 +24,7 @@ import {
   computeVisibleChunkIndices,
   type ChunkDescriptor,
 } from './chunks.js';
+import { CLIMATE_COLORS, climateOverlay } from './climate-overlay.js';
 import { CreatureLayer } from './creature-layer.js';
 import { tribeColor } from './palette.js';
 
@@ -84,6 +85,9 @@ export class MapView {
   private readonly worldContainer = new Container();
   private readonly terrainContainer = new Container();
   private readonly overlayGraphics = new Graphics();
+  /** Droughts, floods, the food zone and winter (Sprint 7.2), under the creatures. */
+  private readonly climateGraphics = new Graphics();
+  private climateKey = '';
   private readonly creatureLayer = new CreatureLayer();
   private readonly resizeObserver: ResizeObserver;
 
@@ -107,6 +111,7 @@ export class MapView {
 
     this.worldContainer.addChild(
       this.terrainContainer,
+      this.climateGraphics,
       this.overlayGraphics,
       this.creatureLayer.rippleContainer,
       this.creatureLayer.container,
@@ -149,6 +154,8 @@ export class MapView {
     this.creatureLayer.clear();
     this.creatureRenderDirty = false;
     this.map = map;
+    this.climateGraphics.clear();
+    this.climateKey = '';
 
     const descriptors = computeChunkGrid(map.width, map.height);
     const entries: ChunkEntry[] = [];
@@ -287,6 +294,34 @@ export class MapView {
     this.chunks = [];
     this.chunkDescriptors = [];
     this.visibleChunkCount = 0;
+  }
+
+  /** Redraws the climate overlay if it changed; the next frame renders it. */
+  setClimate(status: ClimateStatus): void {
+    const overlay = climateOverlay(status);
+    if (overlay.key === this.climateKey || this.map === null) return;
+    this.climateKey = overlay.key;
+    const g = this.climateGraphics;
+    g.clear();
+    const width = this.map.width * TILE_WORLD_SIZE;
+    const height = this.map.height * TILE_WORLD_SIZE;
+    if (overlay.winter)
+      g.rect(0, 0, width, height).fill({ color: CLIMATE_COLORS.winter, alpha: 0.16 });
+    const strokeW = 2 * Math.max(1, this.map.width / 128);
+    for (const shape of overlay.shapes) {
+      const cx = shape.x * TILE_WORLD_SIZE;
+      const cy = shape.y * TILE_WORLD_SIZE;
+      const r = shape.radius * TILE_WORLD_SIZE;
+      const color = CLIMATE_COLORS[shape.kind];
+      if (shape.kind === 'foodZone') {
+        g.circle(cx, cy, r).stroke({ color, width: strokeW, alpha: 0.85 });
+      } else {
+        g.circle(cx, cy, r)
+          .fill({ color, alpha: 0.35 })
+          .stroke({ color, width: strokeW, alpha: 0.8 });
+      }
+    }
+    this.creatureRenderDirty = true;
   }
 
   private rebuildOverlays(map: RenderableMap): void {

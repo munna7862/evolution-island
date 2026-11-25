@@ -1,9 +1,11 @@
 import { Action, ACTION_COUNT, applyAction, type ActionWorldContext } from './actions.js';
 import { DEFAULT_CONFIG, type MapPresetId, type SimConfig } from './config.js';
+import { Climate, type WorldEvent } from './climate.js';
 import { applyMetabolism, createCreature, EMPTY_GENOME, type Creature } from './creature.js';
 import { hashWorld } from './hash.js';
 import { floodFillWalkable, generateMap } from './map/generator.js';
 import { isWalkable, type WorldMap } from './map/types.js';
+import { computeWaterField } from './map/water-field.js';
 import { createRngStreams, type RngStream, type RngStreams, type Seed } from './rng.js';
 import { SpatialGrid } from './spatial-grid.js';
 
@@ -53,6 +55,8 @@ export class World implements ActionWorldContext {
   readonly territoryOwner: Int16Array;
   /** Per tile: the `tickCount` of its owner's last visit. */
   readonly territoryStamp: Int32Array;
+  /** Winter, droughts, floods and the food zone (Sprint 7.2). */
+  readonly climate: Climate;
 
   tickCount = 0;
   generation = 1;
@@ -87,15 +91,40 @@ export class World implements ActionWorldContext {
     this.config = options.config ?? DEFAULT_CONFIG;
     this.policy = options.policy ?? randomActionPolicy;
     this.rng = createRngStreams(options.seed);
-    // Isolate per-world mutable food buffer while sharing immutable terrain arrays zero-copy.
-    this.map =
-      options.map !== undefined
-        ? { ...options.map, food: new Float32Array(options.map.food) }
-        : generateMap({
-            preset: options.preset,
-            seed: options.seed,
-            config: this.config,
-          });
+    const generated =
+      options.map ??
+      generateMap({
+        preset: options.preset,
+        seed: options.seed,
+        config: this.config,
+      });
+    // Own copies of everything the world changes (food; terrain and water under droughts and
+    // floods, Sprint 7.2): a map passed in may be shared with other worlds. The map as generated
+    // stays untouched — the climate restores terrain from it.
+    this.map = {
+      ...generated,
+      food: new Float32Array(generated.food),
+      biomes: new Uint8Array(generated.biomes),
+      maxFood: new Float32Array(generated.maxFood),
+      waterDx: new Int16Array(generated.waterDx),
+      waterDy: new Int16Array(generated.waterDy),
+    };
+    this.climate = new Climate(this.config.climate, {
+      width: this.map.width,
+      height: this.map.height,
+      biomes: this.map.biomes,
+      maxFood: this.map.maxFood,
+      food: this.map.food,
+      baseBiomes: generated.biomes,
+      baseMaxFood: generated.maxFood,
+      biomeMaxFood: this.config.map.biomeMaxFood,
+      foodChanged: (idx) => {
+        this.markDepleted(idx);
+      },
+      waterChanged: () => {
+        this.recomputeWaterField();
+      },
+    });
 
     const presetCfg = this.config.presets[this.preset];
     this.maxAge =
@@ -122,9 +151,35 @@ export class World implements ActionWorldContext {
       }
     }
 
+    this.climate.reset(this.rng.climate);
+
     if (options.populate ?? true) {
       this.spawnInitialTribes();
     }
+  }
+
+  /** Puts a tile below its maximum on the regrowth list (once). */
+  private markDepleted(idx: number): void {
+    if (this.map.food[idx]! < this.map.maxFood[idx]! && this.isDepleted[idx] === 0) {
+      this.isDepleted[idx] = 1;
+      this.depletedTiles[this.depletedCount] = idx;
+      this.depletedCount++;
+    }
+  }
+
+  private recomputeWaterField(): void {
+    const field = computeWaterField(this.map.biomes, this.map.width, this.map.height);
+    this.map.waterDx.set(field.dx);
+    this.map.waterDy.set(field.dy);
+  }
+
+  /**
+   * A spectator's world event (Sprint 7.2), applied between ticks: a drought or flood centred on
+   * (x, y), a winter, or the food zone moved to (x, y). Returns false (and changes nothing) for a
+   * place off the map. Replays record these with the tick they were applied after.
+   */
+  applyWorldEvent(event: WorldEvent): boolean {
+    return this.climate.apply(event, this.generationTick);
   }
 
   getDepletedTileCount(): number {
@@ -175,25 +230,24 @@ export class World implements ActionWorldContext {
     }
 
     this.map.food[idx] = stored;
-    if (stored < this.map.maxFood[idx]! && this.isDepleted[idx] === 0) {
-      this.isDepleted[idx] = 1;
-      this.depletedTiles[this.depletedCount] = idx;
-      this.depletedCount++;
-    }
+    this.markDepleted(idx);
     return actualTaken;
   }
 
   regrowResources(): void {
-    const rate = this.config.food.regrowthRate;
-    if (!(rate > 0) || !Number.isFinite(rate) || this.depletedCount === 0) {
+    const baseRate = this.config.food.regrowthRate;
+    if (!(baseRate > 0) || !Number.isFinite(baseRate) || this.depletedCount === 0) {
       return;
     }
+    // Climate (Sprint 7.2): slower in winter, faster in the food zone.
+    const seasonRate = baseRate * this.climate.seasonMultiplier(this.generationTick);
 
     let i = 0;
     while (i < this.depletedCount) {
       const idx = this.depletedTiles[i]!;
       const current = this.map.food[idx]!;
       const max = this.map.maxFood[idx]!;
+      const rate = seasonRate * this.climate.zoneMultiplier(idx);
       let next = Math.fround(Math.min(max, current + rate));
       // Prevent Float32 ULP stall if rate is smaller than half an ULP at high maxFood.
       if (next <= current && current < max) {
@@ -402,6 +456,7 @@ export class World implements ActionWorldContext {
    * Advances the simulation by one deterministic two-phase tick (plan §3.4).
    */
   tick(): void {
+    this.climate.beforeTick(this.generationTick, this.rng.climate);
     this.regrowResources();
     this.rebuildGrid();
 
@@ -484,6 +539,7 @@ export class World implements ActionWorldContext {
       }
     }
 
+    this.climate.reset(this.rng.climate);
     this.map.food.set(this.map.maxFood);
     this.isDepleted.fill(0);
     this.depletedCount = 0;

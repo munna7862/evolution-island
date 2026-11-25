@@ -7,6 +7,7 @@ import {
   type Seed,
   type SpawnZone,
   type World,
+  type WorldEvent,
   type LineageTree,
 } from '@evolution-island/sim-core';
 
@@ -78,6 +79,39 @@ export interface SimSnapshot {
   readonly replay: ReplayStatus | null;
   /** The inspected creature, live (Sprint 6.2), or null. */
   readonly inspection: CreatureInspection | null;
+  /** Winter, droughts, floods and the food zone now (Sprint 7.2). */
+  readonly climate: ClimateStatus;
+}
+
+/** The climate as the viewer shows it (Sprint 7.2). */
+export interface ClimateStatus {
+  readonly winter: boolean;
+  /** Droughts and floods in progress, oldest first. */
+  readonly events: readonly {
+    readonly kind: 'drought' | 'flood';
+    readonly x: number;
+    readonly y: number;
+    readonly radius: number;
+    readonly ticksLeft: number;
+  }[];
+  readonly foodZone: { readonly x: number; readonly y: number; readonly radius: number } | null;
+}
+
+export function climateStatus(world: World): ClimateStatus {
+  const climate = world.climate;
+  const zone = climate.foodZone();
+  return {
+    winter: climate.isWinter(world.generationTick),
+    events: climate.activeEvents().map((e) => ({
+      kind: e.kind,
+      x: e.x,
+      y: e.y,
+      radius: e.radius,
+      ticksLeft: e.endTick - world.generationTick,
+    })),
+    foodZone:
+      zone === null ? null : { x: zone.x, y: zone.y, radius: world.config.climate.foodZoneRadius },
+  };
 }
 
 /** What to inspect (Sprint 6.2): a creature by id, a tribe's current champion, or nothing. */
@@ -188,6 +222,16 @@ export type MainToWorkerMessage =
       readonly requestId: number;
       readonly tribeId: number;
       readonly depth: number;
+    }
+  | {
+      /**
+       * A spectator's world event (Sprint 7.2), applied before the next tick. Recorded for
+       * "Export replay" in checkpoint mode; ignored while a replay plays (it would diverge).
+       */
+      readonly type: 'worldEvent';
+      readonly runId: number;
+      readonly seq?: number;
+      readonly event: WorldEvent;
     }
   | {
       /** Inspect a creature (Sprint 6.2); its live data then rides on every snapshot. */
@@ -382,6 +426,7 @@ export function buildSimSnapshot(world: World, meta: SnapshotMeta): SimSnapshot 
     worldHash: meta.includeHash ? world.hash() : null,
     replay: meta.replay ?? null,
     inspection: meta.inspection ?? null,
+    climate: climateStatus(world),
   };
 }
 

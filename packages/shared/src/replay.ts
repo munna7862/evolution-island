@@ -7,6 +7,8 @@ import {
   type MapPresetId,
   type Seed,
   type SimConfig,
+  type WorldEvent,
+  WORLD_EVENT_KINDS,
 } from '@evolution-island/sim-core';
 import { applyConfigOverride } from './config-override.js';
 import { runStateFromJson, runStateToJson } from './run-state.js';
@@ -23,10 +25,32 @@ export const REPLAY_FILE_VERSION = 1;
 export const DEFAULT_REPLAY_HASH_EVERY = 500;
 
 /**
- * Spectator input applied between ticks (plan §3.3). No event changes the world yet (disasters
- * arrive in Sprint 7.2), so no type exists and files with events are refused for now.
+ * Spectator input applied between ticks (plan §3.3, Sprint 7.2): a world event (drought, flood,
+ * winter, food zone) applied after `tick` ticks have been played, before the next one. Events
+ * with the same tick apply in file order.
  */
-export type ReplayEvent = never;
+export interface ReplayEvent extends WorldEvent {
+  readonly tick: number;
+}
+
+/**
+ * Applies `events[from..]` due after `played` ticks to the run's world; returns the index of the
+ * first event not applied yet. `events` must be sorted by tick.
+ */
+export function applyDueEvents(
+  run: EvolutionRun,
+  events: readonly ReplayEvent[],
+  from: number,
+  played: number,
+): number {
+  let next = from;
+  while (next < events.length && events[next]!.tick === played) {
+    const e = events[next]!;
+    run.world.applyWorldEvent({ kind: e.kind, x: e.x, y: e.y });
+    next++;
+  }
+  return next;
+}
 
 export interface ReplayHash {
   /** Ticks played since the start. */
@@ -85,6 +109,8 @@ export interface RecordOptions {
   readonly start: EvolutionRunState;
   readonly ticks: number;
   readonly hashEvery?: number;
+  /** Spectator events to apply (sorted by tick, each in 0..ticks − 1). */
+  readonly events?: readonly ReplayEvent[];
 }
 
 /** Plays `ticks` ticks from the start (in Node or a worker) and records the hashes. */
@@ -96,9 +122,15 @@ export function recordReplay(options: RecordOptions): Replay {
   if (!Number.isSafeInteger(hashEvery) || hashEvery < 1) {
     throw new RangeError(`hashEvery must be a positive integer, got ${hashEvery}`);
   }
+  const events = options.events ?? [];
+  checkEvents(events, options.ticks, (message) => {
+    throw new RangeError(message);
+  });
   const run = startReplayRun(options);
   const hashes: ReplayHash[] = [];
+  let nextEvent = 0;
   for (let tick = 1; tick <= options.ticks; tick++) {
+    nextEvent = applyDueEvents(run, events, nextEvent, tick - 1);
     run.tick();
     if (isReplayHashTick(tick, hashEvery, options.ticks)) hashes.push({ tick, hash: run.hash() });
   }
@@ -112,8 +144,22 @@ export function recordReplay(options: RecordOptions): Replay {
     ticks: options.ticks,
     hashEvery,
     hashes,
-    events: [],
+    events: events.map((e) => ({ ...e })),
   };
+}
+
+/** Events must be sorted by tick, each within 0..ticks − 1 (`report` throws). */
+function checkEvents(
+  events: readonly ReplayEvent[],
+  ticks: number,
+  report: (message: string) => never,
+): void {
+  events.forEach((e, i) => {
+    if (!Number.isSafeInteger(e.tick) || e.tick < 0 || e.tick >= ticks) {
+      report(`events[${i}].tick must be within 0..ticks − 1`);
+    }
+    if (i > 0 && e.tick < events[i - 1]!.tick) report('events must be sorted by tick');
+  });
 }
 
 export interface ReplayMismatch {
@@ -136,7 +182,9 @@ export function playReplay(replay: Replay): ReplayResult {
   const run = startReplayRun(replay);
   const expected = new Map(replay.hashes.map((h) => [h.tick, h.hash]));
   let matched = 0;
+  let nextEvent = 0;
   for (let tick = 1; tick <= replay.ticks; tick++) {
+    nextEvent = applyDueEvents(run, replay.events, nextEvent, tick - 1);
     run.tick();
     const want = expected.get(tick);
     if (want === undefined) continue;
@@ -173,7 +221,8 @@ function int(value: unknown, what: string): number {
 
 /**
  * Parses a replay file and checks it can run here: refuses another `simVersion` (the rules
- * changed, it would not re-run the same), a config that doesn't match its hash, and events.
+ * changed, it would not re-run the same), a config that doesn't match its hash, and events of an
+ * unknown kind, out of order or outside the replay's ticks.
  */
 export function parseReplay(text: string): Replay {
   let parsed: unknown;
@@ -224,11 +273,22 @@ export function parseReplay(text: string): Replay {
     if (tick < 1 || tick > ticks) fail(`hashes[${i}].tick is outside 1..ticks`);
     return { tick, hash };
   });
-  const events = r['events'];
-  if (!Array.isArray(events)) fail('"events" must be an array');
-  if (events.length > 0) {
-    fail('this build knows no spectator event types yet (they arrive with world events)');
-  }
+  const rawEvents = r['events'];
+  if (!Array.isArray(rawEvents)) fail('"events" must be an array');
+  const events = rawEvents.map((raw: unknown, i): ReplayEvent => {
+    const e = raw as Record<string, unknown> | null;
+    const kind = e?.['kind'];
+    if (typeof kind !== 'string' || !(WORLD_EVENT_KINDS as readonly string[]).includes(kind)) {
+      fail(`events[${i}].kind must be one of ${WORLD_EVENT_KINDS.join(', ')}`);
+    }
+    return {
+      tick: int(e?.['tick'], `events[${i}].tick`),
+      kind: kind as ReplayEvent['kind'],
+      x: int(e?.['x'], `events[${i}].x`),
+      y: int(e?.['y'], `events[${i}].y`),
+    };
+  });
+  checkEvents(events, ticks, fail);
   return {
     simVersion,
     configHash,
@@ -239,6 +299,6 @@ export function parseReplay(text: string): Replay {
     ticks,
     hashEvery,
     hashes,
-    events: [],
+    events,
   };
 }

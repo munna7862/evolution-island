@@ -567,3 +567,18 @@ body {
 .tree-node.is-hof {
   outline: 1px dashed var(--muted);
 }
+
+/* Sprint 7.2: world events. */
+.event-group {
+  display: flex;
+  gap: 4px;
+}
+
+.event-btn.is-active {
+  outline: 2px solid var(--accent, #38bdf8);
+}
+
+.hud-climate {
+  color: var(--muted);
+  min-height: 1em;
+}

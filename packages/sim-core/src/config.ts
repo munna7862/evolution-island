@@ -92,6 +92,37 @@ export interface FoodConfig {
   readonly regrowthRate: number;
 }
 
+/**
+ * Climate & disasters (plan §4 Sprint 7.2). With `enabled` the world changes by itself: a year
+ * of `yearLength` ticks ends in winter (food regrows slower), droughts dry shallow water to sand
+ * and floods turn land to shallow water for a while (the water field is recomputed), and a food
+ * zone where food regrows faster wanders over the land. Spectator events (drought, flood, winter,
+ * food zone) work whether or not it is enabled. Ticks count from the generation start; every
+ * generation starts with the map as generated.
+ */
+export interface ClimateConfig {
+  readonly enabled: boolean;
+  readonly yearLength: number;
+  /** The last this fraction of every year is winter. */
+  readonly winterFraction: number;
+  readonly winterRegrowthMultiplier: number;
+  /** A spectator's winter lasts this many ticks. */
+  readonly winterEventDuration: number;
+  /** Every this many ticks, a drought and a flood may each start (chances below). */
+  readonly disasterCheckInterval: number;
+  readonly droughtChance: number;
+  readonly droughtRadius: number;
+  readonly droughtDuration: number;
+  readonly floodChance: number;
+  readonly floodRadius: number;
+  readonly floodDuration: number;
+  readonly foodZoneRadius: number;
+  readonly foodZoneRegrowthMultiplier: number;
+  /** The food zone moves `foodZoneStep` tiles in a random direction every this many ticks. */
+  readonly foodZoneMoveInterval: number;
+  readonly foodZoneStep: number;
+}
+
 /** Territory (plan §2.6): ownership fades without sustained presence. */
 export interface TerritoryConfig {
   /** A tile stays owned this many ticks after its owner's last visit. */
@@ -200,6 +231,7 @@ export interface SimConfig {
   readonly map: MapGenConfig;
   readonly creature: CreatureConfig;
   readonly food: FoodConfig;
+  readonly climate: ClimateConfig;
   readonly territory: TerritoryConfig;
   readonly sensor: SensorConfig;
   readonly signals: SignalConfig;
@@ -350,6 +382,26 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   food: {
     regrowthRate: 0.15,
+  },
+  // Sprint 7.2 first values: a quarter-year winter at a quarter of the regrowth, rare local
+  // disasters (a ~15 % chance each per 500 ticks), and a food zone regrowing 3× as fast.
+  climate: {
+    enabled: true,
+    yearLength: 1000,
+    winterFraction: 0.25,
+    winterRegrowthMultiplier: 0.25,
+    winterEventDuration: 300,
+    disasterCheckInterval: 500,
+    droughtChance: 0.15,
+    droughtRadius: 10,
+    droughtDuration: 600,
+    floodChance: 0.15,
+    floodRadius: 8,
+    floodDuration: 400,
+    foodZoneRadius: 8,
+    foodZoneRegrowthMultiplier: 3,
+    foodZoneMoveInterval: 200,
+    foodZoneStep: 4,
   },
   territory: {
     // A tenth of a Small generation: territory means sustained presence, not footprints.

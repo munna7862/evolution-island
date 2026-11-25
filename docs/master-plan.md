@@ -690,3 +690,13 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 
 **2026-11-25 — Sprint 7.1 (Large / Huge optimisation)**
 - §3.6 met on Large and Huge. Worst case (every creature alive, `pnpm bench`, CPU time): Large ≈ 930–1,450 ticks/s, Huge ≈ 590–710. Browser (GPU): Large 20× ≈ 57 fps / 200 ticks/s, Huge 5× 60 fps / 50 ticks/s (opt-in `PERF=1` e2e test). Struct-of-arrays storage was not needed. At 20× the worker now snapshots at most every 12 ms (was 16 ms, which drew only ~40–45 frames/s). No rule changed (`simVersion` 13).
+
+**2026-11-25 — Sprint 7.2 (climate & disasters)** — Phase 7 done (M6 "Epic scale")
+- Climate (`config.climate`, on by default):
+  - Winter: the last quarter of every 1,000-tick year, regrowth at 0.25×.
+  - Droughts dry shallow water to sand; floods turn land to shallow water; the water field is recomputed. Each has a 15% chance per 500 ticks.
+  - A food zone regrows food 3× as fast and wanders 4 tiles every 200 ticks.
+  - All draws come from a new `climate` RNG stream. Everything is undone at each generation start.
+- Spectator events (drought, flood, winter, food zone) come from viewer buttons. They are recorded in replays at their tick and played back between ticks. Replays with events reproduce the same hash in Node, Chromium, Firefox and WebKit.
+- The benchmark arena runs without natural climate (a fixed yardstick).
+- `simVersion` 14: terrain, climate state and the climate stream are in the world hash.
