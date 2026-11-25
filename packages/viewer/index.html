@@ -137,6 +137,34 @@
           </div>
           <div id="hud-tribes" class="hud-tribes"></div>
         </aside>
+        <aside id="dashboard" class="dashboard" aria-label="Tribe dashboard" hidden>
+          <div id="dash-generation" class="dash-generation">No generation finished yet</div>
+          <table class="dash-table">
+            <thead>
+              <tr>
+                <th scope="col">Tribe</th>
+                <th scope="col" title="Creatures alive now">Pop</th>
+                <th scope="col" title="Territory, averaged over the last generation">Terr.</th>
+                <th scope="col">Kills</th>
+                <th scope="col" title="Average fitness in the last generation">Fitness</th>
+                <th scope="col" title="Latest champion benchmark score">Bench</th>
+              </tr>
+            </thead>
+            <tbody id="dash-rows"></tbody>
+          </table>
+          <figure class="dash-chart">
+            <figcaption>Average fitness</figcaption>
+            <canvas id="chart-fitness" width="280" height="64"></canvas>
+          </figure>
+          <figure class="dash-chart">
+            <figcaption>Benchmark score</figcaption>
+            <canvas id="chart-benchmark" width="280" height="64"></canvas>
+          </figure>
+          <figure class="dash-chart">
+            <figcaption>Population</figcaption>
+            <canvas id="chart-population" width="280" height="64"></canvas>
+          </figure>
+        </aside>
       </div>
 
       <footer class="statusbar">

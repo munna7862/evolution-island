@@ -6,6 +6,7 @@ import {
   parseReplay,
   serializeReplay,
   startReplayRun,
+  type GenerationReport,
   type MainToWorkerMessage,
   type ReplayHash,
   type ReplayStatus,
@@ -64,6 +65,8 @@ export class SimRunner {
   private ended = false;
   private played: PlayedRun | null = null;
   private replay: PlayingReplay | null = null;
+  /** Generations already reported to the dashboard (Sprint 6.1). */
+  private reportedThrough = 0;
   private runId = -1;
   private lastAckSeq = 0;
   private running = false;
@@ -213,6 +216,9 @@ export class SimRunner {
       ready.map.maxFood.buffer,
       ready.snapshot.creatures.buffer,
     ]);
+    // TypeScript keeps `played` narrowed to null from above, though trackPlayed set it.
+    const played = this.played as PlayedRun | null;
+    if (played !== null) this.reportGenerations(played.run);
 
     if (this.running) {
       this.scheduleNextSlice(this.initialDelayMs());
@@ -404,6 +410,44 @@ export class SimRunner {
   /** One tick; false (and `ended`) when the run cannot advance any more. */
   private trackPlayed(run: EvolutionRun, start: EvolutionRunState): void {
     this.played = { run, start, startTick: run.world.tickCount, hashes: [] };
+    this.reportedThrough = 0;
+  }
+
+  /** Sends the dashboard every finished generation not reported yet (Sprint 6.1). */
+  private reportGenerations(run: EvolutionRun): void {
+    const generations = new Set<number>();
+    for (const t of run.tribes) {
+      for (const h of t.history)
+        if (h.generation > this.reportedThrough) generations.add(h.generation);
+    }
+    if (generations.size === 0) return;
+    const reports: GenerationReport[] = [...generations]
+      .sort((a, b) => a - b)
+      .map((generation) => ({
+        generation,
+        tribes: run.tribes.flatMap((t) => {
+          const h = t.history.find((x) => x.generation === generation);
+          return h === undefined
+            ? []
+            : [
+                {
+                  tribeId: t.id,
+                  // An eliminated tribe's last generation is the one it died out in.
+                  alive: t.alive || generation < (t.history.at(-1)?.generation ?? 0),
+                  population: h.population,
+                  survivors: h.survivors,
+                  avgFitness: h.avgFitness,
+                  maxFitness: h.maxFitness,
+                  territoryPct: h.territoryPct,
+                  kills: h.kills,
+                  tribeScore: h.tribeScore,
+                  benchmarkScore: h.benchmarkScore,
+                },
+              ];
+        }),
+      }));
+    this.reportedThrough = reports[reports.length - 1]!.generation;
+    this.host.emit({ type: 'generationStats', runId: this.runId, reports }, []);
   }
 
   private playedTicks(): number {
@@ -412,7 +456,9 @@ export class SimRunner {
 
   /** One run tick, then the replay bookkeeping: recorded hashes for export, and checks. */
   private tickRun(run: EvolutionRun): void {
+    const generation = run.generation;
     run.tick();
+    if (run.generation !== generation || run.finished) this.reportGenerations(run);
     const played = this.playedTicks();
     const due = played % DEFAULT_REPLAY_HASH_EVERY === 0;
     const replay = this.replay;

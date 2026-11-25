@@ -76,6 +76,28 @@ export interface SimSnapshot {
   readonly replay: ReplayStatus | null;
 }
 
+/** One tribe's line of a generation report (Sprint 6.1 dashboard). */
+export interface TribeReport {
+  readonly tribeId: number;
+  /** False once eliminated (battle royale). */
+  readonly alive: boolean;
+  readonly population: number;
+  readonly survivors: number;
+  readonly avgFitness: number;
+  readonly maxFitness: number;
+  readonly territoryPct: number;
+  readonly kills: number;
+  readonly tribeScore: number;
+  /** Champion's benchmark score, or null when not benchmarked that generation. */
+  readonly benchmarkScore: number | null;
+}
+
+/** What every tribe did in one finished generation (from `EvolutionRun` history). */
+export interface GenerationReport {
+  readonly generation: number;
+  readonly tribes: readonly TribeReport[];
+}
+
 /** Progress of a replay played in the worker (Sprint 5.2). */
 export interface ReplayStatus {
   /** Ticks played since the replay's start, and its length. */
@@ -170,6 +192,12 @@ export type WorkerToMainMessage =
       readonly requestId: number;
       readonly tick: number;
       readonly worldHash: string;
+    }
+  | {
+      /** Generations that ended (Sprint 6.1): sent at each generation end, and the run's past ones at start. */
+      readonly type: 'generationStats';
+      readonly runId: number;
+      readonly reports: readonly GenerationReport[];
     }
   | {
       readonly type: 'replayExport';

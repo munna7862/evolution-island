@@ -336,3 +336,79 @@ body {
 .field[hidden] {
   display: none;
 }
+
+/* Sprint 6.1: live dashboard (leaderboard + charts), top right over the map. */
+.dashboard {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(11, 19, 30, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard[hidden] {
+  display: none;
+}
+
+.dash-generation {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--muted);
+}
+
+.dash-table th {
+  text-align: right;
+  font-weight: 500;
+  padding: 2px 3px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-table th:first-child,
+.dash-table td:first-child {
+  text-align: left;
+}
+
+.dash-table td {
+  text-align: right;
+  padding: 2px 3px;
+  color: var(--text);
+}
+
+.dash-table tr.is-eliminated td {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.dash-chart {
+  margin: 0;
+}
+
+.dash-chart figcaption {
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.dash-chart canvas {
+  display: block;
+  width: 100%;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}

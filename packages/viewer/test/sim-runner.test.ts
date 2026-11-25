@@ -500,4 +500,56 @@ describe('SimRunner', () => {
       expect(host.messages.at(-1)).toMatchObject({ type: 'replayExport', text: null });
     });
   });
+
+  it('reports each finished generation to the dashboard (Sprint 6.1)', () => {
+    const spec = brainSpecFromConfig(DEFAULT_CONFIG);
+    const start: EvolutionStart = {
+      generation: 5,
+      tribes: [0, 1].map((tribeId) => ({
+        tribeId,
+        alive: true,
+        genomes: [0.2, -0.3].map((v) => new Float32Array(weightCount(spec)).fill(v)),
+        hallOfFame: [],
+      })),
+    };
+    const host = new MockRunnerHost();
+    const runner = new SimRunner(host);
+    send(runner, {
+      type: 'init',
+      runId: 4,
+      preset: 'small',
+      seed: 42,
+      speed: 'max',
+      running: false,
+      pauseAtTick: null,
+      start,
+    });
+    expect(host.messages.some((m) => m.type === 'generationStats')).toBe(false);
+    const node = createEvolutionRun({ preset: 'small', seed: 42, start });
+    node.runGeneration();
+    const ticks = node.world.tickCount;
+    send(runner, { type: 'step', runId: 4, ticks });
+    const reports = host.messages.filter((m) => m.type === 'generationStats');
+    expect(reports).toHaveLength(1);
+    const report = (reports[0] as Extract<WorkerToMainMessage, { type: 'generationStats' }>)
+      .reports;
+    expect(report.map((r) => r.generation)).toEqual([5]);
+    expect(report[0]!.tribes).toEqual(
+      node.tribes.map((t) => {
+        const h = t.history[0]!;
+        return {
+          tribeId: t.id,
+          alive: true,
+          population: h.population,
+          survivors: h.survivors,
+          avgFitness: h.avgFitness,
+          maxFitness: h.maxFitness,
+          territoryPct: h.territoryPct,
+          kills: h.kills,
+          tribeScore: h.tribeScore,
+          benchmarkScore: h.benchmarkScore,
+        };
+      }),
+    );
+  });
 });

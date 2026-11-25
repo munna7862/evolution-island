@@ -40,6 +40,7 @@ import {
   type FoundCheckpoint,
   type RunFileSource,
 } from './run-loader.js';
+import { chartPaths, DashboardData, type ChartMetric } from './dashboard.js';
 import { statusLine } from './status.js';
 import './styles.css';
 
@@ -159,6 +160,15 @@ async function boot(): Promise<void> {
   const hudTpsEl = requireEl('#hud-tps', HTMLElement);
   const hudPopEl = requireEl('#hud-population', HTMLElement);
   const hudTribesEl = requireEl('#hud-tribes', HTMLElement);
+  const dashboardEl = requireEl('#dashboard', HTMLElement);
+  const dashGenerationEl = requireEl('#dash-generation', HTMLElement);
+  const dashRowsEl = requireEl('#dash-rows', HTMLElement);
+  const chartCanvases = {
+    avgFitness: requireEl('#chart-fitness', HTMLCanvasElement),
+    benchmarkScore: requireEl('#chart-benchmark', HTMLCanvasElement),
+    population: requireEl('#chart-population', HTMLCanvasElement),
+  } as const;
+  const dashboard = new DashboardData();
   const loadRunBtn = requireEl('#load-run-btn', HTMLButtonElement);
   const runInput = requireEl('#run-input', HTMLInputElement);
   const loadReplayBtn = requireEl('#load-replay-btn', HTMLButtonElement);
@@ -264,6 +274,11 @@ async function boot(): Promise<void> {
     for (let tribeId = 0; tribeId < pops.length; tribeId++) {
       hudTribeNodes[tribeId]!.label.textContent = `${tribeName(tribeId)} ${pops[tribeId]!}`;
     }
+    for (const tr of dashRowsEl.querySelectorAll('tr')) {
+      const popCell = tr.children[1];
+      if (popCell !== undefined)
+        popCell.textContent = String(pops[Number(tr.dataset['tribe'])] ?? 0);
+    }
   };
 
   const updateStats = (): void => {
@@ -346,6 +361,82 @@ async function boot(): Promise<void> {
     rejectInitialReady = reject;
   });
 
+  /** Draws one chart: a line per tribe in its colour (Sprint 6.1). */
+  const drawChart = (canvas: HTMLCanvasElement, metric: ChartMetric): void => {
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const series = dashboard.series(metric);
+    const { paths, max } = chartPaths(
+      series,
+      canvas.width,
+      canvas.height,
+      4,
+      metric === 'benchmarkScore',
+    );
+    paths.forEach((runs, i) => {
+      ctx.strokeStyle = tribeHex(series[i]!.tribeId);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 1.5;
+      for (const run of runs) {
+        if (run.length === 1) {
+          ctx.fillRect(run[0]!.x - 1.5, run[0]!.y - 1.5, 3, 3);
+          continue;
+        }
+        ctx.beginPath();
+        run.forEach((p, k) => {
+          if (k === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+      }
+    });
+    ctx.fillStyle = '#8fa3ba';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(max.toFixed(0), 4, 11);
+  };
+
+  /** The leaderboard and charts (Sprint 6.1); population is live, the rest per finished generation. */
+  const renderDashboard = (): void => {
+    const state = dashboard.state();
+    dashboardEl.hidden = playing === null && replayName === null;
+    dashGenerationEl.textContent =
+      state.generation === null
+        ? 'No generation finished yet'
+        : `Generation ${state.generation} finished`;
+    const live = latestSnapshot?.tribePopulations ?? [];
+    dashRowsEl.replaceChildren(
+      ...state.rows.map((row) => {
+        const tr = document.createElement('tr');
+        tr.dataset['tribe'] = String(row.tribeId);
+        tr.classList.toggle('is-eliminated', !row.alive);
+        const name = document.createElement('td');
+        const swatch = document.createElement('span');
+        swatch.className = 'hud-swatch';
+        swatch.style.backgroundColor = tribeHex(row.tribeId);
+        swatch.style.display = 'inline-block';
+        swatch.style.marginRight = '4px';
+        name.append(swatch, tribeName(row.tribeId));
+        const cells = [
+          String(live[row.tribeId] ?? 0),
+          `${row.territoryPct.toFixed(1)}%`,
+          String(row.kills),
+          row.avgFitness.toFixed(0),
+          row.benchmarkScore === null ? '–' : row.benchmarkScore.toFixed(0),
+        ].map((text) => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          return td;
+        });
+        tr.append(name, ...cells);
+        return tr;
+      }),
+    );
+    drawChart(chartCanvases.avgFitness, 'avgFitness');
+    drawChart(chartCanvases.benchmarkScore, 'benchmarkScore');
+    drawChart(chartCanvases.population, 'population');
+  };
+
   const getState = (): EvolutionIslandDebugState => {
     if (currentMap === null || latestSnapshot === null) {
       throw new Error('Simulation has not finished initializing');
@@ -382,6 +473,7 @@ async function boot(): Promise<void> {
       checkpointOptions: shownCheckpoints.map((c) => c.label),
       runMessage,
       runMessageIsError,
+      dashboard: dashboard.state(),
     };
   };
 
@@ -469,6 +561,9 @@ async function boot(): Promise<void> {
     },
     get replay() {
       return getState().replay;
+    },
+    get dashboard() {
+      return getState().dashboard;
     },
     exportReplay() {
       return requestReplayExport();
@@ -563,6 +658,13 @@ async function boot(): Promise<void> {
       return;
     }
 
+    if (msg.type === 'generationStats') {
+      if (msg.runId !== activeRunId) return;
+      dashboard.add(msg.reports);
+      renderDashboard();
+      return;
+    }
+
     if (msg.type === 'replayExport') {
       const entry = pendingExports.get(msg.requestId);
       if (entry === undefined) return;
@@ -609,6 +711,8 @@ async function boot(): Promise<void> {
     replayText?: string,
   ): void => {
     exportReplayBtn.hidden = start === undefined && replayText === undefined;
+    dashboard.reset();
+    dashboardEl.hidden = start === undefined && replayText === undefined;
     if (replayText === undefined) replayName = null;
     seedInput.value = String(seed);
     presetSelect.value = preset;
