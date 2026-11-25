@@ -307,3 +307,22 @@ Fresh-session review of PR #15 (`git diff 5fe89b5...sprint-4.2`).
 **Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (350 tests in 43 files),
 `pnpm test:browser` (8), `pnpm build`, `pnpm test:e2e` (11) pass locally. `SIM_VERSION` stays 12 (unmerged); golden hashes
 unchanged.
+
+## Review 2 (2026-11-25)
+
+A second pass over `git diff 5fe89b5...sprint-4.2` after review 1's `b2471fe` (done in the
+implementing session: the app does not let it start sessions from an automated turn).
+
+**Checked, no change needed**
+- `allocateTribeSizes` after review 1: the leftover loop gives places only while some held-at-min
+  tribe is below `max`, in index order, and `left` never goes negative; with no scorer at all every
+  tribe shares evenly first, so the zero-score branch only applies when `anyScore` holds. The
+  property test's ceiling and "held at min grows only once every scorer is capped" check cover it.
+- Battle-royale grace: `eliminates(generation)` gates both the early end (`isGenerationOver`, on
+  the current generation) and elimination at the end; when a battle royale finishes,
+  `endGeneration` returns before sizes are reassigned, and `statsRowsFor` writes `nextSize` 0 only
+  for eliminated tribes, which is what `pnpm analyze` reads as "not alive".
+- `runBenchmarkDetailed`: every clone alive at a tick's start has its `lastAction` set in that
+  tick's Phase B (no deaths before acting in a one-tribe arena), so the counts are exact.
+
+**Found and fixed:** nothing.
