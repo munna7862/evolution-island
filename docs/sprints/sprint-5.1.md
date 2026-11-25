@@ -110,3 +110,19 @@ the generation's genomes, the RNG streams and the tribes' histories are not save
 **Notes for Sprint 5.2**
 - Replays can reuse the same idea: a replay = a run state (or a checkpoint start) + recorded
   spectator events + periodic world hashes.
+
+## Reviews (2026-11-25)
+
+Two passes in the implementing session (the app does not let it start sessions from an automated
+turn) over `git diff 357d512...sprint-5.1`.
+
+**Review 1 — correctness.** Checked: a resumed run that had already finished (battle royale)
+trains nothing more and reports the right generation count; `--resume` always runs in-process, so
+the worker-thread job validation never sees it; `resumeFrom` restores the streams and tick count
+before redoing `startGeneration`, and the map stream is unused after generation; copying each
+generation's spawns costs ~77k floats a generation on Medium (negligible); picking a tribe that has
+no champions shows the reason instead of crashing. **Found:** nothing to fix.
+
+**Review 2 — docs and tests.** Checked: the counts above (+14 unit tests in 2 new files, 12 e2e);
+the kill test's folder comparison covers `run.json`'s generation count and checkpoint list (timing
+excluded) and every genome file; plan, phase and sprint texts agree. **Found:** nothing to fix.
