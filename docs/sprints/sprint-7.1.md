@@ -58,9 +58,13 @@ already culled and all creature sprites already batch (one texture per tribe), s
 was needed.
 
 **Tests:** `trainer/test/bench.test.ts` (3: whole population alive, clock → ticks/s, same options →
-same hash). No simulation change (`SIM_VERSION` 13; golden hashes unchanged).
+same hash); `sim-runner.test.ts` (1: at 20× the worker sends ≥ 60 snapshots per second of mock
+time but fewer than one per two ticks — 50 with the old 16 ms). No simulation change
+(`SIM_VERSION` 13; golden hashes unchanged).
 
-**Verification:** see Reviews.
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (410 in 53 files), `pnpm build`,
+`pnpm test:e2e` (15 passed, 2 perf skipped; one earlier run failed under the machine's load and
+passed on re-run), `pnpm bench` and `PERF=1` perf spec pass locally.
 
 ## Retro
 
@@ -73,3 +77,16 @@ same hash). No simulation change (`SIM_VERSION` 13; golden hashes unchanged).
   Compare variants with alternating fixed-length runs and CPU time.
 - Software WebGL (the e2e default, SwiftShader) caps Large at ~30 fps by itself; perf has to be
   measured on the GPU.
+
+## Reviews (2026-11-25)
+
+Two review passes in this session (sub-sessions can't be started from automated turns here).
+
+**Pass 1** — two fixes: the 20× snapshot change had no regression test (added; it fails with 16 ms),
+and this file's verification line was a placeholder.
+
+**Pass 2** — one fix: the benchmark's "every creature alive" isn't absolute (a pile-on of attackers
+in one tick can still kill; old age after 2 × generationLength), now said in its doc comment; the
+result already reports the creatures alive at the end (480 / 1,200 in every run). Checked and fine:
+golden hashes unchanged, CLI argument errors (unknown preset, bad `--ticks`) exit 2, the perf
+spec is skipped without `PERF`.

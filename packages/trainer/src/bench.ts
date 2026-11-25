@@ -10,6 +10,8 @@ import {
  * Worst-case speed benchmark (Sprint 7.1, plan §3.6): a preset's first generation with every
  * creature kept alive and fed, so each tick senses, thinks and acts for the full population —
  * the most a tick ever costs. Training is never this slow: creatures die and generations end early.
+ * Only several attackers hitting one creature in the same tick can still kill it, and old age
+ * comes after 2 × generationLength ticks; `creatures` reports how many were alive at the end.
  */
 export interface BenchOptions {
   readonly preset: MapPresetId;
