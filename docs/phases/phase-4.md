@@ -16,7 +16,7 @@ wins by default), and, if the experiment works, tribes that call each other for 
 |--------|-------|---------|
 | 4.1 | Combat, sharing, territory | `ATTACK` and `SHARE` act (they were `STAY` since 3.1), kill rewards, territory ownership with decay and territory %, exploit tests for kills and sharing |
 | 4.2 | Balance pass | Population caps, fair spawns, hotspots, fitness and tribe-score weights tuned; no dominant start slot, no degenerate action mix; lock-in and champion noise re-measured |
-| 4.3 | Signals experiment | Call output + "loudest ally call" sensors behind a switch, tribe-score fitness term on in both arms, A/B on many held-out seeds plus a mute test (recipe from Sprint 3.5) |
+| 4.3 | Signals experiment | Call output + "loudest ally call" sensors behind a switch, A/B on 50 held-out seeds plus a mute test: calls carry information but don't help (sparse 0.87×), signals stay off |
 
 ## Exit criteria (Phase 4 is done when)
 
