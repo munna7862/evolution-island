@@ -40,6 +40,10 @@ export interface Creature {
    * as inputs on the next tick. Empty when memory is off.
    */
   readonly memory: Float32Array;
+  /** This creature's call (0..1, 0 = silent) as allies hear it this tick (Sprint 4.3). */
+  call: number;
+  /** The call chosen in Phase A, heard from the next tick on. */
+  nextCall: number;
 }
 
 export function createCreature(
@@ -77,6 +81,8 @@ export function createCreature(
     },
     genome,
     memory: new Float32Array(memoryNeurons),
+    call: 0,
+    nextCall: 0,
   };
 }
 

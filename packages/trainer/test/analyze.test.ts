@@ -1,7 +1,14 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Action, DEFAULT_CONFIG, type SimConfig } from '@evolution-island/sim-core';
+import {
+  Action,
+  brainSpecFromConfig,
+  DEFAULT_CONFIG,
+  inputWeightIndex,
+  weightCount,
+  type SimConfig,
+} from '@evolution-island/sim-core';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   analyzeRun,
@@ -9,6 +16,8 @@ import {
   findRunDirs,
   pickWinner,
   formatReport,
+  mutedInputRange,
+  muteGenome,
   summarize,
   trainSeed,
   type AnalyzeIo,
@@ -212,5 +221,43 @@ describe('findRunDirs, summarize and formatReport', () => {
     expect(report).toContain('small-1 gen 7');
     expect(report).toContain('Start-slot wins: slot 0:');
     expect(report).toContain('Champions: 6 (stored score reproduced: 6)');
+  });
+});
+
+describe('mute test (Sprint 4.3)', () => {
+  const SIGNALS: SimConfig = { ...FAST, signals: { ...FAST.signals, enabled: true } };
+
+  it('zeroes exactly the weights from the muted inputs', () => {
+    const spec = brainSpecFromConfig(SIGNALS);
+    expect(mutedInputRange(SIGNALS, 'memory')).toEqual([18, 20]);
+    expect(mutedInputRange(SIGNALS, 'calls')).toEqual([20, 23]);
+    expect(() => mutedInputRange(FAST, 'calls')).toThrow(/signals on/);
+    const genome = new Float32Array(weightCount(spec)).fill(1);
+    const muted = muteGenome(SIGNALS, genome, 'calls');
+    for (let h = 0; h < spec.hidden; h++) {
+      for (let i = 0; i < spec.inputs; i++) {
+        expect(muted[inputWeightIndex(spec, h, i)]).toBe(i >= 20 ? 0 : 1);
+      }
+    }
+    expect(muted.filter((w) => w === 0)).toHaveLength(spec.hidden * 3);
+    expect(genome.every((w) => w === 1)).toBe(true);
+  });
+
+  it('benchmarks every champion muted too and sums it up', () => {
+    const dir = join(tempDir(), 'small-5');
+    train(dir, 5, SIGNALS);
+    const run = analyzeRun(dir, io, new Map(), 'calls');
+    for (const t of run.tribes) expect(typeof t.champion!.mutedScore).toBe('number');
+    const summary = summarize([run]);
+    expect(summary.mutedChampions).toBe(2);
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(summary.mutedRatio).toBeCloseTo(
+      mean(run.tribes.map((t) => t.champion!.mutedScore!)) /
+        mean(run.tribes.map((t) => t.champion!.storedScore)),
+      12,
+    );
+    expect(formatReport([run], summary)).toContain('Mute test: muted champions score');
+    // Without a mute nothing is muted.
+    expect(summarize([analyzeRun(dir, io)]).mutedRatio).toBeNull();
   });
 });

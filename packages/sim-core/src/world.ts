@@ -321,6 +321,25 @@ export class World implements ActionWorldContext {
     this.territoryRecounts++;
   }
 
+  /** Living creatures that called this tick pay `signals.callCost` energy (ascending id). */
+  private payForCalls(): void {
+    const cost = Math.max(0, this.config.signals.callCost);
+    for (const creature of this.creatures) {
+      if (creature.alive && creature.nextCall > 0) {
+        creature.energy = Math.max(0, creature.energy - cost);
+        creature.stats.callsMade++;
+      }
+    }
+  }
+
+  /** Every creature's call becomes the one chosen this tick (0 once dead); `nextCall` resets. */
+  private commitCalls(): void {
+    for (const creature of this.creatures) {
+      creature.call = creature.alive ? creature.nextCall : 0;
+      creature.nextCall = 0;
+    }
+  }
+
   /** Stamps every living creature's tile with its tribe (after metabolism, ascending id). */
   private stampTerritory(): void {
     const width = this.map.width;
@@ -406,6 +425,9 @@ export class World implements ActionWorldContext {
     }
     living.length = 0;
 
+    // Calls (Sprint 4.3): a living creature that chose to call pays for it this tick.
+    this.payForCalls();
+
     // Metabolism & death in ascending id order.
     for (const creature of this.creatures) {
       if (!creature.alive) continue;
@@ -416,6 +438,9 @@ export class World implements ActionWorldContext {
         this.gridDirty = true;
       }
     }
+
+    // This tick's calls become what allies hear next tick (plan §2.3, §3.4).
+    this.commitCalls();
 
     // Territory (plan §2.6, §3.4): stamp where everyone stands, recount every updateInterval ticks.
     this.stampTerritory();

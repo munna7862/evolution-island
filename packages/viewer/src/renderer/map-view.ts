@@ -100,6 +100,7 @@ export class MapView {
     this.worldContainer.addChild(
       this.terrainContainer,
       this.overlayGraphics,
+      this.creatureLayer.rippleContainer,
       this.creatureLayer.container,
     );
     this.app.stage.addChild(this.worldContainer);

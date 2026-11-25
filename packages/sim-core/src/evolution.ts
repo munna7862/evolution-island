@@ -1,5 +1,10 @@
 import { createBenchmarkArena, runBenchmark, type BenchmarkArena } from './benchmark.js';
-import { brainSpecFromConfig, createBrainPolicy, validateGenome, type BrainSpec } from './brain.js';
+import {
+  brainPolicyForConfig,
+  brainSpecFromConfig,
+  validateGenome,
+  type BrainSpec,
+} from './brain.js';
 import {
   DEFAULT_CONFIG,
   type EvolutionConfig,
@@ -387,7 +392,7 @@ export class EvolutionRun {
       seed: options.seed,
       config: this.config,
       populate: false,
-      policy: createBrainPolicy(this.spec, (c) => c.genome),
+      policy: brainPolicyForConfig(this.config, (c) => c.genome),
     });
     const tribeIds = this.world.map.spawnZones.map((z) => z.tribeId).sort((a, b) => a - b);
     if (options.start !== undefined) {

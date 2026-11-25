@@ -41,6 +41,8 @@ export interface CreatureBuffer {
   readonly tribeIds: Uint8Array;
   readonly lastMoveDir: Int8Array;
   readonly healthRatio: Uint8Array;
+  /** The creature's call as allies hear it, 0..255 (0 = silent; Sprint 4.3). */
+  readonly call: Uint8Array;
 }
 
 export interface TransferableMapData {
@@ -145,7 +147,7 @@ export type WorkerToMainMessage =
       readonly message: string;
     };
 
-export const CREATURE_STRIDE_BYTES = 15;
+export const CREATURE_STRIDE_BYTES = 16;
 
 function clampUint16(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
@@ -164,6 +166,7 @@ function packExactLiving(world: World, count: number): CreatureBuffer {
   const tribeIds = new Uint8Array(buffer, count * 12, count);
   const lastMoveDir = new Int8Array(buffer, count * 13, count);
   const healthRatio = new Uint8Array(buffer, count * 14, count);
+  const call = new Uint8Array(buffer, count * 15, count);
 
   const maxHealth = world.config.creature.maxHealth;
   let writeIdx = 0;
@@ -190,6 +193,9 @@ function packExactLiving(world: World, count: number): CreatureBuffer {
         ? Math.round((c.health / maxHealth) * 255)
         : 0;
     healthRatio[writeIdx] = Math.max(0, Math.min(255, ratio));
+    call[writeIdx] = Number.isFinite(c.call)
+      ? Math.round(Math.max(0, Math.min(1, c.call)) * 255)
+      : 0;
     writeIdx++;
   }
 
@@ -208,6 +214,7 @@ function packExactLiving(world: World, count: number): CreatureBuffer {
     tribeIds,
     lastMoveDir,
     healthRatio,
+    call,
   };
 }
 

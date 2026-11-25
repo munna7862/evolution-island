@@ -103,7 +103,7 @@ Plus 2 memory inputs (on by default since Sprint 3.5) and, optionally, signal in
 - `ATTACK` hits the adjacent enemy (8-neighbourhood) with the lowest health (tie → lowest id) for `attackDamage`. The killing blow gets the kill and a fraction of the victim's remaining energy.
 - `SHARE` gives `shareAmount` energy to the adjacent ally with the lowest energy, at `shareEfficiency` (e.g. 80%), **only if that ally is below 50% energy and the giver keeps at least 50% after giving** — prevents two allies passing energy back and forth to farm fitness. *(Sprint 4.1 added the giver rule: with the recipient rule alone, two allies both below 50% could still pass energy back and forth.)*
 
-**Memory & signals (experiments — Sprints 3.5 and 4.3; memory kept and on by default since 3.5, signals off):**
+**Memory & signals (experiments — Sprints 3.5 and 4.3; memory kept and on by default since 3.5; signals failed their A/B in 4.3 and stay off):**
 - **Memory (Sprint 3.5):** 2 extra outputs, squashed to −1..1, are fed back as 2 extra inputs on the next tick. A creature can keep heading toward water that has gone out of sight, or "remember" being attacked. No meaning is programmed in — evolution decides what the values are used for. *Measured (Sprint 3.5):* evolved champions mostly use it to change what they do when nothing in sight changes (to search instead of walking straight); zeroing their memory inputs cuts their arena score to 0.34–0.60×.
 - **Signals (Sprint 4.3):** 1 extra output is a **call** (0..1; below `callThreshold` = silent). Allies within `callRadius` (default 16 — farther than vision, so a call can bring help from out of sight) hear it through 3 extra inputs: the loudest call as heard (strength fades with distance) and its offset (dx, dy) ÷ callRadius. Calling costs a little energy (`callCost`) so calls aren't free noise. Enemies can't hear calls in v1.
 - Calling is **not** one of the argmax actions: a creature can move *and* call in the same tick. Argmax runs over the 9 action outputs only; memory and call outputs are read as values.
@@ -395,7 +395,7 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 - **Mute test:** run signal-on champions with their call inputs zeroed. If they do worse, the calls carry real information; if not, the calls are noise.
 - Viewer: a ripple ring when a creature calls, so spectators can watch calls spread.
 - Re-run the Sprint 4.2 balance check with signals on.
-- ✅ Signal-on tribes beat signal-off tribes in ≥ 2 of 3 seeds; muting lowers the champions' score; the 4.2 balance criteria still hold. If not, leave signals off and record why in the retro.
+- ✅ On held-out Small seeds 401–450, run once (bar in `docs/sprints/sprint-4.3.md`): signals-on ≥ 0.95× signals-off on the normal map; on the sparse-water map ≥ 1.10× and better on ≥ 30 of 50 seeds; muting the call inputs lowers the champions' score to ≤ 0.90× and for ≥ 60 % of them; then the 4.2 balance bar still holds with signals on. If not, leave signals off and record why in the retro.
 
 ### Phase 5 — Persistence & Replays
 **Sprint 5.1 — Runs & resumable training**
@@ -661,4 +661,12 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Held-out Medium seeds 301–340, run once against the bar above: start-slot wins 15 / 7 / 13 / 5 (≤ 16 needed), battle royale ≥ 2 tribes alive at generation 120 in 38 of 40 (≥ 28), no champion above 80 % `STAY` (max 70 %). Met.
 - Rules: battle-royale grace period (`evolution.battleRoyaleFromGeneration` 100), extinct tribes take the places a capped leader can't (population stays at the budget), tribe outcome uses territory averaged over the generation. New `pnpm analyze` tool.
 - Left as is: absolute tribe score (no slot benefits), territory weight 0, combat numbers. Lead: slot 2 led 51 of this sprint's 140 runs, 36 % (expected 25 %); worth a dedicated check.
+
+**2026-11-25 — Sprint 4.3 acceptance bar** (fixed before any held-out run)
+- §4 Sprint 4.3: **50 held-out seeds instead of 3** (user's decision, before any held-out seed was run and before signals-on was trained): conditions as for memory in 3.5, plus the mute test (call inputs zeroed: ≤ 0.90× and worse for ≥ 60 %) and the 4.2 balance bar re-run with signals on. If all pass, signals become the default.
+- §2.5: the optional tribe-score fitness term is **not** added: selection ranks each tribe's own members, so adding the same `w·tribeScore` to every member of a tribe changes no ranking and no parent choice; it would only shift benchmark scores.
+
+**2026-11-25 — Sprint 4.3 result: signals stay off** (`simVersion` 12 → 13)
+- Held-out seeds 401–450, run once against the bar above: normal map 0.99× (pass), sparse-water **0.87×** (needed ≥ 1.10×) and better on only **19 of 50** seeds (needed ≥ 30): **fail**. The mute test passes (call inputs zeroed: 0.71×, worse for 93 of 100), so calls carry information, but tribes that can call do worse and lock in more (11 vs 4 of 100). `signals.enabled` stays false; the switch, hearing sensors, ripple rings and `pnpm analyze --mute` stay.
+- Likely causes, for a later try on development seeds: `callCost` 0.1 is half the base energy drain; calls may matter only where allies fight together (Medium).
 

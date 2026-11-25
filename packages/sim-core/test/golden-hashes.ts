@@ -19,15 +19,15 @@ import { makeMiniMap } from './mini-map.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 12,
+  simVersion: 13,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: '3e27c3bdcedbaf4d',
-    100: 'aba4012cdbbf330b',
-    600: 'd7710dcaa799fe16',
+    0: '64110b3e8b8e8992',
+    100: '0a1993276c264d9d',
+    600: '749c8bd80907ef8d',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome` of the default
@@ -36,8 +36,8 @@ export const GOLDEN = {
    * creatures have died by tick 600, so deaths are covered too.
    */
   brainPolicy: {
-    100: '5488f81fb2055db0',
-    600: 'd93edd39000dde81',
+    100: '577dae4730bf1c8f',
+    600: '4c713714518c6cdd',
   },
   /**
    * Running digest of every input vector (sensors + memory) and every raw forward-pass output
@@ -53,8 +53,17 @@ export const GOLDEN = {
    * 18 → 12 → 9, 333 weights). 26 of the 50 creatures have died by tick 600 (all by 700).
    */
   noMemoryPolicy: {
-    100: '52e2a87b927b2995',
-    600: 'fa6c0c59063ae9cd',
+    100: '5a867d0d5624d9e9',
+    600: '64efada4b7f1413b',
+  },
+  /**
+   * Like `brainPolicy` with signals on (`signals.enabled`, Sprint 4.3) and the 432-weight
+   * `goldenBrainGenome` of that brain: adds the call output, call cost, the commit step and the
+   * "loudest ally call" sensors. 3,351 creature-ticks of calling up to tick 600; 18 alive then.
+   */
+  signalsPolicy: {
+    100: 'e6038654ee0ef00d',
+    600: 'a09a512576c6433b',
   },
   /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
@@ -62,9 +71,9 @@ export const GOLDEN = {
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: 'e76966792889e82a',
-    3: 'a2c2c974b3244977',
-    4: 'f131367fe25bf86e',
+    2: '90b67576076ee77d',
+    3: '4158a05a0c018689',
+    4: 'cce0d5f147ae5083',
   },
   /**
    * `world.hash()` of `brawlWorld()` (a 7×7 grass block packed with 3 tribes, random policy,
@@ -73,8 +82,8 @@ export const GOLDEN = {
    * 42.9 / 40.8 / 16.3 %.
    */
   brawl: {
-    20: 'b14816e3448a9492',
-    60: '3f43301e737ff0b9',
+    20: '62488c624cff7dd7',
+    60: '4cb40e0428e43242',
   },
 } as const;
 
