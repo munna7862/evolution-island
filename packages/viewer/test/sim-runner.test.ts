@@ -525,6 +525,28 @@ describe('SimRunner', () => {
       expect(host.messages.at(-1)).toMatchObject({ type: 'replayExport', text: null });
     });
 
+    it('applies world events in random mode too, with nothing to export (Sprint 7.2)', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 6,
+        preset: 'small',
+        seed: 1,
+        speed: 1,
+        running: false,
+        pauseAtTick: null,
+      });
+      expect(host.latestSnapshot().climate.events).toEqual([]);
+      send(runner, { type: 'worldEvent', runId: 6, event: { kind: 'drought', x: 30, y: 30 } });
+      expect(host.latestSnapshot().climate.events).toEqual([
+        expect.objectContaining({ kind: 'drought', x: 30, y: 30 }),
+      ]);
+      // Stale run ids are ignored like every other control message.
+      send(runner, { type: 'worldEvent', runId: 5, event: { kind: 'flood', x: 3, y: 3 } });
+      expect(host.latestSnapshot().climate.events).toHaveLength(1);
+    });
+
     it('records spectator world events; the export and its playback in the worker match (Sprint 7.2)', () => {
       const host = new MockRunnerHost();
       const runner = new SimRunner(host);

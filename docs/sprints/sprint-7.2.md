@@ -81,9 +81,9 @@ As designed.
 **Speed:** `pnpm bench` with climate on gives Large 1,015 and Huge 362 CPU ticks/s (targets 400 and 150).
 
 **Verification:**
-- `pnpm lint`, `pnpm typecheck`, `pnpm test` (430 in 55 files) and `pnpm build` pass.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` (432 in 55 files) and `pnpm build` pass.
 - `pnpm test:browser` passes (33, in Chromium, Firefox and WebKit).
-- `pnpm test:e2e` passes (16, with 2 perf tests skipped).
+- `pnpm test:e2e` passes (16, with 2 perf tests skipped). Two runs in review pass 2 timed out on 5 s waits under the machine's load (a Huge preset switch, the first frames). Both tests passed alone and the whole suite passed on re-run, and Huge world creation takes as long as before this sprint.
 
 ## Retro
 
@@ -109,3 +109,12 @@ Checked and fine:
 - Natural draws use only the `climate` stream.
 - Terrain is restored before spawning at each generation start.
 - Sensors, drinking and walkability read the live terrain.
+
+**Pass 2** — two fixes:
+- **A pending placement survived a new world.** An armed Drought, Flood or Food zone stayed armed after loading another world or a replay, so the next map click would still try to place it. Starting a run now clears it.
+- **Test gap:** a worker test now covers world events in random mode (applied, with nothing to export) and stale run ids.
+
+Checked and fine:
+- On resume, the world constructor's food-zone draw is overwritten by the captured `climate` stream, and the generation start redraws the same zone. The resume and golden tests cover this.
+- `worldEvent` carries a control sequence number, and the worker answers with a snapshot that acknowledges it.
+- An event dropped where nothing changes, such as a drought on dry land, is still a recorded event and plays back the same.

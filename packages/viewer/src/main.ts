@@ -1042,6 +1042,7 @@ async function boot(): Promise<void> {
     syncUrlParams(preset, seed);
 
     activeRunId++;
+    armedEvent = null; // a placement never carries over to another world
     rejectPendingHashes('Simulation restarted');
     postToWorker({
       type: 'init',
