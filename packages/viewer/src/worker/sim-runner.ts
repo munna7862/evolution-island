@@ -55,7 +55,11 @@ export interface SimRunnerHost {
 const MAX_ACCUMULATE_MS = 250;
 const MAX_TICKS_PER_FIXED_SLICE = 64;
 const MAX_SPEED_SLICE_BUDGET_MS = 12;
-const FIXED_HIGH_SPEED_SNAPSHOT_INTERVAL_MS = 16;
+/**
+ * Fastest snapshot rate at 20x (Sprint 7.1): below one 60 Hz frame (16.7 ms), because slices run
+ * every few ms and a 16 ms threshold landed a new snapshot only every ~20 ms (~45 drawn frames/s).
+ */
+const FIXED_HIGH_SPEED_SNAPSHOT_INTERVAL_MS = 12;
 const MAX_SPEED_SNAPSHOT_INTERVAL_MS = 33;
 const TPS_WINDOW_MS = 250;
 

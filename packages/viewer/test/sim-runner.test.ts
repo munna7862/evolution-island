@@ -95,6 +95,31 @@ function send(runner: SimRunner, msg: MainToWorkerMessage): void {
 }
 
 describe('SimRunner', () => {
+  it('sends a new snapshot for every 60 Hz frame at 20x, but not one per tick (Sprint 7.1)', () => {
+    const host = new MockRunnerHost();
+    const runner = new SimRunner(host);
+    send(runner, {
+      type: 'init',
+      runId: 1,
+      preset: 'small',
+      seed: 42,
+      speed: 20,
+      running: true,
+      pauseAtTick: null,
+    });
+    host.advanceBy(100);
+    const startTick = host.latestSnapshot().tick;
+    const before = host.messages.filter((m) => m.type === 'snapshot').length;
+    host.advanceBy(1000);
+    const snapshots = host.messages.filter((m) => m.type === 'snapshot').length - before;
+    const ticks = host.latestSnapshot().tick - startTick;
+    expect(ticks).toBeGreaterThanOrEqual(195);
+    // ≥ 60 per second, so a 60 fps view always has a new picture (16 ms gave 50 here) …
+    expect(snapshots).toBeGreaterThanOrEqual(60);
+    // … but well under one per tick: messages stay cheap at 200 ticks/s.
+    expect(snapshots).toBeLessThan(ticks / 2);
+  });
+
   it('emits ready on init and ignores messages with stale runId', () => {
     const host = new MockRunnerHost();
     const runner = new SimRunner(host);
