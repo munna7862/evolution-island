@@ -57,6 +57,8 @@ describe('worker-protocol helpers', () => {
     expect(buf.tribeIds.buffer).toBe(buf.buffer);
     expect(buf.lastMoveDir.buffer).toBe(buf.buffer);
     expect(buf.healthRatio.buffer).toBe(buf.buffer);
+    expect(buf.call.buffer).toBe(buf.buffer);
+    expect(Array.from(buf.call).every((v) => v === 0)).toBe(true);
     expect(Array.from(buf.ids)).not.toContain(victim.id);
 
     // Health ratio clamps cleanly to [0, 255].
@@ -153,5 +155,16 @@ describe('worker-protocol helpers', () => {
     const resyncHigh = packCreatureSnapshot(world);
     expect(resyncHigh.count).toBe(50);
     expect(resyncHigh.buffer.byteLength).toBe(50 * CREATURE_STRIDE_BYTES);
+  });
+});
+
+describe('call byte (Sprint 4.3)', () => {
+  it('packs each living creature call as 0..255', () => {
+    const world = createWorld({ preset: 'small', seed: 42 });
+    world.creatures[0]!.call = 1;
+    world.creatures[1]!.call = 0.5;
+    world.creatures[2]!.call = Number.NaN;
+    const buf = packCreatureSnapshot(world);
+    expect(Array.from(buf.call.slice(0, 4))).toEqual([255, 128, 0, 0]);
   });
 });

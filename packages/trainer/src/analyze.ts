@@ -17,6 +17,10 @@ import {
   runBenchmarkDetailed,
   type BenchmarkArena,
   type MapPresetId,
+  brainSpecFromConfig,
+  inputWeightIndex,
+  memoryNeuronCount,
+  SENSOR_COUNT,
   type SimConfig,
 } from '@evolution-island/sim-core';
 import { STATS_FILE_FORMAT, type StatsRow } from './stats.js';
@@ -44,6 +48,36 @@ export interface AnalyzeIo {
   exists(path: string): boolean;
 }
 
+/**
+ * The mute test (plan §4 Sprint 4.3, used for memory in 3.5): benchmark each champion again with
+ * the weights from these inputs set to 0, so its brain never sees them.
+ */
+export type MuteInputs = 'memory' | 'calls';
+
+/** The [first, end) brain inputs a mute zeroes, for a config's brain. */
+export function mutedInputRange(config: SimConfig, mute: MuteInputs): [number, number] {
+  const spec = brainSpecFromConfig(config);
+  const memory = memoryNeuronCount(spec, config.signals.enabled);
+  if (mute === 'memory') return [SENSOR_COUNT, SENSOR_COUNT + memory];
+  if (!config.signals.enabled) throw new Error('--mute calls needs runs trained with signals on');
+  return [SENSOR_COUNT + memory, spec.inputs];
+}
+
+/** A copy of `genome` whose weights from inputs [first, end) are 0. */
+export function muteGenome(
+  config: SimConfig,
+  genome: Float32Array,
+  mute: MuteInputs,
+): Float32Array {
+  const spec = brainSpecFromConfig(config);
+  const [first, end] = mutedInputRange(config, mute);
+  const muted = Float32Array.from(genome);
+  for (let h = 0; h < spec.hidden; h++) {
+    for (let i = first; i < end; i++) muted[inputWeightIndex(spec, h, i)] = 0;
+  }
+  return muted;
+}
+
 export interface ChampionAnalysis {
   /** Hall-of-fame rank-1 genome of the analysed checkpoint. */
   readonly file: string;
@@ -52,6 +86,8 @@ export interface ChampionAnalysis {
   readonly reproduced: boolean;
   /** Share of each resolved action (indexed by `Action`), over all living clone-ticks. */
   readonly actionShares: readonly number[];
+  /** Arena score with the muted inputs zeroed (only with a mute). */
+  readonly mutedScore: number | null;
 }
 
 export interface TribeAnalysis {
@@ -142,6 +178,7 @@ function analyzeChampion(
   storedScore: number,
   arena: BenchmarkArena,
   io: AnalyzeIo,
+  mute: MuteInputs | undefined,
 ): ChampionAnalysis {
   const genome = parseGenome(io.readTextFile(join(checkpointDir, file))).weights;
   const result = runBenchmarkDetailed(arena, genome);
@@ -151,6 +188,10 @@ function analyzeChampion(
     storedScore,
     reproduced: result.score === storedScore,
     actionShares: result.actions.map((n) => (total > 0 ? n / total : 0)),
+    mutedScore:
+      mute === undefined
+        ? null
+        : runBenchmarkDetailed(arena, muteGenome(arena.config, genome, mute)).score,
   };
 }
 
@@ -162,6 +203,7 @@ export function analyzeRun(
   dir: string,
   io: AnalyzeIo,
   arenas: Map<string, BenchmarkArena> = new Map(),
+  mute?: MuteInputs,
 ): RunAnalysis {
   const manifest = parseRunManifest(io.readTextFile(join(dir, RUN_MANIFEST_NAME)));
   const generation = manifest.completedGenerations;
@@ -183,7 +225,7 @@ export function analyzeRun(
       champion:
         best === undefined
           ? null
-          : analyzeChampion(checkpointDir, best.file, best.benchmarkScore, arena, io),
+          : analyzeChampion(checkpointDir, best.file, best.benchmarkScore, arena, io, mute),
     };
   });
 
@@ -245,6 +287,12 @@ export interface AnalysisSummary {
   readonly meanLateScore: number;
   readonly tribes: number;
   readonly hardLockIns: number;
+  /** Mute test: champions benchmarked muted (0 without a mute). */
+  readonly mutedChampions: number;
+  /** … of which scored lower muted than unmuted. */
+  readonly mutedWorse: number;
+  /** Mean muted score ÷ mean unmuted score over those champions (null without a mute). */
+  readonly mutedRatio: number | null;
 }
 
 export function summarize(runs: readonly RunAnalysis[]): AnalysisSummary {
@@ -255,6 +303,7 @@ export function summarize(runs: readonly RunAnalysis[]): AnalysisSummary {
   }
   const tribes = runs.flatMap((r) => r.tribes);
   const champions = tribes.flatMap((t) => (t.champion === null ? [] : [t.champion]));
+  const muted = champions.filter((c) => c.mutedScore !== null);
   const stay = champions.map((c) => c.actionShares[Action.STAY]!);
   const meanActionShares = Array.from({ length: ACTION_COUNT }, (_, a) =>
     champions.length > 0 ? mean(champions.map((c) => c.actionShares[a]!)) : 0,
@@ -280,6 +329,12 @@ export function summarize(runs: readonly RunAnalysis[]): AnalysisSummary {
     meanLateScore: lates.length > 0 ? mean(lates) : 0,
     tribes: tribes.length,
     hardLockIns: tribes.filter((t) => t.hardLockIn).length,
+    mutedChampions: muted.length,
+    mutedWorse: muted.filter((c) => c.mutedScore! < c.storedScore).length,
+    mutedRatio:
+      muted.length > 0
+        ? mean(muted.map((c) => c.mutedScore!)) / mean(muted.map((c) => c.storedScore))
+        : null,
   };
 }
 
@@ -342,5 +397,11 @@ export function formatReport(runs: readonly RunAnalysis[], summary: AnalysisSumm
       `${summary.meanLateRatio.toFixed(2)}; hard lock-in: ${summary.hardLockIns} of ` +
       `${summary.tribes} tribes`,
   );
+  if (summary.mutedRatio !== null) {
+    lines.push(
+      `Mute test: muted champions score ${summary.mutedRatio.toFixed(3)}× unmuted; worse for ` +
+        `${summary.mutedWorse} of ${summary.mutedChampions}`,
+    );
+  }
   return `${lines.join('\n')}\n`;
 }

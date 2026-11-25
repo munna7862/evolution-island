@@ -83,8 +83,8 @@ describe('hearing (readCallSensors)', () => {
   it('hears the loudest ally within callRadius, fading with distance, and its offset', () => {
     const world = strip(40);
     world.spawnCreature(0, 10, 0); // listener, id 0
-    world.spawnCreature(0, 15, 0).call = 0.8; // 5 tiles: 0.8 × (1 − 5/16) = 0.55
-    world.spawnCreature(0, 7, 0).call = 0.6; // 3 tiles: 0.6 × (1 − 3/16) = 0.4875
+    world.spawnCreature(0, 15, 0)!.call = 0.8; // 5 tiles: 0.8 × (1 − 5/16) = 0.55
+    world.spawnCreature(0, 7, 0)!.call = 0.6; // 3 tiles: 0.6 × (1 − 3/16) = 0.4875
     const [strength, dx, dy] = heard(world, 0);
     expect(strength).toBe(Math.fround(0.8 * (1 - 5 / RADIUS)));
     expect(dx).toBe(Math.fround(5 / RADIUS));
@@ -93,23 +93,23 @@ describe('hearing (readCallSensors)', () => {
 
   it('ignores enemies, silent allies, the dead, itself and allies beyond callRadius', () => {
     const world = strip(40);
-    world.spawnCreature(0, 10, 0).call = 1; // the listener itself calls: not heard by itself
-    world.spawnCreature(1, 11, 0).call = 1; // enemy
+    world.spawnCreature(0, 10, 0)!.call = 1; // the listener itself calls: not heard by itself
+    world.spawnCreature(1, 11, 0)!.call = 1; // enemy
     world.spawnCreature(0, 12, 0); // silent ally
     const dead = world.spawnCreature(0, 13, 0)!;
     dead.call = 1;
     dead.alive = false;
-    world.spawnCreature(0, 10 + RADIUS + 1, 0).call = 1; // out of range
+    world.spawnCreature(0, 10 + RADIUS + 1, 0)!.call = 1; // out of range
     expect(heard(world, 0)).toEqual([0, 0, 0]);
-    world.spawnCreature(0, 10 + RADIUS, 0).call = 1; // exactly at the radius: heard at 0 → silent
+    world.spawnCreature(0, 10 + RADIUS, 0)!.call = 1; // exactly at the radius: heard at 0 → silent
     expect(heard(world, 0)).toEqual([0, 0, 0]);
   });
 
   it('breaks equal strengths to the lowest id', () => {
     const world = strip(40);
     world.spawnCreature(0, 10, 0);
-    world.spawnCreature(0, 14, 0).call = 0.8; // id 1, east
-    world.spawnCreature(0, 6, 0).call = 0.8; // id 2, west, same distance
+    world.spawnCreature(0, 14, 0)!.call = 0.8; // id 1, east
+    world.spawnCreature(0, 6, 0)!.call = 0.8; // id 2, west, same distance
     expect(heard(world, 0)[1]).toBe(Math.fround(4 / RADIUS));
   });
 });

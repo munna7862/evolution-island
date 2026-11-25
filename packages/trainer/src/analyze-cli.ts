@@ -4,10 +4,11 @@ import { parseArgs } from 'node:util';
 import type { BenchmarkArena } from '@evolution-island/sim-core';
 import { analyzeRun, findRunDirs, formatReport, summarize, type AnalyzeIo } from './analyze.js';
 
-const USAGE = `Usage: pnpm analyze --runs <dir> [--json <file>]
+const USAGE = `Usage: pnpm analyze --runs <dir> [--json <file>] [--mute memory|calls]
 
   --runs <dir>   a run folder, or a folder of run folders (e.g. the --out of pnpm train --seeds)
   --json <file>  also write every number as JSON
+  --mute <what>  mute test: also benchmark each champion with its memory or call inputs zeroed
   --help         show this text
 
 Analyses each run at its last completed generation: start-slot winner (highest tribe score),
@@ -21,13 +22,14 @@ const io: AnalyzeIo = {
 };
 
 function run(argv: readonly string[]): number {
-  let values: { runs?: string; json?: string; help?: boolean };
+  let values: { runs?: string; json?: string; mute?: string; help?: boolean };
   try {
     ({ values } = parseArgs({
       args: [...argv],
       options: {
         runs: { type: 'string' },
         json: { type: 'string' },
+        mute: { type: 'string' },
         help: { type: 'boolean' },
       },
     }));
@@ -45,13 +47,18 @@ function run(argv: readonly string[]): number {
     console.error(USAGE);
     return 2;
   }
+  const mute = values.mute;
+  if (mute !== undefined && mute !== 'memory' && mute !== 'calls') {
+    console.error(`--mute must be memory or calls, got "${mute}"`);
+    return 2;
+  }
   const dirs = findRunDirs(values.runs, io);
   if (dirs.length === 0) {
     console.error(`${values.runs} holds no run (no run.json)`);
     return 2;
   }
   const arenas = new Map<string, BenchmarkArena>();
-  const runs = dirs.map((dir) => analyzeRun(dir, io, arenas));
+  const runs = dirs.map((dir) => analyzeRun(dir, io, arenas, mute));
   const summary = summarize(runs);
   process.stdout.write(formatReport(runs, summary));
   if (values.json !== undefined) {

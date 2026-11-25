@@ -6,6 +6,27 @@ import { TRIBE_SHAPES, tribeHex, tribeShape, type TribeShape } from './palette.j
 
 const TEXTURE_SIZE = 32;
 const CREATURE_WORLD_SIZE = TILE_WORLD_SIZE * 0.9;
+/** One ripple (Sprint 4.3): a ring around a calling creature grows and fades over this time. */
+export const RIPPLE_PERIOD_MS = 900;
+/** The ring grows from the creature's size to this many times it. */
+const RIPPLE_MAX_SCALE = 3.5;
+
+/** A white ring, tinted per tribe; its strength fades the alpha. */
+export function createRippleTexture(): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = TEXTURE_SIZE * 2;
+  canvas.height = TEXTURE_SIZE * 2;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) {
+    throw new Error('Failed to acquire 2D canvas context for the ripple texture');
+  }
+  ctx.beginPath();
+  ctx.arc(TEXTURE_SIZE, TEXTURE_SIZE, TEXTURE_SIZE - 3, 0, Math.PI * 2);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  return new Texture({ source: new CanvasSource({ resource: canvas, scaleMode: 'linear' }) });
+}
 
 function traceRegularPolygon(
   ctx: CanvasRenderingContext2D,
@@ -117,9 +138,15 @@ function createTribeTexture(tribeIdx: number): Texture {
 
 export class CreatureLayer {
   readonly container = new Container();
+  /** Ripple rings of calling creatures; the map view puts it under `container`. */
+  readonly rippleContainer = new Container();
 
   private readonly tribeTextures: Texture[];
   private readonly spritePool: Sprite[] = [];
+  private readonly rippleTexture: Texture;
+  private readonly ripplePool: Sprite[] = [];
+  /** Per ripple in use: the creature (snapshot index) it belongs to and its call strength. */
+  private ripples: { readonly index: number; readonly strength: number }[] = [];
 
   private snapshot: CreatureBuffer | null = null;
   private receivedAtMs = 0;
@@ -129,8 +156,12 @@ export class CreatureLayer {
   private lastAlpha = -1;
   private positionChanged = false;
 
-  constructor(textureFactory: (tribeIdx: number) => Texture = createTribeTexture) {
+  constructor(
+    textureFactory: (tribeIdx: number) => Texture = createTribeTexture,
+    rippleFactory: () => Texture = createRippleTexture,
+  ) {
     this.tribeTextures = TRIBE_SHAPES.map((_, idx) => textureFactory(idx));
+    this.rippleTexture = rippleFactory();
   }
 
   setSnapshot(
@@ -169,6 +200,7 @@ export class CreatureLayer {
       this.spritePool[i]!.visible = false;
     }
 
+    this.setRipples(creatures);
     this.updateInterpolation(receivedAtMs);
   }
 
@@ -198,7 +230,54 @@ export class CreatureLayer {
       this.lastAlpha = alpha;
     }
 
-    return changed || (this.running && alpha < 1);
+    if (this.ripples.length > 0) {
+      this.updateRipples(nowMs);
+      this.positionChanged = true;
+    }
+    return changed || (this.running && alpha < 1) || this.ripples.length > 0;
+  }
+
+  /** Calling creatures in the latest snapshot (for tests and the HUD). */
+  getRippleCount(): number {
+    return this.ripples.length;
+  }
+
+  private setRipples(creatures: CreatureBuffer): void {
+    this.ripples = [];
+    for (let i = 0; i < creatures.count; i++) {
+      const call = creatures.call[i]!;
+      if (call > 0) this.ripples.push({ index: i, strength: call / 255 });
+    }
+    while (this.ripplePool.length < this.ripples.length) {
+      const ring = new Sprite(this.rippleTexture);
+      ring.anchor.set(0.5);
+      this.rippleContainer.addChild(ring);
+      this.ripplePool.push(ring);
+    }
+    const tribeCount = this.tribeTextures.length;
+    this.ripples.forEach((ripple, k) => {
+      const rawTribe = creatures.tribeIds[ripple.index]!;
+      this.ripplePool[k]!.tint = tribeHex(((rawTribe % tribeCount) + tribeCount) % tribeCount);
+      this.ripplePool[k]!.visible = true;
+    });
+    for (let k = this.ripples.length; k < this.ripplePool.length; k++) {
+      this.ripplePool[k]!.visible = false;
+    }
+  }
+
+  /** Rings follow their creature, grow from 1× to RIPPLE_MAX_SCALE× its size and fade out. */
+  private updateRipples(nowMs: number): void {
+    const elapsed = Math.max(0, nowMs - this.receivedAtMs);
+    const phase = (elapsed % RIPPLE_PERIOD_MS) / RIPPLE_PERIOD_MS;
+    const size = CREATURE_WORLD_SIZE * (1 + (RIPPLE_MAX_SCALE - 1) * phase);
+    this.ripples.forEach((ripple, k) => {
+      const ring = this.ripplePool[k]!;
+      const sprite = this.spritePool[ripple.index]!;
+      ring.position.set(sprite.position.x, sprite.position.y);
+      ring.width = size;
+      ring.height = size;
+      ring.alpha = ripple.strength * (1 - phase);
+    });
   }
 
   didPositionChange(): boolean {
@@ -211,6 +290,10 @@ export class CreatureLayer {
 
   clear(): void {
     this.snapshot = null;
+    this.ripples = [];
+    for (const ring of this.ripplePool) {
+      ring.visible = false;
+    }
     this.renderedCount = 0;
     this.lastAlpha = -1;
     this.positionChanged = false;
@@ -225,6 +308,11 @@ export class CreatureLayer {
       sprite.destroy();
     }
     this.spritePool.length = 0;
+    for (const ring of this.ripplePool) {
+      ring.destroy();
+    }
+    this.ripplePool.length = 0;
+    this.rippleTexture.destroy(true);
     for (const tex of this.tribeTextures) {
       tex.destroy(true);
     }
