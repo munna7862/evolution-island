@@ -22,8 +22,8 @@ term `territory` (weight 0) exist but are always 0. `tribeOutcome` returns `terr
 ## Design
 
 **`ATTACK`** (plan §2.3). Targets the adjacent enemy (8-neighbourhood, alive, other tribe) with the
-lowest health, ties → lowest id. Deals `creature.attackDamage` (20: a full-health creature dies
-from the fifth hit) and costs the attacker `creature.attackEnergyCost` (0.5, already in config).
+lowest health, ties → lowest id. Deals `creature.attackDamage` (20: five hits kill a full-health
+creature, six if it is hit once a tick and heals 0.25 a tick in between) and costs the attacker `creature.attackEnergyCost` (0.5, already in config).
 No adjacent enemy → `STAY` (no cost). If the victim's health reaches 0 it dies at once, inside
 Phase B: it leaves its tile (another creature may step there later in the same tick), its own
 action is skipped if it had not acted yet, and it gets no metabolism or `ticksAlive` for this
@@ -43,14 +43,15 @@ Invalid → `STAY`.
 are both below 50 % can pass energy back and forth; each pass loses 20 % but earns the giver +5
 fitness, and when thirst, not hunger, ends their lives the lost energy costs nothing. Requiring the
 giver to keep ≥ 50 % makes a valid share go from a creature at ≥ 60 % to one below 50 %; the
-recipient ends below 58 % and the giver at ≥ 50 %, so energy can only flow back after one of them
-eats or starves for a while. Repeated one-way help from a well-fed creature to a hungry one stays
+recipient ends below 58 % and the giver at ≥ 50 %, so the recipient can only give back after it
+gains energy some other way (eating, or a kill's loot). Repeated one-way help from a well-fed creature to a hungry one stays
 valid (and capped).
 
 **Territory** (plan §2.6, §3.4). Per tile: an owner tribe (−1 = none) and the tick it was last
 stamped. After metabolism each tick, every living creature stamps its tile with its tribe (one
 creature per tile, so the order does not matter; a creature moves at most one tile per tick, so
-every visited tile is stamped). Every `territory.updateInterval` ticks (10) the world drops
+a living creature's whole path is stamped; one that dies during a tick does not stamp the tile it
+died on). Every `territory.updateInterval` ticks (10) the world drops
 ownership older than `territory.decayTicks` (300 ticks, a tenth of a Small generation) and
 recounts each tribe's territory % = owned tiles ÷ walkable tiles × 100. A tile has at most one
 owner, so all tribes together hold ≤ 100 %. `startGeneration` clears territory. `tribeOutcome`
@@ -153,7 +154,8 @@ The difference is well inside the ±6 % noise between equal 50-seed arms (Sprint
 **Combat is rare so far.** On Small the two tribes' zones are ~28 tiles apart: 163 kills in total
 over 50 seeds × 100 generations (≈ 0.03 per generation per seed). On Medium (seeds 101–103, 100
 generations, 4 tribes of ~50): 0.0–0.1 kills per generation in generations 1–10 and 0.0–0.4 in
-91–100. Benchmarks rose 793 → 1,868, 694 → 1,556 and 555 → 1,323 (mean ratios 2.36 / 2.24 / 2.39).
+91–100. Benchmarks (mean of the 4 tribes) rose 793 → 1,869, 695 → 1,556 and 555 → 1,323 (ratios
+2.36 / 2.24 / 2.38).
 
 **Territory at generation end is tiny:** 0.3–1.4 % for all four tribes together on Medium at
 generation 100, and about 0.5 % per tribe on Small (mean over the generation ends where it is not 0). Few creatures are alive when a generation ends, and a
@@ -195,3 +197,96 @@ parallel: 6,100–6,300 ticks/s per seed (§3.6 target > 1,000).
 - Measure action mixes on Medium (attacks, shares) next to the balance criteria; kills are rare
   now.
 - Use multi-seed bars sized from measured noise (Sprint 3.5 recipe) for the balance criteria.
+
+## Review (2026-11-25)
+
+A fresh session reviewed PR #14 against `CLAUDE.md`, plan §2.3, §2.5, §2.6, §3.3–3.4, §4 Sprint
+4.1 and the revision notes, `phase-4.md` and this file, with `git diff ce9b130...sprint-4.1`.
+
+**Checked, no change needed**
+- **Rules match the design.** `ATTACK`: 8-neighbourhood, living creatures of other tribes, lowest
+  health then lowest id; 20 damage for 0.5 energy; nobody adjacent → `STAY` at no cost. At 0 health
+  `World.killCreature` sets health 0 and `alive` false, frees the tile, lowers `livingCount` and
+  marks the grid dirty; the Phase B loop and metabolism skip dead creatures (no action, no
+  `ticksAlive`, no age). The killing blow alone gets the kill and half the victim's remaining
+  energy, capped at max and not counted as `foodEaten`. `SHARE`: lowest-energy ally then lowest id;
+  recipient strictly below 50, giver ≥ 50 after giving; −10 / +8, capped; `alliesHelped` +1; the
+  fitness cap (10) is unchanged.
+- **No flow back, by arithmetic.** A recipient ends below need·max + amount·efficiency = 58 and a
+  giver needs keep·max + amount = 60, and more shares can't lift a recipient past 58, so without
+  food or a kill's loot energy never goes back. The guarantee needs
+  `shareNeedRatio·maxEnergy + shareAmount·shareEfficiency ≤ shareKeepRatio·maxEnergy + shareAmount`;
+  Sprint 4.2 tuning must keep it (efficiency 1.0 with keep 0.4 would break it; the property test
+  uses the defaults and would fail).
+- **Determinism.** The new sim-core code uses only `Math.max/min/floor`; targets are picked by
+  health/energy then id; deaths follow the seeded shuffle and draw no random numbers; stamping is
+  one creature per tile, so its order doesn't matter. Territory owner, stamp and the % tally are in
+  `writeWorldState` (so in `hashWorld` and `hashWorldState`). All new numbers are in `config.ts` and
+  `hashConfig`; `territory.decayTicks` / `updateInterval` are hashed as 32-bit integers and listed
+  as whole numbers in `config-override.ts`, which still lists exactly the fields `hashConfig`
+  writes that way.
+- **Territory.** Stamped at spawn and after metabolism; decay compares `tickCount` (not reset at a
+  generation start; owners and stamps are). The recount runs when `generationTick % interval` is 0,
+  i.e. after a generation's 1st, 11th, 21st … tick, so `tribeOutcome` gets the last recount (up to
+  9 ticks old) and it includes tiles of creatures that died within the last 300 ticks. The sum
+  ≤ 100 % holds by construction; in floating point it can exceed 100 by one ulp (7 tribes on one
+  of 7 tiles each: 100.00000000000001), so the property test's 1e-9 tolerance is right. Its random
+  worlds reach up to ~47 %; the pinned brawl reaches full cover (99.99999999999999 %).
+- **Seed-42 test** implemented as the user decided: each tribe's mean of its generation 80/90/100
+  benchmarks against the unchanged thresholds. Reproduced: generation 1 573.2 / 894.7, 50:
+  1,176 / 1,703 (1.96×), 80: 1,719 / 2,064, 90: 2,287 / 1,944, 100: 2,184 / 1,172; late scores
+  3.60× / 1.93× (mean 2.58×), as stated.
+- **Measurements** recomputed from `runs/s41-normal` and `runs/s35-normal-on` (the 4.1 runs'
+  `run.json`: `simVersion` 11, config `d7ef48102997a8a2` = this build's default). Small: tribe score
+  1,596 → 1,569 (0.983×), after better on 22 of 50 seeds, mean per-seed ratio 2.81 → 2.82, seeds at 2×
+  generation 1 and 2× STAY-only (515) 46 → 46 of 50, tribes ≥ 1.5× 94 → 91, 163 kills, territory
+  0.48 % where not 0. Medium (`runs/s41-medium`): kills per generation 0.0 / 0.1 / 0.1 in
+  generations 1–10 and 0.4 / 0.0 / 0.0 in 91–100, territory at generation 100 1.41 / 0.58 / 0.34 %
+  for all tribes together. The Medium benchmarks were truncated, not rounded, and seed 103's ratio
+  was 2.384, not 2.39: corrected above. Speed was not re-measured.
+- **Brawl scenario** reproduces its comment: 37 creatures, by tick 60 23 kills, 8 valid shares,
+  23 dead, territory 42.9 / 40.8 / 16.3 %. `SIM_VERSION` comment, golden-hash procedure, the
+  renamed "nobody to hit or help" tests and the test counts in "What was done" are right.
+
+**Found and fixed** (tests: 334 → 337 in 42 files; `combat.test.ts` 16 → 18, `territory.test.ts`
+9 → 10)
+1. **Unhashed state survived a generation start.** `World.tribeSlots` (the length of the territory
+   tally) was not reset by `startGeneration` and is not hashed. A world that once had a tribe that
+   is gone now (battle royale: an eliminated tribe with the highest id, or a checkpoint replayed in a
+   fresh world without it) hashed the same as a fresh world right after the reset, then differently
+   after the first recount (tally length 2 vs 1). The creatures behaved the same, but "same hash =
+   same world" broke. Now reset at generation start, so it is derived from the hashed creatures.
+   New test "keeps no trace of earlier tribes after a generation start" failed before the fix. No
+   golden scenario has an eliminated tribe, so the golden hashes are unchanged.
+2. **Tie-break tests passed for the wrong reason.** In both "ties → lowest id" tests (`ATTACK`,
+   `SHARE`) the lower-id creature was also the first tile the 8-neighbourhood search visits: with
+   the id tie-break deleted from `lowestNeighbour`, all 16 combat tests still passed. Both tests
+   now put the tied pair on the first and last tile searched, both ways round; deleting the
+   tie-break, or letting the last tie found win, now fails both.
+3. **The ping-pong test couldn't see a same-tick swap.** "No ally both gives and receives" counted
+   a received share only when energy rose over a tick, but when both give in the same tick (the
+   ping-pong pattern) each ends 2.2 lower and nothing was counted. Without the keep rule the test
+   still failed, through its surplus check. In a pair every valid share goes to the partner, so
+   shares received are now the partner's `alliesHelped`, exactly.
+4. **"…and the `alliesHelped` cap bounds it" never reached the cap** (the giver gave 4 times, cap
+   10). The cap is now its own test: a giver on rich grass eats and shares among 8 starving allies
+   (> 20 valid shares in 100 ticks), and its fitness gains exactly 10 × 5.
+5. **No test for "another creature may step there later in the same tick"**: added (the tile is
+   blocked before the killing blow and free right after it).
+6. **Docs.** "A full-health creature dies from the fifth hit" (`config.ts`, this file): a well-fed
+   victim hit once a tick heals 0.25 in between and dies from the sixth hit (checked); now says so.
+   "Energy can only flow back after one of them eats or starves for a while": starving never lets
+   it flow back, a kill's loot does; fixed here, in `phase-4.md` and the plan revision note. "Every
+   visited tile is stamped": a creature that dies during a tick doesn't stamp the tile it died on;
+   reworded. Plan §2.5 now names the giver rule for `alliesHelped`; the §3.4 pseudo-code stamped
+   territory "live" in Phase B and recounted on `tickCount % territoryInterval`, and now shows what
+   was built (stamps after metabolism, `generationTick % territory.updateInterval`).
+
+**Noted for Sprint 4.2** (no change here): keep the share inequality above when tuning; if
+territory gets a tribe-score weight, consider recounting at generation end (or averaging over the
+generation, as the retro says), since the outcome now uses a recount up to 9 ticks old that still
+counts the footprints of the dead.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (337 tests in 42 files),
+`pnpm test:browser` (8), `pnpm build`, `pnpm test:e2e` (11) pass locally. `SIM_VERSION` stays 11
+(unmerged); golden hashes unchanged.

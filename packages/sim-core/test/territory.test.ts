@@ -7,8 +7,10 @@ import {
   createEvolutionRun,
   createWorld,
   DEFAULT_CONFIG,
+  EMPTY_GENOME,
   hashWorld,
   hashWorldState,
+  isWalkable,
   NO_OWNER,
   randomActionPolicy,
   tribeOutcome,
@@ -89,6 +91,28 @@ describe('territory (plan §2.6)', () => {
     expect(world.territoryPercent(0)).toBe(0);
     const ownedTiles = world.territoryOwner.filter((o) => o !== NO_OWNER).length;
     expect(ownedTiles).toBe(world.livingCount);
+  });
+
+  it('keeps no trace of earlier tribes after a generation start: same state hash, same future', () => {
+    // World `a` once had a creature of tribe 1 (like a battle-royale tribe eliminated earlier),
+    // world `b` never did. After the same generation start their state hashes are equal, so they
+    // must stay equal: the territory tally may not remember tribe 1.
+    const make = () =>
+      createWorld({ preset: 'small', seed: 11, populate: false, config: territoryConfig(300, 1) });
+    const a = make();
+    const b = make();
+    const tile = a.map.biomes.findIndex((biome) => isWalkable(biome));
+    a.spawnCreature(1, tile % a.map.width, Math.floor(tile / a.map.width));
+    const spawns = [{ tribeId: 0, genomes: [EMPTY_GENOME, EMPTY_GENOME, EMPTY_GENOME] }];
+    a.startGeneration(1, spawns);
+    b.startGeneration(1, spawns);
+    expect(hashWorld(a)).toBe(hashWorld(b));
+    for (let t = 0; t < 3; t++) {
+      a.tick();
+      b.tick();
+      expect(hashWorld(a)).toBe(hashWorld(b));
+    }
+    expect(a.territorySnapshot()).toEqual(b.territorySnapshot());
   });
 
   it('adds up to ≤ 100 % over all tribes, each within 0..100, for random worlds', () => {

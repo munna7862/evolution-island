@@ -35,8 +35,9 @@ wins by default), and, if the experiment works, tribes that call each other for 
    victim's own action and metabolism are skipped. Order comes from the seeded Phase B shuffle,
    targets from health/energy then id, so fights are deterministic.
 2. **Two-sided share rule (Sprint 4.1).** Recipient below `shareNeedRatio` *and* giver keeps
-   `shareKeepRatio`: energy can't flow back between two allies until one of them eats; one-way help
-   stays valid and is capped by `maxAlliesHelped`.
+   `shareKeepRatio`: energy can't flow back between two allies until the recipient gains energy
+   some other way (eating, a kill's loot); one-way help stays valid and is capped by
+   `maxAlliesHelped`.
 3. **Territory = per-tile owner + last-visit stamp (Sprint 4.1).** Stamped by every living creature
    each tick, faded after `territory.decayTicks`, recounted every `territory.updateInterval`
    ticks, part of the world hash; tribe outcome and stats carry the last recount.

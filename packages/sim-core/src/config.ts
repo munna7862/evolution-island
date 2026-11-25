@@ -316,8 +316,9 @@ export const DEFAULT_CONFIG: SimConfig = {
     eatBiteSize: 20,
     drinkBiteSize: 25,
     attackEnergyCost: 0.5,
-    // Sprint 4.1 (plan §2.3): a full-health creature dies from the fifth hit; the killing blow
-    // gains half the victim's remaining energy. First values, tuned in Sprint 4.2.
+    // Sprint 4.1 (plan §2.3): five hits kill a full-health creature (the sixth if it is hit once
+    // per tick and well fed, healing 0.25 a tick in between); the killing blow gains half the
+    // victim's remaining energy. First values, tuned in Sprint 4.2.
     attackDamage: 20,
     killEnergyFraction: 0.5,
     // A valid SHARE moves 10 energy at 80 %, from a giver that keeps ≥ 50 % to an ally below

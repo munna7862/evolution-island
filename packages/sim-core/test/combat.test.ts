@@ -19,6 +19,21 @@ import { makeMiniMap } from './mini-map.js';
 const CREATURE = DEFAULT_CONFIG.creature;
 const EVO = DEFAULT_CONFIG.evolution;
 
+/**
+ * Around a creature at (1, 1): the first and the last neighbour tile of the 8-neighbourhood
+ * search, in both orders, for tie-break tests (lower id spawned on the first tile of each pair).
+ */
+const TIED_TILES: readonly (readonly [readonly [number, number], readonly [number, number]])[] = [
+  [
+    [0, 0],
+    [2, 2],
+  ],
+  [
+    [2, 2],
+    [0, 0],
+  ],
+];
+
 /** A width × height grass world (food `food` per tile), nobody spawned yet. */
 function grassWorld(
   width: number,
@@ -69,17 +84,21 @@ describe('ATTACK (plan §2.3)', () => {
     expect(attacker.energy).toBe(CREATURE.maxEnergy);
   });
 
-  it('picks the enemy with the lowest health, ties to the lowest id', () => {
-    const world = grassWorld(3, 3);
-    const attacker = spawn(world, 0, 1, 1);
-    const healthy = spawn(world, 1, 0, 0, { health: 50 });
-    const weakA = spawn(world, 2, 2, 0, { health: 30 });
-    const weakB = spawn(world, 1, 0, 2, { health: 30 });
-    expect(weakA.id).toBeLessThan(weakB.id);
-    applyAction(world, attacker, Action.ATTACK);
-    expect(weakA.health).toBe(30 - CREATURE.attackDamage);
-    expect(weakB.health).toBe(30);
-    expect(healthy.health).toBe(50);
+  it('picks the enemy with the lowest health, ties to the lowest id wherever it stands', () => {
+    // The tied pair sits on the first and the last neighbour tile the target search visits, both
+    // ways round, so neither "first found" nor "last found" can pass for "lowest id".
+    for (const [lowAt, highAt] of TIED_TILES) {
+      const world = grassWorld(3, 3);
+      const attacker = spawn(world, 0, 1, 1);
+      const healthy = spawn(world, 1, 1, 0, { health: 50 });
+      const weakLow = spawn(world, 2, ...lowAt, { health: 30 });
+      const weakHigh = spawn(world, 1, ...highAt, { health: 30 });
+      expect(weakLow.id).toBeLessThan(weakHigh.id);
+      applyAction(world, attacker, Action.ATTACK);
+      expect(weakLow.health).toBe(30 - CREATURE.attackDamage);
+      expect(weakHigh.health).toBe(30);
+      expect(healthy.health).toBe(50);
+    }
   });
 
   it('kills at 0 health: the victim leaves its tile, the killer gets the kill and loot', () => {
@@ -124,6 +143,20 @@ describe('ATTACK (plan §2.3)', () => {
     expect(loser.stats.ticksAlive).toBe(0);
     expect(winner.stats.ticksAlive).toBe(1);
     expect(world.livingCount).toBe(1);
+  });
+
+  it("frees the victim's tile at once: a creature acting later in the same tick can step there", () => {
+    // Phase B applies the actions one by one in the shuffled order; here the order is set by hand.
+    const world = grassWorld(3, 1);
+    const attacker = spawn(world, 0, 0, 0);
+    const victim = spawn(world, 1, 1, 0, { health: CREATURE.attackDamage });
+    const mover = spawn(world, 0, 2, 0);
+    expect(applyAction(world, mover, Action.MOVE_W)).toBe(Action.STAY); // still occupied
+    applyAction(world, attacker, Action.ATTACK);
+    expect(victim.alive).toBe(false);
+    expect(applyAction(world, mover, Action.MOVE_W)).toBe(Action.MOVE_W);
+    expect(world.creatureAt(1, 0)).toBe(mover);
+    expect([victim.x, victim.y]).toEqual([1, 0]); // the body stays where it fell, off the grid
   });
 
   it('credits the kill to the killing blow only, whoever did the earlier damage', () => {
@@ -202,18 +235,21 @@ describe('SHARE (plan §2.3)', () => {
     expect(needy.stats.alliesHelped).toBe(0);
   });
 
-  it('helps the ally with the lowest energy, ties to the lowest id, and never an enemy', () => {
-    const world = grassWorld(3, 3);
-    const giver = spawn(world, 0, 1, 1);
-    const starvingEnemy = spawn(world, 1, 0, 0, { energy: 1 });
-    const hungryA = spawn(world, 0, 2, 0, { energy: 20 });
-    const hungryB = spawn(world, 0, 2, 2, { energy: 20 });
-    const fed = spawn(world, 0, 0, 2, { energy: 45 });
-    applyAction(world, giver, Action.SHARE);
-    expect(hungryA.energy).toBe(20 + CREATURE.shareAmount * CREATURE.shareEfficiency);
-    expect(hungryB.energy).toBe(20);
-    expect(fed.energy).toBe(45);
-    expect(starvingEnemy.energy).toBe(1);
+  it('helps the ally with the lowest energy, ties to the lowest id wherever it stands, never an enemy', () => {
+    for (const [lowAt, highAt] of TIED_TILES) {
+      const world = grassWorld(3, 3);
+      const giver = spawn(world, 0, 1, 1);
+      const starvingEnemy = spawn(world, 1, 1, 0, { energy: 1 });
+      const fed = spawn(world, 0, 0, 2, { energy: 45 });
+      const hungryLow = spawn(world, 0, ...lowAt, { energy: 20 });
+      const hungryHigh = spawn(world, 0, ...highAt, { energy: 20 });
+      expect(hungryLow.id).toBeLessThan(hungryHigh.id);
+      applyAction(world, giver, Action.SHARE);
+      expect(hungryLow.energy).toBe(20 + CREATURE.shareAmount * CREATURE.shareEfficiency);
+      expect(hungryHigh.energy).toBe(20);
+      expect(fed.energy).toBe(45);
+      expect(starvingEnemy.energy).toBe(1);
+    }
   });
 
   it('needs an ally below shareNeedRatio and a giver that keeps shareKeepRatio', () => {
@@ -256,31 +292,23 @@ describe('SHARE (plan §2.3)', () => {
 describe('SHARE ping-pong exploit tests (fitness term alliesHelped, plan §4 Sprint 4.1)', () => {
   /**
    * Two adjacent allies on bare sand (no food, no water) that both always SHARE, or both always
-   * STAY, from the given energies, until both are dead. Returns per creature: fitness and the
-   * energy it gave and received.
+   * STAY, from the given energies, until both are dead. Returns per creature: fitness and how many
+   * shares it gave and received. In a pair every valid SHARE goes to the other one, so the shares
+   * received are exactly the partner's `alliesHelped`, even when both give in the same tick.
    */
   function pair(energies: readonly [number, number], action: Action) {
     const world = grassWorld(2, 1, { food: 0, policy: () => action, biome: Biome.Sand });
     const a = spawn(world, 0, 0, 0, { energy: energies[0] });
     const b = spawn(world, 0, 1, 0, { energy: energies[1] });
-    const flows = [
-      { gave: 0, received: 0 },
-      { gave: 0, received: 0 },
-    ];
-    while (world.livingCount > 0) {
-      const before = [a.energy, b.energy];
-      const helped = [a.stats.alliesHelped, b.stats.alliesHelped];
-      world.tick();
-      [a, b].forEach((c, i) => {
-        if (c.stats.alliesHelped > helped[i]!) flows[i]!.gave++;
-        // A jump above the drain means it received a share.
-        if (c.alive && c.energy > before[i]!) flows[i]!.received++;
-      });
-    }
-    return [a, b].map((c, i) => ({
-      fitness: creatureFitness(c.stats, EVO),
-      ticksAlive: c.stats.ticksAlive,
-      ...flows[i]!,
+    while (world.livingCount > 0) world.tick();
+    return [
+      [a, b],
+      [b, a],
+    ].map(([c, partner]) => ({
+      fitness: creatureFitness(c!.stats, EVO),
+      ticksAlive: c!.stats.ticksAlive,
+      gave: c!.stats.alliesHelped,
+      received: partner!.stats.alliesHelped,
     }));
   }
 
@@ -315,7 +343,7 @@ describe('SHARE ping-pong exploit tests (fitness term alliesHelped, plan §4 Spr
     );
   });
 
-  it('a real one-way help is the only extra fitness, and the alliesHelped cap bounds it', () => {
+  it('a real one-way help is the only extra fitness', () => {
     const shared = pair([100, 10], Action.SHARE);
     const stayed = pair([100, 10], Action.STAY);
     const [giver] = shared;
@@ -325,5 +353,27 @@ describe('SHARE ping-pong exploit tests (fitness term alliesHelped, plan §4 Spr
     // The giver gave energy away, so it can only live as long as before or shorter.
     expect(giver!.ticksAlive).toBeLessThanOrEqual(stayed[0]!.ticksAlive);
     expect(giver!.fitness).toBeLessThanOrEqual(stayed[0]!.fitness + bonus);
+  });
+
+  it('a giver that keeps eating helps more than maxAlliesHelped times; fitness counts the cap', () => {
+    // A giver on rich grass shares whenever it can spare the energy and eats otherwise; eight
+    // starving allies around it stand still. Every share is valid, far more than the cap.
+    const canSpare = CREATURE.shareKeepRatio * CREATURE.maxEnergy + CREATURE.shareAmount;
+    const world = grassWorld(3, 3, {
+      food: 1000,
+      policy: (_w, c) =>
+        c.id !== 0 ? Action.STAY : c.energy >= canSpare ? Action.SHARE : Action.EAT,
+    });
+    const giver = spawn(world, 0, 1, 1);
+    for (let i = 0; i < 9; i++) {
+      if (i !== 4) spawn(world, 0, i % 3, Math.floor(i / 3), { energy: 0 });
+    }
+    for (let t = 0; t < 100; t++) world.tick();
+    expect(giver.stats.alliesHelped).toBeGreaterThan(2 * EVO.maxAlliesHelped);
+    const withoutHelp = creatureFitness({ ...giver.stats, alliesHelped: 0 }, EVO);
+    expect(creatureFitness(giver.stats, EVO) - withoutHelp).toBeCloseTo(
+      EVO.fitness.alliesHelped * EVO.maxAlliesHelped,
+      9,
+    );
   });
 });

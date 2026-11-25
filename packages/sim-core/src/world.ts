@@ -69,7 +69,10 @@ export class World implements ActionWorldContext {
   private gridDirty = true;
   /** Territory % per tribe id at the last `updateTerritory` (plan §2.6). */
   private territoryPct: number[] = [];
-  /** 1 + the highest tribe id spawned so far: the length of the territory tally. */
+  /**
+   * 1 + the highest tribe id among `creatures` (spawned since the last generation start): the
+   * length of the territory tally. Derived from hashed state, so it needs no hash of its own.
+   */
   private tribeSlots = 0;
   /** Per tribe: tiles inside its spawn zone reachable from the zone centre (static terrain). */
   private readonly zoneTiles = new Map<number, Int32Array>();
@@ -441,6 +444,9 @@ export class World implements ActionWorldContext {
     this.territoryOwner.fill(NO_OWNER);
     this.territoryStamp.fill(0);
     this.territoryPct = [];
+    // Recomputed from the new creatures as they spawn: a tribe gone since (battle royale) must not
+    // lengthen the hashed territory tally, or two worlds with equal hashes would drift apart.
+    this.tribeSlots = 0;
     this.creatures.length = 0;
     this.livingCount = 0;
     this.nextCreatureId = 0;
