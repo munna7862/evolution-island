@@ -30,13 +30,25 @@ wins by default), and, if the experiment works, tribes that call each other for 
 
 ## Architecture decisions taken in this phase
 
-(Filled in per sprint.)
+1. **Deaths inside Phase B (Sprint 4.1).** An `ATTACK` that brings health to 0 kills at once
+   (`World.killCreature`): the tile frees up for creatures acting later in the same tick, the
+   victim's own action and metabolism are skipped. Order comes from the seeded Phase B shuffle,
+   targets from health/energy then id, so fights are deterministic.
+2. **Two-sided share rule (Sprint 4.1).** Recipient below `shareNeedRatio` *and* giver keeps
+   `shareKeepRatio`: energy can't flow back between two allies until one of them eats; one-way help
+   stays valid and is capped by `maxAlliesHelped`.
+3. **Territory = per-tile owner + last-visit stamp (Sprint 4.1).** Stamped by every living creature
+   each tick, faded after `territory.decayTicks`, recounted every `territory.updateInterval`
+   ticks, part of the world hash; tribe outcome and stats carry the last recount.
+4. **Pinned tests score tribes by late benchmarks (Sprint 4.1).** The seed-42 regression test uses
+   the mean of generations 80/90/100, like the Sprint 3.5 bar, because a single champion's
+   benchmark varies ~15 %.
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
 | Combat or sharing becomes the only strategy (e.g. everyone attacks, nobody forages) or a fitness exploit | Exploit tests for every term (kills, alliesHelped); caps; watch action mixes; balance in 4.2 |
-| Tribes never meet on Small (2 tribes, zones ~28 tiles apart) | Combat is judged on Medium in 4.2; 4.1 checks only that the rules work and learning on Small still holds |
+| Tribes never meet on Small (2 tribes, zones ~28 tiles apart) | Combat is judged on Medium in 4.2; 4.1 checks only that the rules work and learning on Small still holds (4.1: kills are rare on Small and Medium alike) |
 | Balance tuning is open-ended (plan §8) | Trainer `--config` sweeps, multi-seed bars sized from measured noise (Sprint 3.5 recipe), timebox and record what was tried |
 | Signals evolve into noise | A/B plus mute test (4.3) |
