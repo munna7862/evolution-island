@@ -240,7 +240,7 @@ describe('Phase 2 actions', () => {
     expect(c.stats.waterDrunk).toBeCloseTo(1 + 10 / DEFAULT_CONFIG.creature.drinkBiteSize, 10);
   });
 
-  it('treats ATTACK and SHARE as STAY in Sprint 2.1', () => {
+  it('resolves ATTACK and SHARE with nobody adjacent as STAY (rules: combat.test.ts)', () => {
     const map = makeMiniMap([[Biome.Grass, Biome.Grass]]);
     const world = createWorld({ preset: 'small', seed: 1, map, populate: false });
     const c = world.spawnCreature(0, 0, 0)!;

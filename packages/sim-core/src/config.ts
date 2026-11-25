@@ -73,11 +73,31 @@ export interface CreatureConfig {
   readonly eatBiteSize: number;
   readonly drinkBiteSize: number;
   readonly attackEnergyCost: number;
+  /** Health an `ATTACK` takes from its target (plan §2.3). */
+  readonly attackDamage: number;
+  /** Share of the victim's remaining energy the killing blow gains (plan §2.3). */
+  readonly killEnergyFraction: number;
+  /** Energy a valid `SHARE` takes from the giver. */
+  readonly shareAmount: number;
+  /** Share of `shareAmount` the recipient gains (the rest is lost). */
+  readonly shareEfficiency: number;
+  /** A `SHARE` only helps an ally below this fraction of max energy (plan §2.3). */
+  readonly shareNeedRatio: number;
+  /** The giver must keep at least this fraction of max energy after a `SHARE` (Sprint 4.1). */
+  readonly shareKeepRatio: number;
   readonly maxAgeMultiplier: number;
 }
 
 export interface FoodConfig {
   readonly regrowthRate: number;
+}
+
+/** Territory (plan §2.6): ownership fades without sustained presence. */
+export interface TerritoryConfig {
+  /** A tile stays owned this many ticks after its owner's last visit. */
+  readonly decayTicks: number;
+  /** Territory % is recounted (and old ownership dropped) every this many ticks. */
+  readonly updateInterval: number;
 }
 
 export interface SensorConfig {
@@ -120,7 +140,7 @@ export interface TribeScoreWeights {
   readonly survivors: number;
   /** Per bite of food actually eaten by the tribe. */
   readonly foodGathered: number;
-  /** Per percentage point of territory (0 until Sprint 4.1). */
+  /** Per percentage point of territory (measured since Sprint 4.1; weight tuned in 4.2). */
   readonly territory: number;
 }
 
@@ -162,6 +182,7 @@ export interface SimConfig {
   readonly map: MapGenConfig;
   readonly creature: CreatureConfig;
   readonly food: FoodConfig;
+  readonly territory: TerritoryConfig;
   readonly sensor: SensorConfig;
   readonly brain: BrainConfig;
   readonly evolution: EvolutionConfig;
@@ -295,10 +316,25 @@ export const DEFAULT_CONFIG: SimConfig = {
     eatBiteSize: 20,
     drinkBiteSize: 25,
     attackEnergyCost: 0.5,
+    // Sprint 4.1 (plan §2.3): a full-health creature dies from the fifth hit; the killing blow
+    // gains half the victim's remaining energy. First values, tuned in Sprint 4.2.
+    attackDamage: 20,
+    killEnergyFraction: 0.5,
+    // A valid SHARE moves 10 energy at 80 %, from a giver that keeps ≥ 50 % to an ally below
+    // 50 %. The keep rule stops two hungry allies passing energy back and forth for fitness.
+    shareAmount: 10,
+    shareEfficiency: 0.8,
+    shareNeedRatio: 0.5,
+    shareKeepRatio: 0.5,
     maxAgeMultiplier: 2,
   },
   food: {
     regrowthRate: 0.15,
+  },
+  territory: {
+    // A tenth of a Small generation: territory means sustained presence, not footprints.
+    decayTicks: 300,
+    updateInterval: 10,
   },
   sensor: {
     visionRadius: 8,

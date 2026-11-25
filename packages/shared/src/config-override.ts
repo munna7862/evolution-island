@@ -39,6 +39,8 @@ const INTEGER_FIELDS = new Set([
   'map.targetFairnessWaterTiles',
   'map.maxGenerationAttempts',
   'creature.slowTileMoveCooldown',
+  'territory.decayTicks',
+  'territory.updateInterval',
   'brain.hiddenNeurons',
   'brain.memoryNeurons',
   'evolution.tournamentSize',

@@ -105,6 +105,14 @@ export class StateHasher {
     return this;
   }
 
+  writeInt32Array(values: Int32Array): this {
+    this.writeUint32(values.length);
+    for (let i = 0; i < values.length; i++) {
+      this.mix32(values[i]!);
+    }
+    return this;
+  }
+
   writeFloat32Array(values: Float32Array): this {
     this.writeUint32(values.length);
     for (let i = 0; i < values.length; i++) {
@@ -204,8 +212,16 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(c.eatBiteSize)
     .writeFloat64(c.drinkBiteSize)
     .writeFloat64(c.attackEnergyCost)
+    .writeFloat64(c.attackDamage)
+    .writeFloat64(c.killEnergyFraction)
+    .writeFloat64(c.shareAmount)
+    .writeFloat64(c.shareEfficiency)
+    .writeFloat64(c.shareNeedRatio)
+    .writeFloat64(c.shareKeepRatio)
     .writeFloat64(c.maxAgeMultiplier)
     .writeFloat64(config.food.regrowthRate)
+    .writeUint32(config.territory.decayTicks)
+    .writeUint32(config.territory.updateInterval)
     .writeFloat64(config.sensor.visionRadius)
     .writeFloat64(config.sensor.forestVisionMultiplier)
     .writeFloat64(config.sensor.countNormalization)
@@ -315,7 +331,14 @@ function writeWorldState(hasher: StateHasher, world: World): void {
     .writeUint32(world.generationTick)
     .writeUint32(world.livingCount)
     .writeString(world.map.hash)
-    .writeFloat32Array(world.map.food);
+    .writeFloat32Array(world.map.food)
+    .writeInt16Array(world.territoryOwner)
+    .writeInt32Array(world.territoryStamp);
+  const territory = world.territorySnapshot();
+  hasher.writeUint32(territory.length);
+  for (const pct of territory) {
+    hasher.writeFloat64(pct);
+  }
 
   for (const state of [
     world.rng.spawn.getState(),

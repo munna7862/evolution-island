@@ -2,7 +2,12 @@
 // benchmark-arena score rises from generation 1 to 50 (3.2) and at least doubles by generation 100
 // (3.4, "it learns!"). Deterministic, so the margins below are exact, not statistical: a change in
 // the rules or the default config that makes learning slower fails here. The multi-seed numbers
-// are in docs/sprints/sprint-3.4.md.
+// are in docs/sprints/sprint-3.4.md, 3.5.md and 4.1.md.
+//
+// Since Sprint 4.1 a tribe's generation-100 score is its "late" score: the mean of its benchmarks
+// at generations 80, 90 and 100 (the Sprint 3.5 tribe score). A single champion's benchmark varies
+// by ~15 % (Sprint 3.5), and with combat and sharing on, seed 42's tribe 1 scored 2.3× and 2.2×
+// its generation 1 at generations 80 and 90 but 1.31× at 100 (user's decision, 2026-11-25).
 import { describe, expect, it } from 'vitest';
 import {
   Action,
@@ -27,6 +32,12 @@ function benchmarkAt(run: EvolutionRun, generation: number): number[] {
 const mean = (scores: readonly number[]): number =>
   scores.reduce((acc, s) => acc + s, 0) / scores.length;
 
+/** Per tribe: the mean of its benchmarks at the given generations. */
+function lateScores(run: EvolutionRun, generations: readonly number[]): number[] {
+  const perGeneration = generations.map((g) => benchmarkAt(run, g));
+  return run.tribes.map((_, i) => mean(perGeneration.map((scores) => scores[i]!)));
+}
+
 /** Arena score of a brain that always picks STAY: the "learned nothing" floor. */
 function stayOnlyScore(): number {
   const spec = brainSpecFromConfig(DEFAULT_CONFIG);
@@ -36,20 +47,20 @@ function stayOnlyScore(): number {
 }
 
 describe('evolution (Small, seed 42, default config)', () => {
-  it('raises the benchmark-arena score: > 1.1× by generation 50, ≥ 2× by generation 100', () => {
+  it('raises the benchmark-arena score: > 1.1× by generation 50, ≥ 2× by generations 80–100', () => {
     const run = createEvolutionRun({ preset: 'small', seed: 42 });
     while (run.generation <= 100) run.runGeneration();
 
     const first = benchmarkAt(run, 1);
     const fiftieth = benchmarkAt(run, 50);
-    const hundredth = benchmarkAt(run, 100);
+    const late = lateScores(run, [80, 90, 100]);
     // Sprint 3.2: not a hair's-breadth win, at least 10% better.
     expect(mean(fiftieth)).toBeGreaterThan(1.1 * mean(first));
-    // Sprint 3.4 bar: the mean at least doubles, also against a brain that only STAYs, and every
-    // tribe gets ≥ 1.5× better on its own.
-    expect(mean(hundredth)).toBeGreaterThanOrEqual(2 * mean(first));
-    expect(mean(hundredth)).toBeGreaterThanOrEqual(2 * stayOnlyScore());
-    hundredth.forEach((score, i) => {
+    // Sprint 3.4 bar on late scores: the mean at least doubles, also against a brain that only
+    // STAYs, and every tribe gets ≥ 1.5× better on its own.
+    expect(mean(late)).toBeGreaterThanOrEqual(2 * mean(first));
+    expect(mean(late)).toBeGreaterThanOrEqual(2 * stayOnlyScore());
+    late.forEach((score, i) => {
       expect(score).toBeGreaterThanOrEqual(1.5 * first[i]!);
     });
   }, 120_000);

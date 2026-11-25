@@ -3,8 +3,8 @@ import type { Creature } from './creature.js';
 import { isSlow, isWalkable, isWater, type WorldMap } from './map/types.js';
 
 /**
- * All 9 action output slots exist from Phase 2 so genome layout never changes when combat/sharing
- * activate in Sprint 4.1 (plan §2.3, §2.4).
+ * All 9 action output slots exist from Phase 2 so the genome layout did not change when combat and
+ * sharing became active in Sprint 4.1 (plan §2.3, §2.4).
  */
 export const Action = {
   MOVE_N: 0,
@@ -32,6 +32,87 @@ export interface ActionWorldContext {
   moveCreature(creature: Creature, nx: number, ny: number, dir: Action): void;
   getTileFood(x: number, y: number): number;
   consumeFood(x: number, y: number, amount: number): number;
+  /** The living creature standing on (x, y), if any. */
+  creatureAt(x: number, y: number): Creature | undefined;
+  /** Removes a creature killed by an `ATTACK` from the world at once (inside Phase B). */
+  killCreature(victim: Creature): void;
+}
+
+/**
+ * The living neighbour (8-neighbourhood) of `creature` from its own tribe (`allies`) or another
+ * tribe with the lowest `key`, ties → lowest id (plan §2.3, CLAUDE.md "break every tie by id").
+ */
+function lowestNeighbour(
+  world: ActionWorldContext,
+  creature: Creature,
+  allies: boolean,
+  key: (other: Creature) => number,
+): Creature | undefined {
+  let best: Creature | undefined;
+  let bestKey = Number.POSITIVE_INFINITY;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const other = world.creatureAt(creature.x + dx, creature.y + dy);
+      if (other === undefined || (other.tribeId === creature.tribeId) !== allies) continue;
+      const k = key(other);
+      if (best === undefined || k < bestKey || (k === bestKey && other.id < best.id)) {
+        best = other;
+        bestKey = k;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * `ATTACK` (plan §2.3): hits the adjacent enemy with the lowest health for `attackDamage`, at
+ * `attackEnergyCost`. A victim at 0 health dies at once; the killing blow gets the kill and
+ * `killEnergyFraction` of the victim's remaining energy. No adjacent enemy → `STAY`.
+ */
+function applyAttack(world: ActionWorldContext, creature: Creature): Action {
+  const target = lowestNeighbour(world, creature, false, (c) => c.health);
+  if (target === undefined) {
+    return Action.STAY;
+  }
+  const cfg = world.config.creature;
+  creature.energy = Math.max(0, creature.energy - cfg.attackEnergyCost);
+  target.health = Math.max(0, target.health - Math.max(0, cfg.attackDamage));
+  if (target.health <= 0) {
+    const loot = Math.max(0, cfg.killEnergyFraction) * target.energy;
+    creature.energy = Math.min(cfg.maxEnergy, creature.energy + loot);
+    creature.stats.kills++;
+    world.killCreature(target);
+  }
+  return Action.ATTACK;
+}
+
+/**
+ * `SHARE` (plan §2.3): gives `shareAmount` energy to the adjacent ally with the lowest energy, who
+ * gains it at `shareEfficiency`, only if that ally is below `shareNeedRatio` of max energy and the
+ * giver keeps at least `shareKeepRatio` of max energy (Sprint 4.1: without the second rule two
+ * hungry allies could pass energy back and forth for fitness). Counts one `alliesHelped`.
+ * Otherwise `STAY`.
+ */
+function applyShare(world: ActionWorldContext, creature: Creature): Action {
+  const target = lowestNeighbour(world, creature, true, (c) => c.energy);
+  const cfg = world.config.creature;
+  const amount = cfg.shareAmount;
+  if (
+    target === undefined ||
+    !(amount > 0) ||
+    !(target.energy < cfg.shareNeedRatio * cfg.maxEnergy) ||
+    !(creature.energy - amount >= cfg.shareKeepRatio * cfg.maxEnergy)
+  ) {
+    return Action.STAY;
+  }
+  creature.energy -= amount;
+  target.energy = Math.min(
+    cfg.maxEnergy,
+    target.energy + amount * Math.max(0, cfg.shareEfficiency),
+  );
+  creature.stats.alliesHelped++;
+  return Action.SHARE;
 }
 
 /**
@@ -59,7 +140,9 @@ export function isWaterReachable(
 /**
  * Resolves a single creature's chosen action intent against the world rules.
  *
- * - Invalid actions (blocked moves, eating on empty tiles, drinking away from water) become `STAY`.
+ * - Invalid actions (blocked moves, eating on empty tiles, drinking away from water, `ATTACK`
+ *   with no adjacent enemy, `SHARE` with no adjacent ally in need or no energy to spare) become
+ *   `STAY`.
  * - Moving when `energy === 0` is allowed (energy clamps to `0` while starvation drains health).
  * - `EAT`/`DRINK` when already at max energy/hydration still return `EAT`/`DRINK`, consume no
  *   resources, and grant `0` intake credit (preventing fitness farming, plan §2.5).
@@ -150,6 +233,13 @@ export function applyAction(world: ActionWorldContext, creature: Creature, inten
     return Action.DRINK;
   }
 
-  // STAY, plus ATTACK and SHARE (act as STAY until Sprint 4.1 per plan §2.4).
+  if (intent === Action.ATTACK) {
+    return applyAttack(world, creature);
+  }
+
+  if (intent === Action.SHARE) {
+    return applyShare(world, creature);
+  }
+
   return Action.STAY;
 }

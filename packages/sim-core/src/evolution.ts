@@ -508,7 +508,7 @@ export class EvolutionRun {
     const results = aliveTribes.map((tribe) => {
       const members = this.world.creatures.filter((c) => c.tribeId === tribe.id);
       const ranked = rankByFitness(members, evo);
-      const outcome = tribeOutcome(members);
+      const outcome = tribeOutcome(members, this.world.territoryPercent(tribe.id));
       const score = tribeScore(outcome, evo);
       let benchmarkScore: number | null = null;
       if (benchmarkDue && ranked.length > 0) {

@@ -8,6 +8,8 @@ import { createRngStreams, type RngStream, type RngStreams, type Seed } from './
 import { SpatialGrid } from './spatial-grid.js';
 
 export const NO_CREATURE = -1;
+/** `territoryOwner` value of a tile no tribe owns. */
+export const NO_OWNER = -1;
 
 /**
  * Policy callback evaluated in Phase A for every living creature. `rng` is the dedicated
@@ -47,6 +49,10 @@ export class World implements ActionWorldContext {
   readonly creatures: Creature[] = [];
   readonly grid: SpatialGrid;
   readonly maxAge: number;
+  /** Per tile: the tribe that last stood on it (plan §2.6), or `NO_OWNER`. */
+  readonly territoryOwner: Int16Array;
+  /** Per tile: the `tickCount` of its owner's last visit. */
+  readonly territoryStamp: Int32Array;
 
   tickCount = 0;
   generation = 1;
@@ -61,6 +67,10 @@ export class World implements ActionWorldContext {
   private depletedCount = 0;
   private nextCreatureId = 0;
   private gridDirty = true;
+  /** Territory % per tribe id at the last `updateTerritory` (plan §2.6). */
+  private territoryPct: number[] = [];
+  /** 1 + the highest tribe id spawned so far: the length of the territory tally. */
+  private tribeSlots = 0;
   /** Per tribe: tiles inside its spawn zone reachable from the zone centre (static terrain). */
   private readonly zoneTiles = new Map<number, Int32Array>();
 
@@ -93,6 +103,8 @@ export class World implements ActionWorldContext {
     );
     this.depletedTiles = new Int32Array(tileCount);
     this.isDepleted = new Uint8Array(tileCount);
+    this.territoryOwner = new Int16Array(tileCount).fill(NO_OWNER);
+    this.territoryStamp = new Int32Array(tileCount);
 
     // Seed active list with any tiles that start depleted (e.g. hand-made test maps).
     for (let i = 0; i < tileCount; i++) {
@@ -220,7 +232,87 @@ export class World implements ActionWorldContext {
     this.creatures.push(creature);
     this.livingCount++;
     this.gridDirty = true;
+    this.tribeSlots = Math.max(this.tribeSlots, tribeId + 1);
+    this.stampTile(idx, tribeId);
     return creature;
+  }
+
+  /** The living creature standing on (x, y), if any. */
+  creatureAt(x: number, y: number): Creature | undefined {
+    if (!this.inBounds(x, y)) {
+      return undefined;
+    }
+    const id = this.occupancy[y * this.map.width + x]!;
+    if (id === NO_CREATURE) {
+      return undefined;
+    }
+    const creature = this.creatures[id];
+    return creature !== undefined && creature.id === id && creature.alive ? creature : undefined;
+  }
+
+  /**
+   * Kills a creature at once (an `ATTACK`'s killing blow, inside Phase B): health 0, off its tile.
+   * Its own action is skipped if it had not acted yet this tick, and it gets no metabolism.
+   */
+  killCreature(victim: Creature): void {
+    if (!victim.alive) {
+      return;
+    }
+    victim.health = 0;
+    victim.alive = false;
+    const idx = victim.y * this.map.width + victim.x;
+    if (this.occupancy[idx] === victim.id) {
+      this.occupancy[idx] = NO_CREATURE;
+    }
+    this.livingCount--;
+    this.gridDirty = true;
+  }
+
+  /** Territory % (0..100) of a tribe at the last territory update (plan §2.6). */
+  territoryPercent(tribeId: number): number {
+    return this.territoryPct[tribeId] ?? 0;
+  }
+
+  private stampTile(idx: number, tribeId: number): void {
+    this.territoryOwner[idx] = tribeId;
+    this.territoryStamp[idx] = this.tickCount;
+  }
+
+  /**
+   * Drops ownership not renewed for more than `territory.decayTicks` ticks and recounts each
+   * tribe's share of the walkable tiles (plan §2.6). A tile has one owner at most, so the
+   * percentages add up to ≤ 100.
+   */
+  updateTerritory(): void {
+    const decay = this.config.territory.decayTicks;
+    const counts = new Array<number>(this.tribeSlots).fill(0);
+    const owner = this.territoryOwner;
+    for (let i = 0; i < owner.length; i++) {
+      const tribe = owner[i]!;
+      if (tribe === NO_OWNER) continue;
+      if (this.tickCount - this.territoryStamp[i]! > decay) {
+        owner[i] = NO_OWNER;
+      } else {
+        counts[tribe] = counts[tribe]! + 1;
+      }
+    }
+    const walkable = this.map.walkableCount;
+    this.territoryPct = counts.map((n) => (walkable > 0 ? (100 * n) / walkable : 0));
+  }
+
+  /** Stamps every living creature's tile with its tribe (after metabolism, ascending id). */
+  private stampTerritory(): void {
+    const width = this.map.width;
+    for (const creature of this.creatures) {
+      if (creature.alive) {
+        this.stampTile(creature.y * width + creature.x, creature.tribeId);
+      }
+    }
+  }
+
+  /** Territory % of every tribe slot at the last update, for hashing. */
+  territorySnapshot(): readonly number[] {
+    return this.territoryPct;
   }
 
   rebuildGrid(): void {
@@ -300,6 +392,13 @@ export class World implements ActionWorldContext {
       }
     }
 
+    // Territory (plan §2.6, §3.4): stamp where everyone stands, recount every updateInterval ticks.
+    this.stampTerritory();
+    const interval = Math.max(1, Math.floor(this.config.territory.updateInterval));
+    if (this.generationTick % interval === 0) {
+      this.updateTerritory();
+    }
+
     this.tickCount++;
     this.generationTick++;
   }
@@ -339,6 +438,9 @@ export class World implements ActionWorldContext {
     this.isDepleted.fill(0);
     this.depletedCount = 0;
     this.occupancy.fill(NO_CREATURE);
+    this.territoryOwner.fill(NO_OWNER);
+    this.territoryStamp.fill(0);
+    this.territoryPct = [];
     this.creatures.length = 0;
     this.livingCount = 0;
     this.nextCreatureId = 0;

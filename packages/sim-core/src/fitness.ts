@@ -26,19 +26,22 @@ export interface TribeOutcome {
   readonly survivors: number;
   /** Sum of the members' `foodEaten` (bites actually eaten). */
   readonly foodGathered: number;
-  /** Territory percentage 0..100 (always 0 until Sprint 4.1). */
+  /** Territory percentage 0..100 (plan §2.6, `World.territoryPercent`). */
   readonly territoryPct: number;
 }
 
-/** Summarizes one tribe's members (sum in ascending id order, so the result is engine-exact). */
-export function tribeOutcome(members: readonly Creature[]): TribeOutcome {
+/**
+ * Summarizes one tribe's members (sum in ascending id order, so the result is engine-exact) and
+ * its territory % (from `World.territoryPercent`).
+ */
+export function tribeOutcome(members: readonly Creature[], territoryPct = 0): TribeOutcome {
   let survivors = 0;
   let foodGathered = 0;
   for (const c of members) {
     if (c.alive) survivors++;
     foodGathered += c.stats.foodEaten;
   }
-  return { survivors, foodGathered, territoryPct: 0 };
+  return { survivors, foodGathered, territoryPct };
 }
 
 /** Tribe score (plan §2.5, §2.6): survivors + food gathered + territory, weighted. */

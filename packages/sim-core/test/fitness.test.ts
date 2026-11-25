@@ -134,7 +134,9 @@ describe('exploits do not pay', () => {
     expect(foragerFitness).toBeGreaterThan(2 * stayerFitness);
   });
 
-  it('ATTACK and SHARE spam earn nothing (they act as STAY until Sprint 4.1)', () => {
+  it('ATTACK and SHARE spam with nobody to hit or help earn nothing (more: combat.test.ts)', () => {
+    // Small seed 7: the two tribes' zones are far apart (no enemy adjacent), and creatures doing
+    // the same thing all have the same energy, so nobody is in need while a neighbour can spare.
     const run = (action: Action) => {
       const world = createWorld({ preset: 'small', seed: 7, policy: always(action) });
       while (world.livingCount > 0) world.tick();

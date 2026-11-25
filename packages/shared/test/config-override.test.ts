@@ -100,6 +100,20 @@ describe('applyConfigOverride', () => {
     ).toBe(0.25);
   });
 
+  it('takes combat, sharing and territory settings (Sprint 4.1), territory ticks whole', () => {
+    const merged = applyConfigOverride({
+      creature: { attackDamage: 25, shareKeepRatio: 0.6 },
+      territory: { decayTicks: 500 },
+    });
+    expect(merged.creature.attackDamage).toBe(25);
+    expect(merged.creature.shareKeepRatio).toBe(0.6);
+    expect(merged.territory).toEqual({ ...DEFAULT_CONFIG.territory, decayTicks: 500 });
+    expect(hashConfig(merged)).not.toBe(hashConfig(DEFAULT_CONFIG));
+    expect(refusal({ territory: { updateInterval: 2.5 } })).toBe(
+      'territory.updateInterval must be a whole number ≥ 0',
+    );
+  });
+
   it('switches memory neurons (Sprint 3.5, on by default) off or on, a whole number', () => {
     const off = applyConfigOverride({ brain: { memoryNeurons: 0 } });
     expect(off.brain).toEqual({ ...DEFAULT_CONFIG.brain, memoryNeurons: 0 });

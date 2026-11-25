@@ -189,7 +189,7 @@ describe('argmaxAction', () => {
     expect(argmaxAction([-5, -1, -1, -9, -9, -9, -9, -9, -9])).toBe(Action.MOVE_E);
   });
 
-  it('can choose ATTACK and SHARE (they resolve as STAY until Sprint 4.1)', () => {
+  it('can choose ATTACK and SHARE', () => {
     expect(argmaxAction([0, 0, 0, 0, 0, 0, 0, 1, 0])).toBe(Action.ATTACK);
     expect(argmaxAction([0, 0, 0, 0, 0, 0, 0, 0, 1])).toBe(Action.SHARE);
   });
