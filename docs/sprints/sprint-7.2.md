@@ -94,3 +94,18 @@ As designed.
 **Surprises / learnings**
 - The first export test failed: an event applied after the last tick changed the world, so the export's final hash didn't match a replay that leaves that event out.
 - Climate in the benchmark arena made the yardstick noisier. Keeping the arena calm is a design decision, recorded in the phase file.
+
+## Reviews (2026-11-25)
+
+Two review passes in this session.
+
+**Pass 1** — two fixes:
+- **Old run files got a confusing error.** Resuming a run saved before this sprint (simVersion 13) failed on the missing `state.rng.climate` instead of saying it was saved by another simVersion. `parseRunState` now checks the version before reading the state. Test added.
+- **Hover showed the generated terrain only.** The terrain textures show the map as generated, so hovering a flooded tile said "Grass" and nothing else. The hover line now also names the events covering the tile, such as "flood here" (`climateAt`, unit tested).
+
+Checked and fine:
+- Ended events are undone using only the events still active, and overlap applies oldest first.
+- The worker's hashes stay in tick order, and an event at a 500-tick checkpoint isn't hashed twice.
+- Natural draws use only the `climate` stream.
+- Terrain is restored before spawning at each generation start.
+- Sensors, drinking and walkability read the live terrain.

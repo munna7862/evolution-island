@@ -31,7 +31,7 @@ import type {
   PlayingCheckpoint,
 } from './debug-hook.js';
 import type { TileCoord } from './renderer/camera.js';
-import { climateSummary } from './renderer/climate-overlay.js';
+import { climateAt, climateSummary } from './renderer/climate-overlay.js';
 import { MapView } from './renderer/map-view.js';
 import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
 import { sourcesFromDrop, sourcesFromFileList } from './run-drop.js';
@@ -351,7 +351,11 @@ async function boot(): Promise<void> {
     const biomeIdx = currentMap.biomes[idx]!;
     const biomeName = (BIOME_NAMES as Record<number, string>)[biomeIdx] ?? 'Unknown';
     const maxFood = currentMap.maxFood[idx]!;
-    hoverInfoEl.textContent = `(${tile.x}, ${tile.y}) · ${biomeName} · max food ${maxFood}`;
+    const climate =
+      latestSnapshot === null ? [] : climateAt(latestSnapshot.climate, tile.x, tile.y);
+    hoverInfoEl.textContent =
+      `(${tile.x}, ${tile.y}) · ${biomeName} · max food ${maxFood}` +
+      (climate.length > 0 ? ` · ${climate.join(', ')} here` : '');
   };
 
   const mapView = await MapView.create(viewport, {

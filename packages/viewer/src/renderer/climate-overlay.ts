@@ -56,3 +56,19 @@ export function climateSummary(status: ClimateStatus): string {
   if (droughts > 0) parts.push(`${droughts} drought${droughts === 1 ? '' : 's'}`);
   return parts.join(' · ');
 }
+
+/**
+ * The climate events covering tile (x, y), newest first ("flood", "drought", "food zone"), for the
+ * hover line: the terrain textures show the map as generated, the overlay shows the changes.
+ */
+export function climateAt(status: ClimateStatus, x: number, y: number): string[] {
+  const inside = (cx: number, cy: number, r: number): boolean =>
+    (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
+  const names = status.events
+    .filter((e) => inside(e.x, e.y, e.radius))
+    .map((e) => e.kind as string)
+    .reverse();
+  const zone = status.foodZone;
+  if (zone !== null && inside(zone.x, zone.y, zone.radius)) names.push('food zone');
+  return names;
+}

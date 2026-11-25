@@ -134,7 +134,18 @@ function stats(value: unknown, what: string): GenerationStats {
   return out as unknown as GenerationStats;
 }
 
-/** Parses a run-state file. Use `assertRunStateCompatible` before resuming from it. */
+function versionMismatch(saved: number, current: number): RunStateError {
+  return new RunStateError(
+    `the run was saved by simVersion ${saved}, this build is simVersion ${current}: ` +
+      'the rules changed since, so it cannot be continued. Train it again with this build.',
+  );
+}
+
+/**
+ * Parses a run-state file. Use `assertRunStateCompatible` before resuming from it. A file of
+ * another simVersion is refused first, before its state (whose layout may differ, e.g. RNG
+ * streams added in Sprint 7.2) is read.
+ */
 export function parseRunState(text: string): RunStateFile {
   let parsed: unknown;
   try {
@@ -145,6 +156,8 @@ export function parseRunState(text: string): RunStateFile {
   const top = record(parsed, 'the file');
   if (top['format'] !== RUN_STATE_FILE_FORMAT) fail(`"format" must be "${RUN_STATE_FILE_FORMAT}"`);
   if (top['fileVersion'] !== RUN_STATE_FILE_VERSION) fail(`unsupported fileVersion`);
+  const simVersion = int(top['simVersion'], 'simVersion');
+  if (simVersion !== SIM_VERSION) throw versionMismatch(simVersion, SIM_VERSION);
   const configHash = top['configHash'];
   if (typeof configHash !== 'string' || !/^[0-9a-f]{16}$/.test(configHash)) {
     fail('"configHash" must be 16 lowercase hex digits');
@@ -157,7 +170,7 @@ export function parseRunState(text: string): RunStateFile {
     outputs: int(b['outputs'], 'brain.outputs'),
   };
   return {
-    simVersion: int(top['simVersion'], 'simVersion'),
+    simVersion,
     configHash,
     brain,
     state: runStateFromJson(top['state']),
@@ -230,12 +243,7 @@ export function assertRunStateCompatible(
   },
 ): void {
   const simVersion = expected.simVersion ?? SIM_VERSION;
-  if (file.simVersion !== simVersion) {
-    throw new RunStateError(
-      `the run was saved by simVersion ${file.simVersion}, this build is simVersion ${simVersion}: ` +
-        'the rules changed since, so it cannot be continued. Train it again with this build.',
-    );
-  }
+  if (file.simVersion !== simVersion) throw versionMismatch(file.simVersion, simVersion);
   if (file.configHash !== expected.configHash) {
     throw new RunStateError(
       `the run state was saved under config ${file.configHash}, but run.json's config is ` +
