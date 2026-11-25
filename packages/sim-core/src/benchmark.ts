@@ -1,8 +1,10 @@
+import { ACTION_COUNT } from './actions.js';
 import { brainSpecFromConfig, createBrainPolicy, validateGenome } from './brain.js';
 import type { MapPresetId, SimConfig } from './config.js';
 import { creatureFitness } from './fitness.js';
 import { generateMap } from './map/generator.js';
 import type { WorldMap } from './map/types.js';
+import type { Creature } from './creature.js';
 import { createWorld } from './world.js';
 
 /**
@@ -24,8 +26,25 @@ export function createBenchmarkArena(preset: MapPresetId, config: SimConfig): Be
   return { preset, config, map };
 }
 
+/** What a genome did in the arena. */
+export interface BenchmarkResult {
+  /** Mean fitness of the clones (the benchmark score). */
+  readonly score: number;
+  /**
+   * Resolved actions of all living clones over the whole run, indexed by `Action` (an invalid
+   * action counts as the `STAY` it became). The arena holds one tribe, so nobody is killed before
+   * acting: every clone alive at a tick's start acts once in it.
+   */
+  readonly actions: readonly number[];
+}
+
 /** Mean fitness of the genome's clones in the arena. Deterministic; uses no run RNG stream. */
 export function runBenchmark(arena: BenchmarkArena, genome: Float32Array): number {
+  return runBenchmarkDetailed(arena, genome).score;
+}
+
+/** `runBenchmark` plus the clones' action counts (Sprint 4.2: champions' action mix). */
+export function runBenchmarkDetailed(arena: BenchmarkArena, genome: Float32Array): BenchmarkResult {
   const { preset, config, map } = arena;
   const spec = brainSpecFromConfig(config);
   validateGenome(spec, genome);
@@ -40,12 +59,22 @@ export function runBenchmark(arena: BenchmarkArena, genome: Float32Array): numbe
   const clones = config.presets[preset].startingCreaturesPerTribe;
   const tribeId = map.spawnZones[0]!.tribeId;
   world.startGeneration(1, [{ tribeId, genomes: new Array<Float32Array>(clones).fill(genome) }]);
+  const actions = new Array<number>(ACTION_COUNT).fill(0);
+  const acting: Creature[] = [];
   while (!world.isGenerationOver()) {
+    acting.length = 0;
+    for (const c of world.creatures) {
+      if (c.alive) acting.push(c);
+    }
     world.tick();
+    for (const c of acting) {
+      actions[c.lastAction] = actions[c.lastAction]! + 1;
+    }
   }
   let total = 0;
   for (const c of world.creatures) {
     total += creatureFitness(c.stats, config.evolution);
   }
-  return world.creatures.length > 0 ? total / world.creatures.length : 0;
+  const score = world.creatures.length > 0 ? total / world.creatures.length : 0;
+  return { score, actions };
 }

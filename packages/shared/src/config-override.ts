@@ -47,6 +47,7 @@ const INTEGER_FIELDS = new Set([
   'evolution.eliteCount',
   'evolution.hallOfFameSize',
   'evolution.benchmarkInterval',
+  'evolution.battleRoyaleFromGeneration',
 ]);
 
 const MAX_UINT32 = 0xffffffff;

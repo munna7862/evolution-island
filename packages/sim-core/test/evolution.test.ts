@@ -24,6 +24,7 @@ import {
   rankByFitness,
   respawnGenomes,
   runBenchmark,
+  runBenchmarkDetailed,
   sameGenome,
   SensorIndex,
   weightCount,
@@ -33,6 +34,7 @@ import {
   type HallOfFameEntry,
   type MapPreset,
   type SimConfig,
+  type TribeAllocation,
 } from '../src/index.js';
 
 const EVO = DEFAULT_CONFIG.evolution;
@@ -190,6 +192,30 @@ describe('allocateTribeSizes', () => {
     expect(allocateTribeSizes([share(9), share(1), share(0)], 60, 25, 100)).toEqual([25, 25, 25]);
   });
 
+  it('gives places a capped leader cannot take to the extinct tribes (Sprint 4.2)', () => {
+    const min = { kind: 'min' as const };
+    // Medium, one tribe alone survived: 100 + 3 × 25 = 175 before; now the total stays 200.
+    expect(allocateTribeSizes([share(900), min, min, min], 200, 25, 100)).toEqual([
+      100, 34, 33, 33,
+    ]);
+    expect(allocateTribeSizes([min, share(50), min], 200, 25, 100)).toEqual([50, 100, 50]);
+    // Extinct tribes never pass the cap either.
+    expect(allocateTribeSizes([share(1), min], 400, 25, 100)).toEqual([100, 100]);
+    // While the scoring tribes can still grow, extinct tribes stay at the minimum.
+    expect(allocateTribeSizes([share(3), share(1), min], 200, 25, 100)).toEqual([100, 75, 25]);
+  });
+
+  // Sprint 4.2 review: when every tribe died out, one that gathered no food scores 0 and is held
+  // at the minimum like an extinct tribe; it must take the capped leader's places too.
+  it('gives places a capped leader cannot take to tribes that scored nothing', () => {
+    expect(allocateTribeSizes([share(900), share(0), share(0), share(0)], 200, 25, 100)).toEqual([
+      100, 34, 33, 33,
+    ]);
+    expect(
+      allocateTribeSizes([share(0), share(900), { kind: 'min' }, share(0)], 200, 25, 100),
+    ).toEqual([34, 100, 33, 33]);
+  });
+
   it('property: sizes within [min, max], total = budget when feasible, order follows score', () => {
     const tribe = fc.oneof(
       { weight: 6, arbitrary: fc.integer({ min: 0, max: 5000 }).map((s) => share(s)) },
@@ -210,17 +236,24 @@ describe('allocateTribeSizes', () => {
           let ceiling = 0;
           tribes.forEach((t, i) => {
             if (t.kind === 'none') expect(sizes[i]).toBe(0);
-            if (t.kind === 'min') expect(sizes[i]).toBe(min);
-            if (t.kind === 'share') {
+            if (t.kind === 'min' || t.kind === 'share') {
               expect(sizes[i]).toBeGreaterThanOrEqual(min);
               expect(sizes[i]).toBeLessThanOrEqual(max);
             }
             floor += t.kind === 'none' ? 0 : min;
-            ceiling += t.kind === 'min' ? min : t.kind === 'share' && t.score > 0 ? max : 0;
+            ceiling += t.kind === 'none' ? 0 : max;
           });
           const anyScore = shares.some((i) => (tribes[i] as { score: number }).score > 0);
-          if (!anyScore) ceiling += shares.length * (max - min);
           const total = sizes.reduce((a, s) => a + s, 0);
+          // A tribe held at `min` (extinct, or scored nothing) only gets more than `min` once
+          // every tribe that scored is at `max`.
+          const heldAtMin = (t: TribeAllocation): boolean =>
+            t.kind === 'min' || (t.kind === 'share' && anyScore && t.score <= 0);
+          if (tribes.some((t, i) => heldAtMin(t) && sizes[i]! > min)) {
+            for (const i of shares) {
+              if (!heldAtMin(tribes[i]!)) expect(sizes[i]).toBe(max);
+            }
+          }
           if (shares.length > 0 && budget >= floor && budget <= ceiling) {
             expect(total).toBe(budget);
           }
@@ -642,7 +675,10 @@ describe('EvolutionRun', () => {
     const run = createEvolutionRun({
       preset: 'small',
       seed: 6,
-      config: smallConfig({ generationLength: 30 }, { extinction: 'battle-royale' }),
+      config: smallConfig(
+        { generationLength: 30 },
+        { extinction: 'battle-royale', battleRoyaleFromGeneration: 1 },
+      ),
     });
     for (let i = 0; i < 10; i++) run.tick();
     doomTribe(run, 1);
@@ -659,12 +695,41 @@ describe('EvolutionRun', () => {
     const run = createEvolutionRun({
       preset: 'small',
       seed: 6,
-      config: smallConfig({ generationLength: 30 }, { extinction: 'battle-royale' }),
+      config: smallConfig(
+        { generationLength: 30 },
+        { extinction: 'battle-royale', battleRoyaleFromGeneration: 1 },
+      ),
     });
     run.runGeneration();
     expect(run.finished).toBe(false);
     expect(run.generation).toBe(2);
     expect(run.tribes.every((t) => t.alive)).toBe(true);
+  });
+
+  it('battle royale eliminates nobody before battleRoyaleFromGeneration (Sprint 4.2)', () => {
+    const run = createEvolutionRun({
+      preset: 'small',
+      seed: 6,
+      config: smallConfig(
+        { generationLength: 30 },
+        { extinction: 'battle-royale', battleRoyaleFromGeneration: 3 },
+      ),
+    });
+    for (const generation of [1, 2]) {
+      for (let i = 0; i < 10; i++) run.tick();
+      doomTribe(run, 1);
+      run.runGeneration(); // tribe 1 dies out: respawned, and the generation ran its full length
+      expect(run.generation).toBe(generation + 1);
+      expect(run.finished).toBe(false);
+      expect(run.tribes.map((t) => t.alive)).toEqual([true, true]);
+      expect(run.tribes[1]!.history.at(-1)!.survivors).toBe(0);
+      expect(run.world.tickCount).toBe(30 * generation);
+    }
+    for (let i = 0; i < 10; i++) run.tick();
+    doomTribe(run, 1);
+    run.tick(); // generation 3: tribe 1 dies → eliminated, the run is over
+    expect(run.finished).toBe(true);
+    expect(run.winner).toBe(0);
   });
 });
 
@@ -699,5 +764,21 @@ describe('benchmark arena', () => {
 
   it('rejects genomes of the wrong size', () => {
     expect(() => runBenchmark(arena, new Float32Array(10))).toThrow(RangeError);
+  });
+
+  it("reports the clones' resolved actions: one per living clone per tick (Sprint 4.2)", () => {
+    const stay = runBenchmarkDetailed(arena, stayGenome());
+    expect(stay.score).toBe(runBenchmark(arena, stayGenome()));
+    const clones = DEFAULT_CONFIG.presets.small.startingCreaturesPerTribe;
+    // A STAY-only clone lives ticksAlive ticks and acts once more on the tick it dies.
+    const ticksAlive = stay.score; // fitness = ticksAlive (no intake) for every clone
+    expect(stay.actions[Action.STAY]).toBe(clones * (ticksAlive + 1));
+    expect(stay.actions.reduce((a, n) => a + n, 0)).toBe(stay.actions[Action.STAY]);
+
+    const forager = runBenchmarkDetailed(arena, foragerGenome());
+    expect(forager.score).toBe(runBenchmark(arena, foragerGenome()));
+    expect(forager.actions).toHaveLength(9);
+    expect(forager.actions[Action.EAT]).toBeGreaterThan(0);
+    expect(forager.actions[Action.ATTACK]).toBe(0); // nobody to attack in a one-tribe arena
   });
 });

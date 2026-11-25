@@ -251,6 +251,7 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(e.tribeScore.foodGathered)
     .writeFloat64(e.tribeScore.territory)
     .writeString(e.extinction)
+    .writeUint32(e.battleRoyaleFromGeneration)
     .writeUint32(e.hallOfFameSize)
     .writeUint32(e.benchmarkInterval)
     .writeString(e.benchmarkSeed);
@@ -334,10 +335,14 @@ function writeWorldState(hasher: StateHasher, world: World): void {
     .writeFloat32Array(world.map.food)
     .writeInt16Array(world.territoryOwner)
     .writeInt32Array(world.territoryStamp);
-  const territory = world.territorySnapshot();
-  hasher.writeUint32(territory.length);
-  for (const pct of territory) {
+  const territory = world.territoryTally();
+  hasher.writeUint32(territory.recounts).writeUint32(territory.last.length);
+  for (const pct of territory.last) {
     hasher.writeFloat64(pct);
+  }
+  hasher.writeUint32(territory.sum.length);
+  for (const sum of territory.sum) {
+    hasher.writeFloat64(sum);
   }
 
   for (const state of [

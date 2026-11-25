@@ -13,7 +13,8 @@
     }
   },
   "bin": {
-    "ei-train": "./dist/cli.js"
+    "ei-train": "./dist/cli.js",
+    "ei-analyze": "./dist/analyze-cli.js"
   },
   "files": [
     "dist"

@@ -149,9 +149,11 @@ export type TribeAllocation =
  * Splits `budget` creatures between tribes in proportion to their scores (plan §2.5), each share
  * clamped to [min, max]: share_i = clamp(λ·score_i, min, max), with the one scale λ that makes the
  * shares add up to the budget ("water filling"). Integer sizes by largest remainder (ties → lower
- * index). The total equals the budget whenever the clamps allow it; otherwise every tribe sits at
- * the clamp nearest the budget. Non-positive scores count as 0 (such a tribe gets `min`); if no
- * tribe scored, the budget is split evenly.
+ * index). Non-positive scores count as 0 (such a tribe gets `min`); if no tribe scored, the budget
+ * is split evenly. Places the scoring tribes can't take because of `max` go to the tribes held at
+ * `min` (extinct, or scored nothing), one at a time in index order, up to `max`. The total equals
+ * the budget whenever the clamps allow it; otherwise every tribe sits at the clamp nearest the
+ * budget.
  */
 export function allocateTribeSizes(
   tribes: readonly TribeAllocation[],
@@ -193,6 +195,23 @@ export function allocateTribeSizes(
     if (sizes[i]! >= max) continue;
     sizes[i] = sizes[i]! + 1;
     left--;
+  }
+  // Places the scoring tribes can't take (all at `max`) go to the tribes held at `min`, one at a
+  // time in index order, up to `max` (Sprint 4.2): otherwise Medium shrank to 3 × 25 + 100 = 175
+  // whenever one tribe alone survived (plan §2.5). A tribe that scored nothing (every tribe died
+  // out, it gathered no food) is held at `min` like an extinct one, so it takes them too.
+  const heldAtMin = tribes.flatMap((t, i) =>
+    t.kind === 'min' || (t.kind === 'share' && anyScore && rawScore(i) === 0) ? [i] : [],
+  );
+  for (let open = true; left > 0 && open;) {
+    open = false;
+    for (const i of heldAtMin) {
+      if (left === 0) break;
+      if (sizes[i]! >= max) continue;
+      sizes[i] = sizes[i]! + 1;
+      left--;
+      open = true;
+    }
   }
   return sizes;
 }
@@ -292,6 +311,7 @@ export interface GenerationStats {
   readonly avgFitness: number;
   readonly maxFitness: number;
   readonly foodGathered: number;
+  /** Mean territory % over the generation (Sprint 4.2; the last recount before). */
   readonly territoryPct: number;
   readonly kills: number;
   readonly tribeScore: number;
@@ -489,9 +509,15 @@ export class EvolutionRun {
     return hasher.digest();
   }
 
+  /** Battle royale and past its grace period: this generation's end can eliminate tribes. */
+  private eliminates(generation: number): boolean {
+    const evo = this.config.evolution;
+    return evo.extinction === 'battle-royale' && generation >= evo.battleRoyaleFromGeneration;
+  }
+
   private isGenerationOver(): boolean {
     if (this.world.isGenerationOver()) return true;
-    if (this.config.evolution.extinction !== 'battle-royale') return false;
+    if (!this.eliminates(this.world.generation)) return false;
     const living = new Set<number>();
     for (const c of this.world.creatures) {
       if (c.alive) living.add(c.tribeId);
@@ -508,7 +534,7 @@ export class EvolutionRun {
     const results = aliveTribes.map((tribe) => {
       const members = this.world.creatures.filter((c) => c.tribeId === tribe.id);
       const ranked = rankByFitness(members, evo);
-      const outcome = tribeOutcome(members, this.world.territoryPercent(tribe.id));
+      const outcome = tribeOutcome(members, this.world.territoryAverage(tribe.id));
       const score = tribeScore(outcome, evo);
       let benchmarkScore: number | null = null;
       if (benchmarkDue && ranked.length > 0) {
@@ -547,7 +573,7 @@ export class EvolutionRun {
       return { tribe, ranked, score, extinct: outcome.survivors === 0 };
     });
 
-    if (evo.extinction === 'battle-royale') {
+    if (this.eliminates(generation)) {
       for (const r of results) {
         if (r.extinct) r.tribe.alive = false;
       }

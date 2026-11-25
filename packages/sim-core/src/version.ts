@@ -26,5 +26,8 @@
  * 11 = Sprint 4.1: `ATTACK` (damage, deaths inside Phase B, kill credit and energy) and `SHARE`
  *     (need/keep rules, efficiency, alliesHelped) act; territory stamps, decay and territory %
  *     (in the world hash and the tribe outcome).
+ * 12 = Sprint 4.2: battle royale eliminates only from `battleRoyaleFromGeneration`; places a capped
+ *     leader can not take go to extinct tribes; the tribe outcome uses territory % averaged over
+ *     the generation (sum and recount count in the world hash).
  */
-export const SIM_VERSION = 11;
+export const SIM_VERSION = 12;

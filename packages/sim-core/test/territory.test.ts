@@ -112,7 +112,7 @@ describe('territory (plan §2.6)', () => {
       b.tick();
       expect(hashWorld(a)).toBe(hashWorld(b));
     }
-    expect(a.territorySnapshot()).toEqual(b.territorySnapshot());
+    expect(a.territoryTally()).toEqual(b.territoryTally());
   });
 
   it('adds up to ≤ 100 % over all tribes, each within 0..100, for random worlds', () => {
@@ -170,14 +170,28 @@ describe('territory in the tribe outcome and generation stats', () => {
     expect(tribeScore(outcome, DEFAULT_CONFIG.evolution)).toBe(0);
   });
 
-  it("is recorded in each generation's stats", () => {
+  it('averages over the generation recounts (Sprint 4.2), restarting with each generation', () => {
+    const world = strip(10, () => Action.MOVE_E, territoryConfig(300, 1));
+    world.spawnCreature(0, 0, 0);
+    expect(world.territoryAverage(0)).toBe(0); // no recount yet
+    world.tick(); // 2 tiles: 20 %
+    world.tick(); // 30 %
+    world.tick(); // 40 %
+    expect(world.territoryPercent(0)).toBe(40);
+    expect(world.territoryAverage(0)).toBeCloseTo(30, 12);
+    expect(world.territoryAverage(1)).toBe(0);
+    world.startGeneration(2, []);
+    expect(world.territoryAverage(0)).toBe(0);
+  });
+
+  it("is recorded in each generation's stats as the generation's average", () => {
     const run = createEvolutionRun({ preset: 'small', seed: 9 });
-    // Read the world's territory % at the end of generation 1, just before the reset.
+    // Read the world's territory average at the end of generation 1, just before the reset.
     const world = run.world;
     const reset = world.startGeneration.bind(world);
     let atEnd: number[] = [];
     world.startGeneration = (generation, spawns) => {
-      atEnd = run.tribes.map((t) => world.territoryPercent(t.id));
+      atEnd = run.tribes.map((t) => world.territoryAverage(t.id));
       reset(generation, spawns);
     };
     run.runGeneration();

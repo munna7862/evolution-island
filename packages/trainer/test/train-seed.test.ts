@@ -191,7 +191,7 @@ describe('trainSeed', () => {
         ...FAST.presets,
         small: { ...FAST.presets.small, generationLength: 1500 },
       },
-      evolution: { ...FAST.evolution, extinction: 'battle-royale' },
+      evolution: { ...FAST.evolution, extinction: 'battle-royale', battleRoyaleFromGeneration: 1 },
     };
     // Random generation-1 brains all die before 1,500 ticks, so one tribe outlives the other.
     const summary = trainSeed(job(out, { config: royale, generations: 50 }));
