@@ -153,3 +153,108 @@ The bar passes only if all three hold:
 
 Reported, not blocking: late score and ratio, hard lock-in, action mixes, kills, territory,
 population.
+
+
+## Acceptance (held-out seeds 301–340, run once)
+
+The four commands of the bar, after `606c97f` (`SIM_VERSION` 12, default config
+`hashConfig` of this build). Normal runs: 52 minutes; battle royale: 19 minutes. `pnpm analyze`
+reproduced all 320 stored champion benchmark scores before measuring their action mix.
+
+| Condition | Needed | Result | |
+|---|---|---|---|
+| 1. Most start-slot wins (normal, generation 200) | ≤ 16 of 40 | slot 0: **15**, slot 1: 7, slot 2: 13, slot 3: 5 | pass |
+| 2. Battle royale: seeds with ≥ 2 tribes alive at generation 120 | ≥ 28 of 40 | **38 of 40** | pass |
+| 3. Best champions above 80 % `STAY` (normal runs) | 0 of 160 | **0** (max 70 %, median 18 %) | pass |
+
+**The bar is met.** Condition 1 has the least room (15 vs 16).
+
+Reported, not blocking (normal runs): late score 2,163, mean ratio to generation 1 3.53, no hard
+lock-in (0 of 160), mean champion mix moves 8 % / `STAY` 22 % / `EAT` 48 % / `DRINK` 21 %,
+total population 200 in every generation. Kills grow with training: 1,890 in all, 0.24 per
+generation per seed overall but 0.72 in generations 191–200. Battle-royale runs: champions max
+72 % `STAY`, late score 1,697 (ratio 2.77).
+
+Per seed: winning slot (normal, generation 200), tribes alive at generation 120 in battle royale
+and the battle royale's highest tribe score's slot:
+
+| Seed | Normal: winner | Battle royale: alive | Battle royale: top slot |
+|---|---|---|---|
+| 301 | 2 | 3 | 2 |
+| 302 | 3 | 2 | 3 |
+| 303 | 0 | 2 | 0 |
+| 304 | 2 | 4 | 2 |
+| 305 | 3 | 3 | 2 |
+| 306 | 0 | 2 | 3 |
+| 307 | 2 | 2 | 2 |
+| 308 | 2 | 3 | 2 |
+| 309 | 2 | 2 | 1 |
+| 310 | 0 | 2 | 0 |
+| 311 | 0 | 4 | 3 |
+| 312 | 3 | 1 | 3 |
+| 313 | 0 | 2 | 0 |
+| 314 | 2 | 2 | 2 |
+| 315 | 0 | 3 | 2 |
+| 316 | 0 | 4 | 0 |
+| 317 | 0 | 2 | 0 |
+| 318 | 2 | 1 | 2 |
+| 319 | 3 | 3 | 3 |
+| 320 | 2 | 2 | 2 |
+| 321 | 0 | 2 | 0 |
+| 322 | 1 | 3 | 1 |
+| 323 | 0 | 3 | 0 |
+| 324 | 1 | 3 | 2 |
+| 325 | 0 | 3 | 0 |
+| 326 | 0 | 3 | 1 |
+| 327 | 1 | 2 | 2 |
+| 328 | 2 | 2 | 2 |
+| 329 | 0 | 3 | 2 |
+| 330 | 0 | 2 | 2 |
+| 331 | 1 | 2 | 1 |
+| 332 | 1 | 3 | 1 |
+| 333 | 1 | 3 | 2 |
+| 334 | 3 | 2 | 3 |
+| 335 | 2 | 4 | 2 |
+| 336 | 0 | 2 | 0 |
+| 337 | 2 | 2 | 2 |
+| 338 | 2 | 2 | 2 |
+| 339 | 2 | 2 | 2 |
+| 340 | 1 | 2 | 2 |
+
+**A lead, not part of the bar:** in the battle-royale runs slot 2 had the highest tribe score in
+20 of 40 seeds (normal runs: 13 of 40; development seeds: 9 of 20, then 6 of 20). Spawn angles are
+random per seed and no rule treats tribe 2 differently, and the normal-mode condition passed, but
+over all 120 runs of this sprint slot 2 leads ~40 % of the time against an expected 25 %. Worth a
+dedicated check (e.g. 100 seeds, tribe ids permuted against spawn zones) before Phase 6 shows
+leaderboards.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (345 tests in 43 files),
+`pnpm test:browser` (8), `pnpm build`, `pnpm test:e2e` (11) pass locally.
+
+## Retro
+
+**Went well**
+- `pnpm analyze` measured the whole bar the same way on development and held-out seeds, and
+  re-ran every champion first to prove the stored scores (320 of 320 reproduced).
+- The baseline showed what was actually broken (battle royale ending at generation 1, a shrinking
+  population early on, territory read at generation end) and what wasn't (degenerate champions,
+  lock-in), so three small rule changes were enough.
+
+**Surprises / learnings**
+- The plan's 10-seed slot rule would have let a slot that wins half the time pass ~62 % of the
+  time; 40 seeds and a 40 % threshold catch it ~87 % of the time.
+- Kills, rare at generation 100 (Sprint 4.1), triple by generation 200: tribes start to meet.
+- Medium training at 200 generations is slow on this machine (52 minutes for 40 seeds): keep
+  held-out runs to what the bar needs.
+
+**Left as is (with reasons)**
+- Tribe score stays absolute: the leader sits near the cap, but no slot benefits and the bar
+  doesn't ask for equal sizes; a per-member score would change what "winning" means.
+- Territory weight stays 0: even averaged over the generation, tribes hold 1–2 % of the island;
+  weighting it now would mostly reward size. Revisit when territory is shown (Phase 6).
+- Combat numbers unchanged: kills are only now becoming common.
+
+**Notes for Sprint 4.3**
+- Reuse `pnpm analyze` and the noise-sized bar recipe; the 4.2 criteria to re-check with
+  signals are the three conditions above.
+- Check the slot-2 lead above if it shows again.

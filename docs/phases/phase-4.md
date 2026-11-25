@@ -40,10 +40,21 @@ wins by default), and, if the experiment works, tribes that call each other for 
    `maxAlliesHelped`.
 3. **Territory = per-tile owner + last-visit stamp (Sprint 4.1).** Stamped by every living creature
    each tick, faded after `territory.decayTicks`, recounted every `territory.updateInterval`
-   ticks, part of the world hash; tribe outcome and stats carry the last recount.
+   ticks, part of the world hash; tribe outcome and stats carried the last recount (the
+   generation's average since Sprint 4.2, decision 8).
 4. **Pinned tests score tribes by late benchmarks (Sprint 4.1).** The seed-42 regression test uses
    the mean of generations 80/90/100, like the Sprint 3.5 bar, because a single champion's
    benchmark varies ~15 %.
+5. **`pnpm analyze` computes balance bars from run folders (Sprint 4.2).** Start-slot winner,
+   tribes alive, late scores, hard lock-in and each tribe's best champion's arena action mix
+   (`runBenchmarkDetailed`), with every stored benchmark score reproduced first, so a bar is
+   measured the same way on development and held-out seeds and later sprints (4.3) can reuse it.
+6. **Battle royale has a grace period (Sprint 4.2).** `evolution.battleRoyaleFromGeneration`
+   (default 100): eliminations only from then on; before, extinct tribes respawn.
+7. **The population budget is always spent (Sprint 4.2).** Places capped tribes can't take go to
+   extinct tribes, one at a time in index order, up to the cap.
+8. **Territory in the tribe outcome is the generation's average (Sprint 4.2).** The world keeps
+   the sum of each tribe's recounted % and the number of recounts (both hashed).
 
 ## Risks
 
