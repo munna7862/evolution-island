@@ -68,3 +68,8 @@ generation's champion. New worker test. Checked: a follow stops when the creatur
 need < 4 px of movement, so drags still pan; dashboard rows are only clickable while it shows.
 **Review 2 — docs/tests.** Unit tests 400 in 51 files (+6), e2e 15 (+1); texts agree. Nothing else
 to fix.
+
+**Local flakiness (not a code issue).** With another program holding the CPU at ~90 %, two
+sim-core tests this sprint did not touch (`resume` "continues bit for bit…", `world` invariants
+property test, ~5 s each when idle) hit Vitest's 5 s default, and one e2e run timed out; CI passed
+the same commit, and a re-run passed all 15 e2e tests. The two tests now have a 30 s timeout.
