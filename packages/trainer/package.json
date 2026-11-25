@@ -15,7 +15,8 @@
   "bin": {
     "ei-train": "./dist/cli.js",
     "ei-analyze": "./dist/analyze-cli.js",
-    "ei-replay": "./dist/replay-cli.js"
+    "ei-replay": "./dist/replay-cli.js",
+    "ei-bench": "./dist/bench-cli.js"
   },
   "files": [
     "dist"

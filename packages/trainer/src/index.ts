@@ -33,6 +33,7 @@ export {
   type TribeAnalysis,
 } from './analyze.js';
 export { banner } from './banner.js';
+export { benchWorstCase, type BenchClock, type BenchOptions, type BenchResult } from './bench.js';
 export { formatProgress, formatSummary, main, type CliIo, type SeedRunners } from './main.js';
 export { runPool, type Settled } from './pool.js';
 export { replayMain } from './replay-command.js';
