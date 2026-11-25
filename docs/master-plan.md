@@ -386,7 +386,7 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 **Sprint 4.2 — Balance pass**
 - Population caps, fair spawn zones, hotspots, tune fitness and tribe-score weights.
 - Watch for degenerate strategies (e.g. everyone stands still) and fix rewards.
-- ✅ Over 10 seeds × 200 generations on Medium (trainer): no start slot has the highest tribe score at gen 200 in more than 5 of the 10 seeds; in battle-royale mode, ≥ 2 tribes are still alive at gen 20 in ≥ 7 seeds; champions don't show a degenerate action mix (e.g. > 80% `STAY`).
+- ✅ Over 40 held-out seeds × 200 generations on Medium (trainer, run once): no start slot has the highest tribe score at gen 200 in more than 16 of the 40 seeds; in battle-royale mode with eliminations from gen 100, ≥ 2 tribes are still alive at gen 120 in ≥ 28 seeds; no tribe's best champion is above 80 % `STAY` in the benchmark arena (bar in `docs/sprints/sprint-4.2.md`).
 
 **Sprint 4.3 — Signals experiment**
 - Call output + "loudest ally call" sensors (§2.3) behind a config switch; Sprint 4.2 champions migrated with zero call weights.
@@ -652,3 +652,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - §2.6 territory: per-tile owner + last-visit stamp, decay 300 ticks, recount every 10 ticks, cleared at generation start; reported in generation stats; tribe-score weight stays 0 until 4.2. At generation end it is tiny (Medium: 0.3–1.4 % for all tribes together), because few creatures are alive then; 4.2 may average it over the generation.
 - Combat barely happens yet (Small: ≈ 0.03 kills per generation per seed; Medium: ≤ 0.4); learning on Small is unchanged (50 held-out seeds: tribe score 0.98× Sprint 3.5's, within noise).
 - The seed-42 regression test scores each tribe by the mean of its generation 80/90/100 benchmarks (user's decision): with sharing on, tribe 1's single generation-100 champion fell to 1.31× while generations 80 and 90 were 2.31× and 2.17×.
+
+**2026-11-25 — Sprint 4.2 acceptance bar** (fixed before any held-out run)
+- §4 Sprint 4.2: **40 held-out Medium seeds (301–340) instead of 10** (user's decision, before any held-out seed was run): no start slot wins more than 16 of 40 (a fair game fails this ~4 % of the time, a slot that truly wins half the time passes ~13 %; the plan's "> 5 of 10" let such a slot pass ~62 %); battle royale ≥ 2 tribes alive in ≥ 28 of 40; no best champion above 80 % `STAY`.
+- Battle royale's "alive at generation 20" is read as **20 generations after eliminations start**: untrained tribes all die out in generation 1, which ended every battle royale at once. `evolution.battleRoyaleFromGeneration` (default 100) is the grace period; before it, extinct tribes respawn.

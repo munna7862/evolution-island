@@ -70,3 +70,86 @@ and generation-end territory is tiny (Medium 0.3–1.4 % for all tribes together
 ## Out of scope
 
 - Signals — Sprint 4.3. Viewer changes — Phase 6. Large/Huge balance — Phase 7.
+
+---
+
+## Baseline (`SIM_VERSION` 11 defaults, Medium seeds 1–20 × 200 generations)
+
+`pnpm train --preset medium --seeds 1-20 --generations 200` (14.5 minutes), then
+`pnpm analyze --runs <dir>`; every one of the 80 champions' stored benchmark scores was reproduced.
+
+| Measure | Result |
+|---|---|
+| Start-slot wins (highest tribe score at generation 200) | slot 0: 3, slot 1: 4, **slot 2: 9**, slot 3: 4 |
+| Mean tribe size by slot, generations 101–200 | 50.0 / 51.4 / 52.9 / 45.8 |
+| Champions above 80 % `STAY` | **0 of 80** (max 59 %) |
+| Mean champion action mix | moves 8 %, `STAY` 25 %, `EAT` 45 %, `DRINK` 21 %, `SHARE` 0 % |
+| Late score (mean of last 3 benchmarks) | 2,123; mean ratio to generation 1: 3.58 |
+| Hard lock-in | 0 of 80 tribes |
+| Generations with total population < 200 | gens 1–20: 89 of 400 (mean 194.4); 21–100: 302 of 1,600 (195.3); 101–200: 0 of 2,000 |
+| Generations in which a tribe died out (101–200) | slot 0 11 %, slot 1 7 %, slot 2 5 %, slot 3 8 %; tribes of ≥ 60: never |
+
+- **Start slots look fair.** Spawn angles are random per seed (`baseTurn` from the map stream), so
+  slot 2 has no fixed place on the map, and tribe sizes by slot are close. A slot winning ≥ 9 of
+  20 happens by chance in about 15 % of 20-seed samples (four slots, p = 0.25 each).
+- **The winner is the biggest tribe.** Tribe score is absolute, so the tribe at or near the cap
+  (84–100 at generation 200) wins; the others sit near 25. This is the "rich get richer" lead; it
+  doesn't favour a slot, and the bar doesn't ask for equal sizes, so it stays (see the retro).
+- **No degenerate champions.** The arena has one tribe, so it can't show `ATTACK`; in the world
+  kills stay rare (Sprint 4.1).
+- **Battle royale from scratch ends in generation 1** (every tribe dies out then). After 100
+  generations tribes rarely die out: in 19 of 20 seeds at least 2 tribes had survivors in every one
+  of generations 101–120 (20 of 20 for 151–170 and 181–200), a static estimate.
+- **Population drop:** only in the first 100 generations (about 19 % of them), from 200 to a mean
+  of ~195.
+
+## Changes (each from the baseline above)
+
+1. **`evolution.battleRoyaleFromGeneration`** (default 100): in battle royale, a generation's end
+   eliminates extinct tribes only from this generation on; before it, extinct tribes respawn and
+   generations run their full length, as in normal mode. Test: no elimination before it (a doomed
+   tribe respawns, the generation isn't cut short), elimination from it on.
+2. **No population drop:** `allocateTribeSizes` gives places the scoring tribes can't take (all at
+   `popCap`) to the extinct tribes, one at a time in index order, up to `popCap`. One tribe alone
+   surviving on Medium now gives 100 / 34 / 33 / 33 instead of 100 / 25 / 25 / 25. The property
+   test now also checks that an extinct tribe only grows once every scoring tribe is at the cap.
+3. **Territory averaged over the generation:** `World.territoryAverage` (sum of the recounts ÷
+   recounts this generation, in the world hash); the tribe outcome and `stats.csv` use it. The
+   tribe-score weight stays 0 (retro).
+
+`SIM_VERSION` 11 → 12; golden hashes re-recorded (map hash and the forward-pass digest unchanged).
+
+**Re-check on development seeds 1–20** (after the changes, `SIM_VERSION` 12): start-slot wins
+4 / 8 / 6 / 2; total population exactly 200 in all 4,000 generations; no champion above 80 %
+`STAY` (max 64 %); late score 2,165 (ratio 3.66; baseline 2,123 / 3.58); no hard lock-in; mean
+territory per tribe at generation 200 (now the generation's average) 1.71 %. Battle royale
+(`docs/sprints/sprint-4.2/battle-royale.json`, 120 generations, eliminations from 100): ≥ 2 tribes
+alive at generation 120 in **20 of 20** seeds (2 tribes in 9, 3 in 6, 4 in 5).
+
+## Acceptance bar (fixed before the held-out run)
+
+Chosen by the user on 2026-11-25 before any held-out seed was run. Held-out Medium seeds
+**301–340** (never used), each run **once**:
+
+```
+pnpm train --preset medium --seeds 301-340 --generations 200 --out runs/s42-heldout
+pnpm train --preset medium --seeds 301-340 --generations 120 --config docs/sprints/sprint-4.2/battle-royale.json --out runs/s42-heldout-br
+pnpm analyze --runs runs/s42-heldout
+pnpm analyze --runs runs/s42-heldout-br
+```
+
+The bar passes only if all three hold:
+
+1. **Start slots:** no slot has the highest tribe score at generation 200 in more than **16 of
+   40** seeds (40 %). A fair game (each slot 25 %) fails this about 4 % of the time; a slot that
+   truly wins half the time passes only about 13 %. (Plan: > 5 of 10, which a fair game fails
+   ~8 % of the time and a 50 % slot passes ~62 %.)
+2. **Battle royale:** with eliminations from generation 100 (the default grace period), ≥ 2 tribes
+   alive at generation 120 in **≥ 28 of 40** seeds (70 %, the plan's 7 of 10). From scratch every
+   tribe dies out in generation 1, so the plan's "alive at generation 20" is read as 20 generations
+   after eliminations start.
+3. **Champions:** none of the 160 tribes' best hall-of-fame champions (at generation 200) above
+   **80 % `STAY`** in the benchmark arena.
+
+Reported, not blocking: late score and ratio, hard lock-in, action mixes, kills, territory,
+population.
