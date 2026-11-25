@@ -217,3 +217,21 @@ to exist (combat on Medium, where a call could bring allies to a fight) and judg
 **Notes for Phase 5**
 - `SIM_VERSION` 13; the snapshot stride is 16 bytes. Signals stay available behind the switch;
   the viewer shows ripples when a run is trained with them on.
+
+## Reviews (2026-11-25)
+
+Done in the implementing session (the app does not let it start sessions from an automated
+turn), as two passes over `git diff 3232dfe...sprint-4.3`.
+
+**Review 1 — correctness and tests.** Checked: a caller exactly `callRadius` away is heard at 0
+and stays silent (tested); the tie test puts the lower id east of the listener while the grid is
+scanned west to east, so "first found wins" would fail it; a creature killed in Phase B pays no
+call cost and commits as silent; `pnpm analyze --mute` takes input ranges from the run's own
+config. **Fixed:** the `hashWorld` / `hashWorldState` comments now say calls are in the full hash
+and outside the state hash (like memory), which is what makes the migration test meaningful.
+
+**Review 2 — plan, docs, formats.** Checked: plan §2.4's 432 weights match; genome files with
+signals carry their spec and config hash, so they load like any other; the snapshot stride change
+(15 → 16) ships on both sides of the worker in one build (e2e green); every number in the
+acceptance table recomputes from `runs/s43-*` (`runs/s43-report.txt`, `analysis.json`).
+**Found:** nothing further.

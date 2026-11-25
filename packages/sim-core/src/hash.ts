@@ -299,8 +299,8 @@ export function hashMap(map: Omit<WorldMap, 'hash'>): string {
 }
 
 /**
- * Full world state: `hashWorldState` plus the config hash and every creature's genome and memory.
- * Same hash = same world, bit for bit (determinism tests, golden hashes, replays).
+ * Full world state: `hashWorldState` plus the config hash and every creature's genome, memory and
+ * calls. Same hash = same world, bit for bit (determinism tests, golden hashes, replays).
  */
 export function hashWorld(world: World): string {
   const hasher = new StateHasher();
@@ -318,8 +318,9 @@ export function hashWorld(world: World): string {
 
 /**
  * What happens in the world, without how the brains are built: everything `hashWorld` covers
- * except the config hash and the creatures' genomes and memory values. Two worlds whose brains
- * differ only in layout (e.g. a genome and its migration, Sprint 3.5) have the same state hash
+ * except the config hash and the creatures' genomes, memory values and calls (Sprint 4.3: what
+ * the brain produces, not what happens). Two worlds whose brains differ only in layout (e.g. a
+ * genome and its migration, Sprints 3.5 and 4.3) have the same state hash
  * exactly when they put the same creatures in the same places with the same stats, food and RNG
  * draws.
  */
