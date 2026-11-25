@@ -675,3 +675,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Viewer run browser: Run → Saved generation → Tribe (all, or one tribe's champions alone).
 - Files from another `simVersion` are refused with the reason, not migrated: the rules changed, so a migrated genome would not behave as trained; `migrateGenome` covers brain growth within one version.
 
+**2026-11-25 — Sprint 5.2 (save / load / replay)**
+- Replay files (`evolution-island/replay`): full config + hash, preset, seed, start (a run state with every genome), ticks, `run.hash()` every 500 ticks (default) and at the end, spectator events (none exist yet; refused until Sprint 7.2 defines them). `pnpm replay export / verify`; the viewer loads, checks and exports replays.
+- Cross-engine: the browser suite runs in Chromium, Firefox and WebKit; a pinned replay reaches the same final hash in Node and all three (plan §4 Sprint 5.2 met). CI installs the three browsers. No rule changed (`simVersion` 13).
+

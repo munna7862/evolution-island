@@ -36,34 +36,38 @@ export class RunStateError extends Error {
 
 const RNG_NAMES = ['map', 'spawn', 'evolution', 'tick', 'policy'] as const;
 
-export function serializeRunState(file: RunStateFile): string {
-  const { state } = file;
+/** A run state as plain JSON data (genomes as number arrays), for run-state and replay files. */
+export function runStateToJson(state: EvolutionRunState): unknown {
   const genome = (g: Float32Array) => Array.from(g);
+  return {
+    generation: state.generation,
+    tickCount: state.tickCount,
+    rng: state.rng,
+    spawns: state.spawns.map((s) => ({ tribeId: s.tribeId, genomes: s.genomes.map(genome) })),
+    tribes: state.tribes.map((t) => ({
+      id: t.id,
+      size: t.size,
+      alive: t.alive,
+      hallOfFame: t.hallOfFame.map((e) => ({
+        generation: e.generation,
+        benchmarkScore: e.benchmarkScore,
+        genome: genome(e.genome),
+      })),
+      history: t.history,
+    })),
+    finished: state.finished,
+    winner: state.winner,
+  };
+}
+
+export function serializeRunState(file: RunStateFile): string {
   return JSON.stringify({
     format: RUN_STATE_FILE_FORMAT,
     fileVersion: RUN_STATE_FILE_VERSION,
     simVersion: file.simVersion,
     configHash: file.configHash,
     brain: { ...file.brain },
-    state: {
-      generation: state.generation,
-      tickCount: state.tickCount,
-      rng: state.rng,
-      spawns: state.spawns.map((s) => ({ tribeId: s.tribeId, genomes: s.genomes.map(genome) })),
-      tribes: state.tribes.map((t) => ({
-        id: t.id,
-        size: t.size,
-        alive: t.alive,
-        hallOfFame: t.hallOfFame.map((e) => ({
-          generation: e.generation,
-          benchmarkScore: e.benchmarkScore,
-          genome: genome(e.genome),
-        })),
-        history: t.history,
-      })),
-      finished: state.finished,
-      winner: state.winner,
-    },
+    state: runStateToJson(file.state),
   });
 }
 
@@ -152,7 +156,17 @@ export function parseRunState(text: string): RunStateFile {
     hidden: int(b['hidden'], 'brain.hidden'),
     outputs: int(b['outputs'], 'brain.outputs'),
   };
-  const s = record(top['state'], 'state');
+  return {
+    simVersion: int(top['simVersion'], 'simVersion'),
+    configHash,
+    brain,
+    state: runStateFromJson(top['state']),
+  };
+}
+
+/** Reads a run state written by `runStateToJson`; throws `RunStateError` naming the bad field. */
+export function runStateFromJson(value: unknown): EvolutionRunState {
+  const s = record(value, 'state');
   const rngRaw = record(s['rng'], 'state.rng');
   const rng = Object.fromEntries(
     RNG_NAMES.map((name) => [name, rngState(rngRaw[name], `state.rng.${name}`)]),
@@ -193,18 +207,13 @@ export function parseRunState(text: string): RunStateFile {
   if (typeof s['finished'] !== 'boolean') fail('state.finished must be true or false');
   const winner = s['winner'] === null ? null : int(s['winner'], 'state.winner');
   return {
-    simVersion: int(top['simVersion'], 'simVersion'),
-    configHash,
-    brain,
-    state: {
-      generation: int(s['generation'], 'state.generation'),
-      tickCount: int(s['tickCount'], 'state.tickCount'),
-      rng,
-      spawns,
-      tribes,
-      finished: s['finished'],
-      winner,
-    },
+    generation: int(s['generation'], 'state.generation'),
+    tickCount: int(s['tickCount'], 'state.tickCount'),
+    rng,
+    spawns,
+    tribes,
+    finished: s['finished'],
+    winner,
   };
 }
 

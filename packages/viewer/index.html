@@ -79,6 +79,24 @@
             Load run…
           </button>
           <input id="run-input" type="file" webkitdirectory multiple hidden />
+          <button
+            id="load-replay-btn"
+            type="button"
+            class="btn"
+            title="Pick a replay file (.replay.json) to play and check bit for bit"
+          >
+            Load replay…
+          </button>
+          <input id="replay-input" type="file" accept=".json,application/json" hidden />
+          <button
+            id="export-replay-btn"
+            type="button"
+            class="btn"
+            title="Save what was played since the start as a replay file"
+            hidden
+          >
+            Export replay
+          </button>
           <label id="run-field" class="field" title="The run to watch" hidden>
             <span>Run</span>
             <select id="run-select" name="run"></select>

@@ -10,6 +10,8 @@ import {
   checkpointStart,
   parseCheckpoint,
   parseGenome,
+  parseReplay,
+  playReplay,
   type LoadedGenome,
 } from '@evolution-island/shared';
 import {
@@ -249,6 +251,52 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     expect(
       (await page.evaluate(() => window.__ei!.getState().tribePopulations))[1],
     ).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('exports a replay that Node plays back exactly, and plays it back (Sprint 5.2)', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page);
+    await page.goto('/?paused=1&speed=max');
+    await expect.poll(() => page.evaluate(() => window.__ei?.mode)).toBe('random');
+    await expect(page.locator('#export-replay-btn')).toBeHidden();
+
+    await page.locator('#run-input').setInputFiles(join(runsDir, 'small-1'));
+    await waitForCheckpoint(page, 'Gen 3 · small-1', 3);
+    await expect(page.locator('#export-replay-btn')).toBeVisible();
+    const startTick = await page.evaluate(() => window.__ei!.tick);
+    await runTo(page, startTick + 700);
+    const text = await page.evaluate(() => window.__ei!.exportReplay());
+
+    // Recorded in Chromium, checked in Node: every hash matches.
+    const replay = parseReplay(text);
+    expect(replay.ticks).toBe(700);
+    const node = playReplay(replay);
+    expect(node.mismatch).toBeNull();
+    expect(node.matched).toBe(replay.hashes.length);
+
+    // Played back in the viewer: it stops at the end with every hash matched.
+    await page.locator('#replay-input').setInputFiles({
+      name: 'small-1-gen3.replay.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(text),
+    });
+    await expect.poll(() => page.evaluate(() => window.__ei?.mode)).toBe('replay');
+    await page.click('#play-pause-btn');
+    await expect
+      .poll(() => page.evaluate(() => window.__ei?.replay?.played), { timeout: 30_000 })
+      .toBe(700);
+    const status = await page.evaluate(() => window.__ei!.replay!);
+    expect(status).toEqual({
+      played: 700,
+      ticks: 700,
+      checked: replay.hashes.length,
+      matched: replay.hashes.length,
+      total: replay.hashes.length,
+      mismatch: null,
+    });
+    await expect(page.locator('#run-info')).toHaveText(/finished, every hash matched/);
     expect(errors).toEqual([]);
   });
 

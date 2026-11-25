@@ -29,3 +29,6 @@ major browser engine.
    `resume.json` is rewritten at every checkpoint; `pnpm train --resume` continues from it.
 2. **Run browser = run → generation → tribe (Sprint 5.1).** One tribe plays alone by leaving the
    other tribes out of the start (as if eliminated).
+3. **Replay = run state + ticks + hashes + events (Sprint 5.2).** `run.hash()` every `hashEvery`
+   ticks and at the end pinpoints the first divergence; the same `recordReplay` / `playReplay`
+   run in Node, the viewer worker and the cross-engine suite (Chromium, Firefox, WebKit).

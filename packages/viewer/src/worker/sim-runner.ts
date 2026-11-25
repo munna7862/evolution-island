@@ -2,11 +2,43 @@ import {
   BASE_TICKS_PER_SECOND,
   buildReadyMessage,
   buildSimSnapshot,
+  DEFAULT_REPLAY_HASH_EVERY,
+  parseReplay,
+  serializeReplay,
+  startReplayRun,
   type MainToWorkerMessage,
+  type ReplayHash,
+  type ReplayStatus,
   type SimSpeed,
   type WorkerToMainMessage,
 } from '@evolution-island/shared';
-import { createEvolutionRun, createWorld, type World } from '@evolution-island/sim-core';
+import {
+  createEvolutionRun,
+  createWorld,
+  hashConfig,
+  SIM_VERSION,
+  type EvolutionRun,
+  type EvolutionRunState,
+  type World,
+} from '@evolution-island/sim-core';
+
+/** What the worker played since its start, for "Export replay" (Sprint 5.2). */
+interface PlayedRun {
+  readonly run: EvolutionRun;
+  readonly start: EvolutionRunState;
+  readonly startTick: number;
+  /** run.hash() every DEFAULT_REPLAY_HASH_EVERY ticks played. */
+  readonly hashes: ReplayHash[];
+}
+
+/** A replay being played (Sprint 5.2). */
+interface PlayingReplay {
+  readonly ticks: number;
+  readonly expected: ReadonlyMap<number, string>;
+  checked: number;
+  matched: number;
+  mismatch: ReplayStatus['mismatch'];
+}
 
 export interface SimRunnerHost {
   now(): number;
@@ -30,6 +62,8 @@ export class SimRunner {
   private advance: () => boolean = () => false;
   /** Set once `advance` returned false: the run is over, so it behaves like a pause target. */
   private ended = false;
+  private played: PlayedRun | null = null;
+  private replay: PlayingReplay | null = null;
   private runId = -1;
   private lastAckSeq = 0;
   private running = false;
@@ -59,7 +93,7 @@ export class SimRunner {
         return;
       }
 
-      if (msg.type !== 'requestHash' && msg.seq !== undefined) {
+      if (msg.type !== 'requestHash' && msg.type !== 'exportReplay' && msg.seq !== undefined) {
         this.lastAckSeq = msg.seq;
       }
 
@@ -75,6 +109,9 @@ export class SimRunner {
           break;
         case 'setPauseAtTick':
           this.handleSetPauseAtTick(msg.targetTick);
+          break;
+        case 'exportReplay':
+          this.host.emit(this.exportReplay(msg.requestId), []);
           break;
         case 'requestHash':
           this.host.emit(
@@ -118,7 +155,28 @@ export class SimRunner {
     this.ended = false;
     this.speed = msg.speed;
     this.pauseAtTick = msg.pauseAtTick;
-    if (msg.start === undefined) {
+    this.played = null;
+    this.replay = null;
+    if (msg.replay !== undefined) {
+      const file = parseReplay(msg.replay);
+      const run = startReplayRun(file);
+      this.trackPlayed(run, file.start);
+      const replay: PlayingReplay = {
+        ticks: file.ticks,
+        expected: new Map(file.hashes.map((h) => [h.tick, h.hash])),
+        checked: 0,
+        matched: 0,
+        mismatch: null,
+      };
+      this.replay = replay;
+      this.world = run.world;
+      this.advance = () => {
+        const played = this.playedTicks();
+        if (run.finished || played >= replay.ticks || replay.mismatch !== null) return false;
+        this.tickRun(run);
+        return true;
+      };
+    } else if (msg.start === undefined) {
       const world = createWorld({ preset: msg.preset, seed: msg.seed });
       this.world = world;
       this.advance = () => {
@@ -127,10 +185,11 @@ export class SimRunner {
       };
     } else {
       const run = createEvolutionRun({ preset: msg.preset, seed: msg.seed, start: msg.start });
+      this.trackPlayed(run, run.captureState());
       this.world = run.world;
       this.advance = () => {
         if (run.finished) return false;
-        run.tick();
+        this.tickRun(run);
         return true;
       };
     }
@@ -343,6 +402,71 @@ export class SimRunner {
   }
 
   /** One tick; false (and `ended`) when the run cannot advance any more. */
+  private trackPlayed(run: EvolutionRun, start: EvolutionRunState): void {
+    this.played = { run, start, startTick: run.world.tickCount, hashes: [] };
+  }
+
+  private playedTicks(): number {
+    return this.played === null ? 0 : this.played.run.world.tickCount - this.played.startTick;
+  }
+
+  /** One run tick, then the replay bookkeeping: recorded hashes for export, and checks. */
+  private tickRun(run: EvolutionRun): void {
+    run.tick();
+    const played = this.playedTicks();
+    const due = played % DEFAULT_REPLAY_HASH_EVERY === 0;
+    const replay = this.replay;
+    const want = replay?.expected.get(played);
+    if (!due && want === undefined) return;
+    const hash = run.hash();
+    if (due) this.played!.hashes.push({ tick: played, hash });
+    if (replay !== null && want !== undefined) {
+      replay.checked++;
+      if (hash === want) replay.matched++;
+      else replay.mismatch = { tick: played, expected: want, actual: hash };
+    }
+  }
+
+  private replayStatus(): ReplayStatus | null {
+    const r = this.replay;
+    if (r === null) return null;
+    return {
+      played: this.playedTicks(),
+      ticks: r.ticks,
+      checked: r.checked,
+      matched: r.matched,
+      total: r.expected.size,
+      mismatch: r.mismatch,
+    };
+  }
+
+  /** The replay of everything played since the start (checkpoint or replay mode). */
+  private exportReplay(requestId: number): Extract<WorkerToMainMessage, { type: 'replayExport' }> {
+    const base = { type: 'replayExport' as const, runId: this.runId, requestId };
+    const p = this.played;
+    const ticks = this.playedTicks();
+    if (p === null) {
+      return { ...base, text: null, error: 'Only a saved generation or a replay can be exported' };
+    }
+    if (ticks < 1) return { ...base, text: null, error: 'Play at least one tick first' };
+    const hashes = p.hashes.filter((h) => h.tick <= ticks);
+    // Always end with the hash after the last tick played.
+    if (hashes.at(-1)?.tick !== ticks) hashes.push({ tick: ticks, hash: p.run.hash() });
+    const text = serializeReplay({
+      simVersion: SIM_VERSION,
+      configHash: hashConfig(p.run.config),
+      config: p.run.config,
+      preset: p.run.world.preset,
+      seed: p.run.world.seed,
+      start: p.start,
+      ticks,
+      hashEvery: DEFAULT_REPLAY_HASH_EVERY,
+      hashes,
+      events: [],
+    });
+    return { ...base, text, error: null };
+  }
+
   private tickOnce(): boolean {
     if (this.ended || !this.advance()) {
       this.ended = true;
@@ -399,6 +523,7 @@ export class SimRunner {
       speed: this.speed,
       tickDurationMs,
       includeHash,
+      replay: this.replayStatus(),
     });
     this.host.emit({ type: 'snapshot', snapshot }, [snapshot.creatures.buffer]);
   }

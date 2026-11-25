@@ -72,6 +72,25 @@ export interface SimSnapshot {
   readonly tickDurationMs: number;
   readonly creatures: CreatureBuffer;
   readonly worldHash: string | null;
+  /** While playing a replay (Sprint 5.2): how far it got and whether its hashes still match. */
+  readonly replay: ReplayStatus | null;
+}
+
+/** Progress of a replay played in the worker (Sprint 5.2). */
+export interface ReplayStatus {
+  /** Ticks played since the replay's start, and its length. */
+  readonly played: number;
+  readonly ticks: number;
+  /** Recorded hashes reached so far, and how many of them matched. */
+  readonly checked: number;
+  readonly matched: number;
+  readonly total: number;
+  /** The first recorded hash that differed. */
+  readonly mismatch: {
+    readonly tick: number;
+    readonly expected: string;
+    readonly actual: string;
+  } | null;
 }
 
 export type MainToWorkerMessage =
@@ -89,6 +108,11 @@ export type MainToWorkerMessage =
        * keeps evolving. Omitted: the random policy (no brains), as before.
        */
       readonly start?: EvolutionStart;
+      /**
+       * Play a replay file (Sprint 5.2), as its text: the worker parses it, checks every recorded
+       * hash and stops at its end. `start` is then ignored.
+       */
+      readonly replay?: string;
     }
   | {
       readonly type: 'setRunning';
@@ -118,6 +142,12 @@ export type MainToWorkerMessage =
       readonly type: 'requestHash';
       readonly runId: number;
       readonly requestId: number;
+    }
+  | {
+      /** The replay of what was played since the start (checkpoint or replay mode, Sprint 5.2). */
+      readonly type: 'exportReplay';
+      readonly runId: number;
+      readonly requestId: number;
     };
 
 export type WorkerToMainMessage =
@@ -140,6 +170,14 @@ export type WorkerToMainMessage =
       readonly requestId: number;
       readonly tick: number;
       readonly worldHash: string;
+    }
+  | {
+      readonly type: 'replayExport';
+      readonly runId: number;
+      readonly requestId: number;
+      /** The replay file's text, or null with `error` when there is nothing to export. */
+      readonly text: string | null;
+      readonly error: string | null;
     }
   | {
       readonly type: 'error';
@@ -264,6 +302,7 @@ export interface SnapshotMeta {
   readonly speed: SimSpeed;
   readonly tickDurationMs: number;
   readonly includeHash: boolean;
+  readonly replay?: ReplayStatus | null;
 }
 
 export function buildSimSnapshot(world: World, meta: SnapshotMeta): SimSnapshot {
@@ -281,6 +320,7 @@ export function buildSimSnapshot(world: World, meta: SnapshotMeta): SimSnapshot 
     tickDurationMs: meta.tickDurationMs,
     creatures,
     worldHash: meta.includeHash ? world.hash() : null,
+    replay: meta.replay ?? null,
   };
 }
 
