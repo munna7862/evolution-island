@@ -34,6 +34,7 @@ import {
   type HallOfFameEntry,
   type MapPreset,
   type SimConfig,
+  type TribeAllocation,
 } from '../src/index.js';
 
 const EVO = DEFAULT_CONFIG.evolution;
@@ -204,6 +205,17 @@ describe('allocateTribeSizes', () => {
     expect(allocateTribeSizes([share(3), share(1), min], 200, 25, 100)).toEqual([100, 75, 25]);
   });
 
+  // Sprint 4.2 review: when every tribe died out, one that gathered no food scores 0 and is held
+  // at the minimum like an extinct tribe; it must take the capped leader's places too.
+  it('gives places a capped leader cannot take to tribes that scored nothing', () => {
+    expect(allocateTribeSizes([share(900), share(0), share(0), share(0)], 200, 25, 100)).toEqual([
+      100, 34, 33, 33,
+    ]);
+    expect(
+      allocateTribeSizes([share(0), share(900), { kind: 'min' }, share(0)], 200, 25, 100),
+    ).toEqual([34, 100, 33, 33]);
+  });
+
   it('property: sizes within [min, max], total = budget when feasible, order follows score', () => {
     const tribe = fc.oneof(
       { weight: 6, arbitrary: fc.integer({ min: 0, max: 5000 }).map((s) => share(s)) },
@@ -229,18 +241,17 @@ describe('allocateTribeSizes', () => {
               expect(sizes[i]).toBeLessThanOrEqual(max);
             }
             floor += t.kind === 'none' ? 0 : min;
-            ceiling += t.kind === 'min' ? max : t.kind === 'share' && t.score > 0 ? max : 0;
+            ceiling += t.kind === 'none' ? 0 : max;
           });
           const anyScore = shares.some((i) => (tribes[i] as { score: number }).score > 0);
-          if (!anyScore) ceiling += shares.length * (max - min);
           const total = sizes.reduce((a, s) => a + s, 0);
-          // An extinct tribe only gets more than `min` once every tribe that could take places is
-          // at `max`.
-          if (tribes.some((t, i) => t.kind === 'min' && sizes[i]! > min)) {
+          // A tribe held at `min` (extinct, or scored nothing) only gets more than `min` once
+          // every tribe that scored is at `max`.
+          const heldAtMin = (t: TribeAllocation): boolean =>
+            t.kind === 'min' || (t.kind === 'share' && anyScore && t.score <= 0);
+          if (tribes.some((t, i) => heldAtMin(t) && sizes[i]! > min)) {
             for (const i of shares) {
-              if (!anyScore || (tribes[i] as { score: number }).score > 0) {
-                expect(sizes[i]).toBe(max);
-              }
+              if (!heldAtMin(tribes[i]!)) expect(sizes[i]).toBe(max);
             }
           }
           if (shares.length > 0 && budget >= floor && budget <= ceiling) {

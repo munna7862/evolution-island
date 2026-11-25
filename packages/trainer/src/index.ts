@@ -14,12 +14,14 @@ export {
 } from './args.js';
 export {
   analyzeRun,
+  analyzeTribe,
   DEGENERATE_STAY_SHARE,
   findRunDirs,
   formatReport,
   LATE_BENCHMARKS,
   LOCK_IN_FITNESS,
   LOCK_IN_WINDOW,
+  pickWinner,
   summarize,
   type AnalysisSummary,
   type AnalyzeIo,

@@ -98,8 +98,8 @@ and generation-end territory is tiny (Medium 0.3–1.4 % for all tribes together
 - **No degenerate champions.** The arena has one tribe, so it can't show `ATTACK`; in the world
   kills stay rare (Sprint 4.1).
 - **Battle royale from scratch ends in generation 1** (every tribe dies out then). After 100
-  generations tribes rarely die out: in 19 of 20 seeds at least 2 tribes had survivors in every one
-  of generations 101–120 (20 of 20 for 151–170 and 181–200), a static estimate.
+  generations tribes rarely die out: in 19 of 20 seeds at least 2 tribes never died out in generations
+  101–120 (20 of 20 for 151–170 and 181–200), a static estimate.
 - **Population drop:** only in the first 100 generations (about 19 % of them), from 200 to a mean
   of ~195.
 
@@ -110,7 +110,8 @@ and generation-end territory is tiny (Medium 0.3–1.4 % for all tribes together
    generations run their full length, as in normal mode. Test: no elimination before it (a doomed
    tribe respawns, the generation isn't cut short), elimination from it on.
 2. **No population drop:** `allocateTribeSizes` gives places the scoring tribes can't take (all at
-   `popCap`) to the extinct tribes, one at a time in index order, up to `popCap`. One tribe alone
+   `popCap`) to the extinct tribes (and, since the review, tribes that scored nothing), one at a
+   time in index order, up to `popCap`. One tribe alone
    surviving on Medium now gives 100 / 34 / 33 / 33 instead of 100 / 25 / 25 / 25. The property
    test now also checks that an extinct tribe only grows once every scoring tribe is at the cap.
 3. **Territory averaged over the generation:** `World.territoryAverage` (sum of the recounts ÷
@@ -124,7 +125,7 @@ and generation-end territory is tiny (Medium 0.3–1.4 % for all tribes together
 `STAY` (max 64 %); late score 2,165 (ratio 3.66; baseline 2,123 / 3.58); no hard lock-in; mean
 territory per tribe at generation 200 (now the generation's average) 1.71 %. Battle royale
 (`docs/sprints/sprint-4.2/battle-royale.json`, 120 generations, eliminations from 100): ≥ 2 tribes
-alive at generation 120 in **20 of 20** seeds (2 tribes in 9, 3 in 6, 4 in 5).
+alive at generation 120 in **20 of 20** seeds (2 tribes in 10, 3 in 6, 4 in 4).
 
 ## Acceptance bar (fixed before the held-out run)
 
@@ -170,7 +171,7 @@ reproduced all 320 stored champion benchmark scores before measuring their actio
 **The bar is met.** Condition 1 has the least room (15 vs 16).
 
 Reported, not blocking (normal runs): late score 2,163, mean ratio to generation 1 3.53, no hard
-lock-in (0 of 160), mean champion mix moves 8 % / `STAY` 22 % / `EAT` 48 % / `DRINK` 21 %,
+lock-in (0 of 160), mean champion mix moves 10 % / `STAY` 22 % / `EAT` 48 % / `DRINK` 21 %,
 total population 200 in every generation. Kills grow with training: 1,890 in all, 0.24 per
 generation per seed overall but 0.72 in generations 191–200. Battle-royale runs: champions max
 72 % `STAY`, late score 1,697 (ratio 2.77).
@@ -224,8 +225,8 @@ and the battle royale's highest tribe score's slot:
 **A lead, not part of the bar:** in the battle-royale runs slot 2 had the highest tribe score in
 20 of 40 seeds (normal runs: 13 of 40; development seeds: 9 of 20, then 6 of 20). Spawn angles are
 random per seed and no rule treats tribe 2 differently, and the normal-mode condition passed, but
-over all 120 runs of this sprint slot 2 leads ~40 % of the time against an expected 25 %. Worth a
-dedicated check (e.g. 100 seeds, tribe ids permuted against spawn zones) before Phase 6 shows
+over all 140 runs of this sprint (development battle royale: 3 of 20) slot 2 led 51 times, 36 %,
+against an expected 25 %. Worth a dedicated check (e.g. 100 seeds, tribe ids permuted against spawn zones) before Phase 6 shows
 leaderboards.
 
 **Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (345 tests in 43 files),
@@ -258,3 +259,51 @@ leaderboards.
 - Reuse `pnpm analyze` and the noise-sized bar recipe; the 4.2 criteria to re-check with
   signals are the three conditions above.
 - Check the slot-2 lead above if it shows again.
+
+## Review (2026-11-25)
+
+Fresh-session review of PR #15 (`git diff 5fe89b5...sprint-4.2`).
+
+**Checked, no change needed**
+- Rules match plan §2.5/§2.6 and `phase-4.md`: `eliminates` (battle royale and generation ≥
+  `battleRoyaleFromGeneration`) gates both the early end of a generation and elimination; the
+  boundary is tested (from 3: generations 1–2 respawn and run 30 ticks, generation 3 eliminates).
+- Determinism: territory sum and recount count use only + and /, are summed in tribe order, are in
+  the world hash and reset at generation start; `battleRoyaleFromGeneration` is in `config.ts`,
+  `hashConfig` and the whole-number list in `config-override.ts`.
+- `runBenchmarkDetailed`: counts the resolved action of every clone alive at a tick's start (in a
+  one-tribe arena nobody dies before acting), and the STAY test pins counts = living clone-ticks.
+- `pnpm analyze` computes the bar as defined: winner = highest tribe score at the last generation,
+  alive = a row there with a next size > 0 (eliminated tribes have none), late score = last three
+  benchmarks, lock-in = last 10 generations below 700, STAY share over living clone-ticks.
+- Every held-out number recomputed from `stats.csv` and `analysis.json` independently of
+  `pnpm analyze`: slot wins 15/7/13/5, the per-seed table (all 40 rows, both columns), 38 of 40,
+  max STAY 70 % / median 18 % (battle royale 72 %), late 2,163 / 3.53 (1,697 / 2.77), 0 lock-ins,
+  population 200 in all 8,000 generations, 1,890 kills (0.24, 0.72 in 191–200). Baseline and
+  development numbers too (slot wins, sizes by slot 50.0/51.4/52.9/45.8, extinction by slot
+  11/7/5/8 %, population 89/302/0 below 200, 2,123/3.58, 2,165/3.66, territory 1.71 %).
+
+**Found and fixed**
+1. **Population could still drop when every tribe died out.** Then every tribe shares by score,
+   and one that gathered no food scores 0 and is held at `minTribeSize`; the leftover rule only
+   gave places to `min` (extinct-with-survivors-elsewhere) tribes, so `[900, 0, 0, 0]` gave
+   100/25/25/25 = 175. Tribes that scored nothing now take leftover places too (new test; the
+   property test's ceiling and "held at min only grows once every scorer is capped" check now
+   cover them). Never happened in this sprint's runs (population 200 everywhere), so golden
+   hashes are unchanged.
+2. **`pnpm analyze` tests couldn't fail for the wrong window.** The trained-run test had exactly
+   three benchmarks and every row below fitness 700, so "mean of all benchmarks" or "lock-in over
+   all rows" passed it; winner ties were never exercised, and the tie-break relied on checkpoint
+   order. `analyzeTribe` and `pickWinner` are now exported with synthetic-row tests (last three
+   of six benchmarks, a 900 just outside / inside the 10-generation window, eliminated-before
+   tribes, ties in reverse order); `pickWinner` sorts by id itself.
+3. **Docs.** Held-out champion mix: moves are 10 % (2.4 % per direction), not 8 %. Development
+   battle royale: 2 tribes alive in 10 seeds and 4 in 4, not 9 and 5. Slot-2 lead: "~40 % of all
+   120 runs" left out the development battle royale (3 of 20); over all 140 runs it is 51, 36 %
+   (here and in the plan revision note). Baseline "19 of 20 seeds" counts tribes that never died
+   out in 101–120 (per generation it is 20 of 20); reworded. Plan §2.5 and `phase-4.md` decision
+   7 name the zero-score case.
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (350 tests in 43 files),
+`pnpm test:browser` (8), `pnpm build`, `pnpm test:e2e` (11) pass locally. `SIM_VERSION` stays 12 (unmerged); golden hashes
+unchanged.

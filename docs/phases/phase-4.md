@@ -52,7 +52,7 @@ wins by default), and, if the experiment works, tribes that call each other for 
 6. **Battle royale has a grace period (Sprint 4.2).** `evolution.battleRoyaleFromGeneration`
    (default 100): eliminations only from then on; before, extinct tribes respawn.
 7. **The population budget is always spent (Sprint 4.2).** Places capped tribes can't take go to
-   extinct tribes, one at a time in index order, up to the cap.
+   extinct tribes (and tribes that scored nothing), one at a time in index order, up to the cap.
 8. **Territory in the tribe outcome is the generation's average (Sprint 4.2).** The world keeps
    the sum of each tribe's recounted % and the number of recounts (both hashed).
 

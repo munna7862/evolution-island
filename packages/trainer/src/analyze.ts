@@ -109,7 +109,13 @@ function mean(values: readonly number[]): number {
   return values.reduce((acc, v) => acc + v, 0) / values.length;
 }
 
-function analyzeTribe(
+/**
+ * One tribe's numbers from the run's stats rows, up to `generation`: tribe score there, alive
+ * (not eliminated: it has a row there and a next size), late score (mean of its last
+ * `LATE_BENCHMARKS` benchmarks) and hard lock-in (best creature below `LOCK_IN_FITNESS` in each
+ * of its last `LOCK_IN_WINDOW` generations).
+ */
+export function analyzeTribe(
   tribeId: number,
   rows: readonly StatsRow[],
   generation: number,
@@ -181,14 +187,7 @@ export function analyzeRun(
     };
   });
 
-  let winner: number | null = null;
-  let best = Number.NEGATIVE_INFINITY;
-  for (const t of tribes) {
-    if (t.tribeScore !== null && t.tribeScore > best) {
-      best = t.tribeScore;
-      winner = t.tribeId;
-    }
-  }
+  const winner = pickWinner(tribes);
   return {
     dir,
     seed: String(manifest.seed),
@@ -199,6 +198,24 @@ export function analyzeRun(
     winner,
     tribesAlive: tribes.filter((t) => t.alive).length,
   };
+}
+
+/**
+ * The tribe (= start slot) with the highest tribe score, ties → lowest id whatever the input
+ * order; tribes without a score (eliminated earlier) can't win. Null if no tribe has a score.
+ */
+export function pickWinner(
+  tribes: readonly Pick<TribeAnalysis, 'tribeId' | 'tribeScore'>[],
+): number | null {
+  let winner: number | null = null;
+  let best = Number.NEGATIVE_INFINITY;
+  for (const t of [...tribes].sort((a, b) => a.tribeId - b.tribeId)) {
+    if (t.tribeScore !== null && t.tribeScore > best) {
+      best = t.tribeScore;
+      winner = t.tribeId;
+    }
+  }
+  return winner;
 }
 
 /** `root` itself if it holds a run, else its sub-folders that do, sorted by name. */

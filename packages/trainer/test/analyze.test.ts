@@ -5,7 +5,9 @@ import { Action, DEFAULT_CONFIG, type SimConfig } from '@evolution-island/sim-co
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   analyzeRun,
+  analyzeTribe,
   findRunDirs,
+  pickWinner,
   formatReport,
   summarize,
   trainSeed,
@@ -110,6 +112,80 @@ describe('analyzeRun', () => {
       },
     };
     expect(() => analyzeRun(dir, tampered)).toThrow(/does not match its config hash/);
+  });
+});
+
+/** A stats row with only what `analyzeTribe` reads set meaningfully. */
+function row(
+  generation: number,
+  tribeId: number,
+  fields: Partial<Pick<StatsRow, 'maxFitness' | 'benchmarkScore' | 'nextSize' | 'tribeScore'>> = {},
+): StatsRow {
+  return {
+    generation,
+    tribeId,
+    population: 50,
+    survivors: 1,
+    deaths: 49,
+    avgFitness: 500,
+    maxFitness: fields.maxFitness ?? 500,
+    foodGathered: 40,
+    territoryPct: 1,
+    kills: 0,
+    tribeScore: fields.tribeScore ?? 41,
+    benchmarkScore: fields.benchmarkScore ?? null,
+    nextSize: fields.nextSize ?? 50,
+  };
+}
+
+// Sprint 4.2 review: the trained-run test above has exactly three benchmarks and every row below
+// fitness 700, so it can't tell "last three" from "all" or the lock-in window from all rows.
+describe('analyzeTribe (Sprint 4.2 review)', () => {
+  const rows = Array.from({ length: 20 }, (_, k) => {
+    const g = k + 1;
+    return row(g, 0, {
+      benchmarkScore: g === 1 || g % 4 === 0 ? 100 * g : null, // 100, 400, 800, …, 2000
+      maxFitness: g === 10 ? 900 : 500, // one good generation, 11 generations before the end
+    });
+  });
+
+  it('late score = mean of the last three benchmarks up to the analysed generation', () => {
+    expect(analyzeTribe(0, rows, 20).lateScore).toBe((1200 + 1600 + 2000) / 3);
+    expect(analyzeTribe(0, rows, 13).lateScore).toBe((400 + 800 + 1200) / 3);
+    expect(analyzeTribe(0, rows, 20).firstBenchmark).toBe(100);
+  });
+
+  it('hard lock-in looks only at the last 10 generations up to the analysed one', () => {
+    expect(analyzeTribe(0, rows, 20).hardLockIn).toBe(true); // generation 10 is outside 11–20
+    expect(analyzeTribe(0, rows, 19).hardLockIn).toBe(false); // 10–19 holds the 900
+  });
+
+  it('alive = has a row at the analysed generation and a next size', () => {
+    const royale = [row(1, 1), row(2, 1, { nextSize: 0 })];
+    expect(analyzeTribe(1, royale, 1).alive).toBe(true);
+    expect(analyzeTribe(1, royale, 2).alive).toBe(false); // eliminated at generation 2
+    const gone = analyzeTribe(1, royale, 3); // eliminated before generation 3
+    expect(gone.alive).toBe(false);
+    expect(gone.tribeScore).toBeNull();
+  });
+});
+
+describe('pickWinner', () => {
+  it('takes the highest score, ties → lowest id whatever the order, skips missing scores', () => {
+    expect(
+      pickWinner([
+        { tribeId: 2, tribeScore: 90 },
+        { tribeId: 1, tribeScore: 90 },
+        { tribeId: 0, tribeScore: 10 },
+      ]),
+    ).toBe(1);
+    expect(
+      pickWinner([
+        { tribeId: 0, tribeScore: null },
+        { tribeId: 3, tribeScore: 5 },
+      ]),
+    ).toBe(3);
+    expect(pickWinner([{ tribeId: 0, tribeScore: null }])).toBeNull();
   });
 });
 

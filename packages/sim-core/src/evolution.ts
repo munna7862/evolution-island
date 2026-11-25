@@ -149,10 +149,11 @@ export type TribeAllocation =
  * Splits `budget` creatures between tribes in proportion to their scores (plan §2.5), each share
  * clamped to [min, max]: share_i = clamp(λ·score_i, min, max), with the one scale λ that makes the
  * shares add up to the budget ("water filling"). Integer sizes by largest remainder (ties → lower
- * index). Places the scoring tribes can't take because of `max` go to the `min` tribes, one at a
- * time in index order. The total equals the budget whenever the clamps allow it; otherwise every
- * tribe sits at the clamp nearest the budget. Non-positive scores count as 0 (such a tribe gets `min`); if no
- * tribe scored, the budget is split evenly.
+ * index). Non-positive scores count as 0 (such a tribe gets `min`); if no tribe scored, the budget
+ * is split evenly. Places the scoring tribes can't take because of `max` go to the tribes held at
+ * `min` (extinct, or scored nothing), one at a time in index order, up to `max`. The total equals
+ * the budget whenever the clamps allow it; otherwise every tribe sits at the clamp nearest the
+ * budget.
  */
 export function allocateTribeSizes(
   tribes: readonly TribeAllocation[],
@@ -195,13 +196,16 @@ export function allocateTribeSizes(
     sizes[i] = sizes[i]! + 1;
     left--;
   }
-  // Places the scoring tribes can't take (all at `max`) go to the extinct ones, one at a time
-  // in index order, up to `max` (Sprint 4.2): otherwise Medium shrank to 3 × 25 + 100 = 175
-  // whenever one tribe alone survived (plan §2.5).
-  const minTribes = tribes.flatMap((t, i) => (t.kind === 'min' ? [i] : []));
+  // Places the scoring tribes can't take (all at `max`) go to the tribes held at `min`, one at a
+  // time in index order, up to `max` (Sprint 4.2): otherwise Medium shrank to 3 × 25 + 100 = 175
+  // whenever one tribe alone survived (plan §2.5). A tribe that scored nothing (every tribe died
+  // out, it gathered no food) is held at `min` like an extinct one, so it takes them too.
+  const heldAtMin = tribes.flatMap((t, i) =>
+    t.kind === 'min' || (t.kind === 'share' && anyScore && rawScore(i) === 0) ? [i] : [],
+  );
   for (let open = true; left > 0 && open;) {
     open = false;
-    for (const i of minTribes) {
+    for (const i of heldAtMin) {
       if (left === 0) break;
       if (sizes[i]! >= max) continue;
       sizes[i] = sizes[i]! + 1;
