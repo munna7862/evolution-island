@@ -1,7 +1,7 @@
 import { Action, ACTION_COUNT } from './actions.js';
-import type { SimConfig } from './config.js';
+import type { SignalConfig, SimConfig } from './config.js';
 import type { Creature } from './creature.js';
-import { readSensors, SENSOR_COUNT } from './sensors.js';
+import { CALL_SENSOR_COUNT, readCallSensors, readSensors, SENSOR_COUNT } from './sensors.js';
 import type { DecisionPolicy } from './world.js';
 
 /**
@@ -52,26 +52,32 @@ const ACTION_BY_INDEX: readonly Action[] = [
   Action.SHARE,
 ];
 
+/** Call outputs when signals are on (Sprint 4.3): one, after the memory outputs. */
+export const CALL_OUTPUT_COUNT = 1;
+
 export function brainSpecFromConfig(config: SimConfig): BrainSpec {
   const memory = config.brain.memoryNeurons;
   if (!Number.isSafeInteger(memory) || memory < 0) {
     throw new RangeError(`brain.memoryNeurons must be a whole number ≥ 0, got ${memory}`);
   }
+  const signals = config.signals.enabled;
   return {
     formatVersion: BRAIN_FORMAT_VERSION,
-    inputs: SENSOR_COUNT + memory,
+    inputs: SENSOR_COUNT + memory + (signals ? CALL_SENSOR_COUNT : 0),
     hidden: config.brain.hiddenNeurons,
-    outputs: ACTION_COUNT + memory,
+    outputs: ACTION_COUNT + memory + (signals ? CALL_OUTPUT_COUNT : 0),
   };
 }
 
 /**
- * Memory neurons of a brain spec: its inputs beyond the sensors, which must match its outputs
- * beyond the actions. Throws for a spec the creature brain can't run.
+ * Memory neurons of a brain spec: its inputs beyond the sensors (and the call inputs, when
+ * `signals`), which must match its outputs beyond the actions (and the call output). Throws for
+ * a spec the creature brain can't run. Sizes alone can't tell whether a brain has signals, so the
+ * caller says (from its config).
  */
-export function memoryNeuronCount(spec: BrainSpec): number {
-  const memoryInputs = spec.inputs - SENSOR_COUNT;
-  const memoryOutputs = spec.outputs - ACTION_COUNT;
+export function memoryNeuronCount(spec: BrainSpec, signals = false): number {
+  const memoryInputs = spec.inputs - SENSOR_COUNT - (signals ? CALL_SENSOR_COUNT : 0);
+  const memoryOutputs = spec.outputs - ACTION_COUNT - (signals ? CALL_OUTPUT_COUNT : 0);
   if (memoryInputs < 0) {
     throw new RangeError(`Brain has ${spec.inputs} inputs, needs at least ${SENSOR_COUNT}`);
   }
@@ -241,12 +247,27 @@ export function storeMemoryOutputs(outputs: ArrayLike<number>, memory: Float32Ar
  * (Sprint 3.2 gives every creature its own genome from its tribe's gene pool).
  * Genomes are length-checked per call; validate their values once with `validateGenome`.
  */
+/**
+ * The call a creature makes from its raw call output (Sprint 4.3): `max(0, softsign(x))`, so
+ * 0..1, and 0 (silent) below `callThreshold`. A zero-weight output gives 0: a migrated genome
+ * never calls.
+ */
+export function callValue(output: number, callThreshold: number): number {
+  const call = Math.max(0, softsign(output));
+  return call >= callThreshold ? call : 0;
+}
+
 export function createBrainPolicy(
   spec: BrainSpec,
   genomeFor: (creature: Creature) => Float32Array,
+  signals?: SignalConfig,
 ): DecisionPolicy {
   validateBrainSpec(spec);
-  const memorySize = memoryNeuronCount(spec);
+  const hasSignals = signals?.enabled === true;
+  const memorySize = memoryNeuronCount(spec, hasSignals);
+  const callInputs = SENSOR_COUNT + memorySize;
+  const callOutput = ACTION_COUNT + memorySize;
+  const callThreshold = signals?.callThreshold ?? 0;
 
   const expectedWeights = weightCount(spec);
   const inputs = new Float32Array(spec.inputs);
@@ -267,8 +288,18 @@ export function createBrainPolicy(
     }
     readSensors(world, creature, inputs);
     inputs.set(memory, SENSOR_COUNT);
+    if (hasSignals) readCallSensors(world, creature, inputs, callInputs);
     const outputs = forwardPass(spec, genome, inputs, scratch);
     storeMemoryOutputs(outputs, memory);
+    if (hasSignals) creature.nextCall = callValue(outputs[callOutput]!, callThreshold);
     return argmaxAction(outputs);
   };
+}
+
+/** `createBrainPolicy` for a config's brain (memory and signals as the config says). */
+export function brainPolicyForConfig(
+  config: SimConfig,
+  genomeFor: (creature: Creature) => Float32Array,
+): DecisionPolicy {
+  return createBrainPolicy(brainSpecFromConfig(config), genomeFor, config.signals);
 }

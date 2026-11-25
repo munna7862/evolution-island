@@ -287,3 +287,72 @@ export function readSensors(world: World, creature: Creature, out?: Float32Array
 
   return sensors;
 }
+
+/** Inputs the call sensors add after the memory inputs when signals are on (Sprint 4.3). */
+export const CALL_SENSOR_COUNT = 3;
+
+/**
+ * "Loudest ally call" sensors (plan §2.3 "Signals"), written to `out[offset..offset+2]`: the
+ * strongest call heard from a living ally (same tribe, not itself) within `signals.callRadius`
+ * — heard strength = call × (1 − distance ÷ callRadius), ties → lowest id — and its offset
+ * (dx, dy) ÷ callRadius; (0, 0, 0) if nothing is heard. Reads the calls committed last tick
+ * (`creature.call`), so the order creatures decide in doesn't matter. Enemies' calls are not heard.
+ */
+export function readCallSensors(
+  world: World,
+  creature: Creature,
+  out: Float32Array,
+  offset: number,
+): void {
+  const radius = world.config.signals.callRadius;
+  out[offset] = 0;
+  out[offset + 1] = 0;
+  out[offset + 2] = 0;
+  if (!(radius > 0) || !Number.isFinite(radius)) return;
+
+  const grid = world.ensureGrid();
+  const head = grid.getHead();
+  const next = grid.getNext();
+  const creatures = grid.getCreatures();
+  const cellSize = grid.cellSize;
+  const cx = creature.x;
+  const cy = creature.y;
+  const minGx = Math.max(0, Math.floor((cx - radius) / cellSize));
+  const maxGx = Math.min(grid.cols - 1, Math.floor((cx + radius) / cellSize));
+  const minGy = Math.max(0, Math.floor((cy - radius) / cellSize));
+  const maxGy = Math.min(grid.rows - 1, Math.floor((cy + radius) / cellSize));
+  const r2 = radius * radius;
+
+  let best = 0;
+  let bestId = Number.POSITIVE_INFINITY;
+  let bestDx = 0;
+  let bestDy = 0;
+  for (let gy = minGy; gy <= maxGy; gy++) {
+    for (let gx = minGx; gx <= maxGx; gx++) {
+      let idx = head[gy * grid.cols + gx]!;
+      while (idx !== -1) {
+        const other = creatures[idx]!;
+        idx = next[idx]!;
+        if (!other.alive || other.id === creature.id || other.tribeId !== creature.tribeId)
+          continue;
+        if (!(other.call > 0)) continue;
+        const dx = other.x - cx;
+        const dy = other.y - cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > r2) continue;
+        const heard = other.call * (1 - Math.sqrt(d2) / radius);
+        if (heard > best || (heard === best && heard > 0 && other.id < bestId)) {
+          best = heard;
+          bestId = other.id;
+          bestDx = dx;
+          bestDy = dy;
+        }
+      }
+    }
+  }
+  if (best > 0) {
+    out[offset] = best;
+    out[offset + 1] = bestDx / radius;
+    out[offset + 2] = bestDy / radius;
+  }
+}

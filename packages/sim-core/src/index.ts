@@ -25,6 +25,7 @@ export {
   type MapPresetId,
   type SelectionMode,
   type SensorConfig,
+  type SignalConfig,
   type SimConfig,
   type TerritoryConfig,
   type TribeScoreWeights,
@@ -78,11 +79,20 @@ export {
   type TribeSpawn,
 } from './world.js';
 export { SpatialGrid } from './spatial-grid.js';
-export { readSensors, SENSOR_COUNT, SensorIndex } from './sensors.js';
+export {
+  CALL_SENSOR_COUNT,
+  readCallSensors,
+  readSensors,
+  SENSOR_COUNT,
+  SensorIndex,
+} from './sensors.js';
 export {
   argmaxAction,
   BRAIN_FORMAT_VERSION,
   brainSpecFromConfig,
+  brainPolicyForConfig,
+  CALL_OUTPUT_COUNT,
+  callValue,
   createBrainPolicy,
   createBrainScratch,
   createZeroGenome,

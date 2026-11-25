@@ -227,6 +227,10 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.sensor.countNormalization)
     .writeFloat64(config.sensor.foodNormalization)
     .writeFloat64(config.sensor.minVisibleFood)
+    .writeBoolean(config.signals.enabled)
+    .writeFloat64(config.signals.callThreshold)
+    .writeFloat64(config.signals.callRadius)
+    .writeFloat64(config.signals.callCost)
     .writeUint32(config.brain.hiddenNeurons)
     .writeUint32(config.brain.memoryNeurons);
 
@@ -303,7 +307,11 @@ export function hashWorld(world: World): string {
   hasher.writeString(hashConfig(world.config));
   writeWorldState(hasher, world);
   for (const c of world.creatures) {
-    hasher.writeFloat32Array(c.genome).writeFloat32Array(c.memory);
+    hasher
+      .writeFloat32Array(c.genome)
+      .writeFloat32Array(c.memory)
+      .writeFloat64(c.call)
+      .writeFloat64(c.nextCall);
   }
   return hasher.digest();
 }

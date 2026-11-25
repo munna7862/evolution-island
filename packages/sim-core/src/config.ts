@@ -113,6 +113,18 @@ export interface SensorConfig {
   readonly minVisibleFood: number;
 }
 
+/** Calls (plan §2.3 "Signals", Sprint 4.3). */
+export interface SignalConfig {
+  /** Adds 1 call output and 3 "loudest ally call" inputs to the brain. */
+  readonly enabled: boolean;
+  /** A call (0..1) below this is silent. */
+  readonly callThreshold: number;
+  /** Allies within this distance (tiles, Euclidean) hear a call; farther than vision. */
+  readonly callRadius: number;
+  /** Energy a creature pays for each tick it calls. */
+  readonly callCost: number;
+}
+
 export interface BrainConfig {
   /** Hidden-layer size of the fixed-topology MLP (plan §2.4). */
   readonly hiddenNeurons: number;
@@ -190,6 +202,7 @@ export interface SimConfig {
   readonly food: FoodConfig;
   readonly territory: TerritoryConfig;
   readonly sensor: SensorConfig;
+  readonly signals: SignalConfig;
   readonly brain: BrainConfig;
   readonly evolution: EvolutionConfig;
 }
@@ -349,6 +362,13 @@ export const DEFAULT_CONFIG: SimConfig = {
     countNormalization: 5,
     foodNormalization: 160,
     minVisibleFood: 20, // one full bite (creature.eatBiteSize)
+  },
+  // Off unless the Sprint 4.3 A/B shows calls help (plan §2.3, §4).
+  signals: {
+    enabled: false,
+    callThreshold: 0.5,
+    callRadius: 16,
+    callCost: 0.1,
   },
   brain: {
     hiddenNeurons: 12,

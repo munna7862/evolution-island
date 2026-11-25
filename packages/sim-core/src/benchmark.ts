@@ -1,5 +1,5 @@
 import { ACTION_COUNT } from './actions.js';
-import { brainSpecFromConfig, createBrainPolicy, validateGenome } from './brain.js';
+import { brainPolicyForConfig, brainSpecFromConfig, validateGenome } from './brain.js';
 import type { MapPresetId, SimConfig } from './config.js';
 import { creatureFitness } from './fitness.js';
 import { generateMap } from './map/generator.js';
@@ -54,7 +54,7 @@ export function runBenchmarkDetailed(arena: BenchmarkArena, genome: Float32Array
     config,
     map,
     populate: false,
-    policy: createBrainPolicy(spec, (c) => c.genome),
+    policy: brainPolicyForConfig(config, (c) => c.genome),
   });
   const clones = config.presets[preset].startingCreaturesPerTribe;
   const tribeId = map.spawnZones[0]!.tribeId;

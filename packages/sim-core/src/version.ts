@@ -29,5 +29,8 @@
  * 12 = Sprint 4.2: battle royale eliminates only from `battleRoyaleFromGeneration`; places a capped
  *     leader can not take go to extinct tribes; the tribe outcome uses territory % averaged over
  *     the generation (sum and recount count in the world hash).
+ * 13 = Sprint 4.3: signals (`signals.enabled`, off by default): call output and 3 "loudest ally
+ *     call" inputs; calls committed after metabolism and heard next tick, with a per-tick cost;
+ *     creatures' calls in the world hash.
  */
-export const SIM_VERSION = 12;
+export const SIM_VERSION = 13;

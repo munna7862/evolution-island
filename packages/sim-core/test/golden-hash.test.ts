@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   argmaxAction,
+  brainPolicyForConfig,
   brainSpecFromConfig,
   createBrainPolicy,
   createBrainScratch,
@@ -89,6 +90,16 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     const genome = goldenBrainGenome(spec);
     const policy = createBrainPolicy(spec, () => genome);
     expect(hashesAt(GOLDEN.brainPolicy, policy)).toEqual(GOLDEN.brainPolicy);
+  });
+
+  it('reproduce the pinned world hashes with signals on (calls, hearing, cost)', () => {
+    const config: SimConfig = {
+      ...DEFAULT_CONFIG,
+      signals: { ...DEFAULT_CONFIG.signals, enabled: true },
+    };
+    const genome = goldenBrainGenome(brainSpecFromConfig(config));
+    const policy = brainPolicyForConfig(config, () => genome);
+    expect(hashesAt(GOLDEN.signalsPolicy, policy, config)).toEqual(GOLDEN.signalsPolicy);
   });
 
   it('reproduce the pinned world hashes with memory switched off (18 → 12 → 9 brain)', () => {
