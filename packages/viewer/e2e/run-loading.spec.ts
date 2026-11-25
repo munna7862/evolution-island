@@ -300,6 +300,61 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('the dashboard updates at each generation end, as Node computes (Sprint 6.1)', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page);
+    await page.goto('/?paused=1&speed=max');
+    await expect(page.locator('#dashboard')).toBeHidden();
+    await page.locator('#run-input').setInputFiles(join(runsDir, 'small-1'));
+    await waitForCheckpoint(page, 'Gen 3 · small-1', 3);
+    await expect(page.locator('#dashboard')).toBeVisible();
+    await expect(page.locator('#dash-generation')).toHaveText('No generation finished yet');
+
+    // Node: the same run, two generations on, and the ticks at each end.
+    const node = nodeRunFrom(checkpointDir(1, 3));
+    const start = node.world.tickCount;
+    node.runGeneration();
+    const firstEnd = node.world.tickCount - start;
+    node.runGeneration();
+    const secondEnd = node.world.tickCount - start;
+    const expectedRows = (generation: number) =>
+      node.tribes
+        .map((t) => {
+          const h = t.history.find((x) => x.generation === generation)!;
+          return {
+            tribeId: t.id,
+            tribeScore: h.tribeScore,
+            kills: h.kills,
+            avgFitness: h.avgFitness,
+            territoryPct: h.territoryPct,
+          };
+        })
+        .sort((a, b) => b.tribeScore - a.tribeScore || a.tribeId - b.tribeId);
+    const shownRows = () =>
+      page.evaluate(() =>
+        window.__ei!.dashboard.rows.map((r) => ({
+          tribeId: r.tribeId,
+          tribeScore: r.tribeScore,
+          kills: r.kills,
+          avgFitness: r.avgFitness,
+          territoryPct: r.territoryPct,
+        })),
+      );
+
+    await runTo(page, start + firstEnd);
+    await expect.poll(() => page.evaluate(() => window.__ei!.dashboard.generation)).toBe(3);
+    expect(await shownRows()).toEqual(expectedRows(3));
+    await expect(page.locator('#dash-generation')).toHaveText('Generation 3 finished');
+    await expect(page.locator('#dash-rows tr')).toHaveCount(2);
+
+    await runTo(page, start + secondEnd);
+    await expect.poll(() => page.evaluate(() => window.__ei!.dashboard.generation)).toBe(4);
+    expect(await shownRows()).toEqual(expectedRows(4));
+    await expect(page.locator('#dash-generation')).toHaveText('Generation 4 finished');
+    expect(errors).toEqual([]);
+  });
+
   test('plays a checkpoint folder dropped on the map', async ({ page }) => {
     const errors = trackErrors(page);
     await page.goto('/?paused=1&speed=max');

@@ -679,3 +679,5 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Replay files (`evolution-island/replay`): full config + hash, preset, seed, start (a run state with every genome), ticks, `run.hash()` every 500 ticks (default) and at the end, spectator events (none exist yet; refused until Sprint 7.2 defines them). `pnpm replay export / verify`; the viewer loads, checks and exports replays.
 - Cross-engine: the browser suite runs in Chromium, Firefox and WebKit; a pinned replay reaches the same final hash in Node and all three (plan §4 Sprint 5.2 met). CI installs the three browsers. No rule changed (`simVersion` 13).
 
+**2026-11-25 — Sprint 6.1 (live dashboard)**
+- Leaderboard (live population; territory %, kills, average fitness, latest benchmark per finished generation), generation counter, charts of average fitness, benchmark and population per tribe, fed by the worker at each generation end. §3.1: charts are drawn on a canvas by the viewer instead of uPlot (three small line charts don't justify a dependency). No rule changed (`simVersion` 13).

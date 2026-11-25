@@ -1,3 +1,4 @@
+import type { DashboardState } from './dashboard.js';
 import type { ReplayStatus } from '@evolution-island/shared';
 import type { SimSpeed } from '@evolution-island/shared';
 import type { MapPresetId, Seed } from '@evolution-island/sim-core';
@@ -52,6 +53,8 @@ export interface EvolutionIslandDebugState {
   /** Last message about loading a run ('' if none); `runMessageIsError` marks refusals. */
   readonly runMessage: string;
   readonly runMessageIsError: boolean;
+  /** Live dashboard (Sprint 6.1): the last finished generation's leaderboard. */
+  readonly dashboard: DashboardState;
 }
 
 export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {
