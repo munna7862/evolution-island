@@ -26,6 +26,7 @@ export {
   type SelectionMode,
   type SensorConfig,
   type SimConfig,
+  type TerritoryConfig,
   type TribeScoreWeights,
 } from './config.js';
 export { hashConfig, hashMap, hashWorld, hashWorldState, StateHasher } from './hash.js';
@@ -69,6 +70,7 @@ export {
 export {
   createWorld,
   NO_CREATURE,
+  NO_OWNER,
   randomActionPolicy,
   World,
   type CreateWorldOptions,

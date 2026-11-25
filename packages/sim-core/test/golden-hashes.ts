@@ -1,4 +1,12 @@
-import { weightCount, type BrainSpec } from '../src/index.js';
+import {
+  Biome,
+  createWorld,
+  randomActionPolicy,
+  weightCount,
+  type BrainSpec,
+  type World,
+} from '../src/index.js';
+import { makeMiniMap } from './mini-map.js';
 
 /**
  * Golden state hashes for fixed scenarios, checked by golden-hash.test.ts in Node (`pnpm test`)
@@ -11,15 +19,15 @@ import { weightCount, type BrainSpec } from '../src/index.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 10,
+  simVersion: 11,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: 'ae3b8336483d0288',
-    100: '762ac3f99274e6bc',
-    600: '1904290e50c606fc',
+    0: '847292cbd10c4481',
+    100: 'bcb7442960d9fe2e',
+    600: '4d92fc652049a1ef',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome` of the default
@@ -28,8 +36,8 @@ export const GOLDEN = {
    * creatures have died by tick 600, so deaths are covered too.
    */
   brainPolicy: {
-    100: 'd5e3cccb8693ba2d',
-    600: '2b5df2a43876ddb4',
+    100: 'f2c3492cee0729d5',
+    600: '9087ac1ba1f22d3d',
   },
   /**
    * Running digest of every input vector (sensors + memory) and every raw forward-pass output
@@ -45,8 +53,8 @@ export const GOLDEN = {
    * 18 → 12 → 9, 333 weights). 26 of the 50 creatures have died by tick 600 (all by 700).
    */
   noMemoryPolicy: {
-    100: '8cbdabceac6afa8e',
-    600: 'b449d4d13e4c041c',
+    100: '427ab268562bb994',
+    600: '5254f6288e0db199',
   },
   /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
@@ -54,9 +62,19 @@ export const GOLDEN = {
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: '2ffe2bd27b697de9',
-    3: '2efbe3c44ec5d4bc',
-    4: 'b63e36b3aca38cbf',
+    2: 'e0d2a3e9e2e23410',
+    3: 'ca50dce930fc4042',
+    4: 'c748d2d67fcd68d2',
+  },
+  /**
+   * `world.hash()` of `brawlWorld()` (a 7×7 grass block packed with 3 tribes, random policy,
+   * seed 42) after N ticks: adds combat (deaths inside Phase B, kill credit and loot), sharing and
+   * territory. By tick 60: 23 kills, 8 valid shares, 23 of 37 creatures dead, territory
+   * 42.9 / 40.8 / 16.3 %.
+   */
+  brawl: {
+    20: '470b134939d42647',
+    60: 'c8e86c6018cbc346',
   },
 } as const;
 
@@ -72,4 +90,25 @@ export function goldenBrainGenome(spec: BrainSpec): Float32Array {
     weights[i] = (((i * 7919) % 97) - 48) / 24;
   }
   return weights;
+}
+
+/**
+ * The `brawl` scenario: 37 creatures of tribes 0–2 on a 7×7 grass block (every 4th tile left
+ * free), every 5th one starting hungry (energy 30) so valid shares happen, random policy.
+ */
+export function brawlWorld(): World {
+  const map = makeMiniMap(Array.from({ length: 7 }, () => new Array<Biome>(7).fill(Biome.Grass)));
+  const world = createWorld({
+    preset: 'small',
+    seed: 42,
+    map,
+    populate: false,
+    policy: randomActionPolicy,
+  });
+  for (let i = 0; i < 49; i++) {
+    if (i % 4 === 3) continue;
+    const creature = world.spawnCreature(i % 3, i % 7, Math.floor(i / 7))!;
+    if (i % 5 === 0) creature.energy = 30;
+  }
+  return world;
 }

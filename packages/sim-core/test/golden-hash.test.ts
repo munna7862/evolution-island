@@ -18,7 +18,7 @@ import {
   type DecisionPolicy,
   type SimConfig,
 } from '../src/index.js';
-import { GOLDEN, goldenBrainGenome } from './golden-hashes.js';
+import { brawlWorld, GOLDEN, goldenBrainGenome } from './golden-hashes.js';
 
 /**
  * The same steps as `createBrainPolicy` (sensors and memory → forward pass → memory, argmax), but
@@ -118,6 +118,18 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     // Same world as the brainPolicy scenario, so the recording policy decides like the real one.
     expect(worldHashes).toEqual(GOLDEN.brainPolicy);
     expect(digests).toEqual(GOLDEN.brainOutputs);
+  });
+
+  it('reproduce the pinned brawl hashes (combat, kills, sharing, territory)', () => {
+    const world = brawlWorld();
+    const actual: Record<number, string> = {};
+    for (const target of [20, 60] as const) {
+      while (world.tickCount < target) world.tick();
+      actual[target] = world.hash();
+    }
+    expect(actual).toEqual(GOLDEN.brawl);
+    expect(world.creatures.reduce((acc, c) => acc + c.stats.kills, 0)).toBe(23);
+    expect(world.creatures.reduce((acc, c) => acc + c.stats.alliesHelped, 0)).toBe(8);
   });
 
   it('reproduce the pinned evolution-run hashes (genetic algorithm + benchmark arena)', () => {

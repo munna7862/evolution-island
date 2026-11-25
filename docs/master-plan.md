@@ -101,7 +101,7 @@ Plus 2 memory inputs (on by default since Sprint 3.5) and, optionally, signal in
 
 - Invalid actions (eat with no food, walk into a mountain or occupied tile) become `STAY`.
 - `ATTACK` hits the adjacent enemy (8-neighbourhood) with the lowest health (tie → lowest id) for `attackDamage`. The killing blow gets the kill and a fraction of the victim's remaining energy.
-- `SHARE` gives `shareAmount` energy to the adjacent ally with the lowest energy, at `shareEfficiency` (e.g. 80%), **only if that ally is below 50% energy** — prevents two allies passing energy back and forth to farm fitness.
+- `SHARE` gives `shareAmount` energy to the adjacent ally with the lowest energy, at `shareEfficiency` (e.g. 80%), **only if that ally is below 50% energy and the giver keeps at least 50% after giving** — prevents two allies passing energy back and forth to farm fitness. *(Sprint 4.1 added the giver rule: with the recipient rule alone, two allies both below 50% could still pass energy back and forth.)*
 
 **Memory & signals (experiments — Sprints 3.5 and 4.3; memory kept and on by default since 3.5, signals off):**
 - **Memory (Sprint 3.5):** 2 extra outputs, squashed to −1..1, are fed back as 2 extra inputs on the next tick. A creature can keep heading toward water that has gone out of sight, or "remember" being attacked. No meaning is programmed in — evolution decides what the values are used for. *Measured (Sprint 3.5):* evolved champions mostly use it to change what they do when nothing in sight changes (to search instead of walking straight); zeroing their memory inputs cuts their arena score to 0.34–0.60×.
@@ -130,7 +130,7 @@ Written from scratch in TypeScript (small, fast, no dependency risk).
   `fitness = ticksAlive + 2·foodEaten + 1·waterDrunk + 5·alliesHelped + 10·kills`
   (weights are tunable in config — reward design is part of the fun; `alliesHelped` and `kills` stay 0 until Sprint 4.1).
   - `foodEaten` / `waterDrunk` = energy / hydration **actually gained** (capped at max) ÷ bite size — not the number of `EAT`/`DRINK` actions. Otherwise a creature standing in a lake spamming `DRINK` earns +1 every tick.
-  - `alliesHelped` = valid `SHARE`s only (recipient below 50% energy), capped per generation.
+  - `alliesHelped` = valid `SHARE`s only (recipient below 50% energy, giver keeps ≥ 50%; §2.3), capped per generation.
   - Optional tribe term `+ w·tribeScore` (default 0; switched on in Sprint 4.3): shares the tribe's success with every member, which helps cooperation evolve. Useful calls only evolve when helping the tribe also pays off for the caller.
 - At generation end, per tribe:
   1. Rank creatures by fitness (ties → lower id). Dead creatures keep the fitness they earned.
@@ -145,7 +145,7 @@ Written from scratch in TypeScript (small, fast, no dependency risk).
 - **Benchmark arena:** tribes co-evolve, so raw fitness rises and falls with the arms race and is a poor progress signal. At generation 1 and every N generations, each tribe's champion runs in a **fixed scenario** (fixed seed; alone while foraging-only, later against a frozen reference tribe) and the score is recorded. This is the "is it actually learning?" metric. *Foraging-only arena (Sprint 3.2):* a fixed-seed map of the run's preset, the champion cloned `startingCreaturesPerTribe` times into tribe 0's start zone, one generation; score = the clones' mean fitness (cloning averages out spawn luck).
 
 ### 2.6 Tribes & competition
-- **Territory:** a tile belongs to the tribe that last visited it, but ownership **fades** after `territoryDecayTicks` without a visit — territory means sustained presence, not a trail of footprints. Territory % = owned walkable tiles ÷ walkable tiles, recalculated every K ticks.
+- **Territory:** a tile belongs to the tribe that last visited it, but ownership **fades** after `territory.decayTicks` (300) without a visit — territory means sustained presence, not a trail of footprints. Every living creature stamps its tile each tick. Territory % = owned walkable tiles ÷ walkable tiles, recalculated every `territory.updateInterval` (10) ticks; all tribes together hold ≤ 100 %.
 - **Combat:** `ATTACK` on an adjacent enemy deals damage; the kill gives the attacker energy (rules in §2.3).
 - **Cooperation:** `SHARE` transfers energy to an adjacent ally in need (rules in §2.3).
 - **Tribe score** (drives next-generation tribe size): survivors + food gathered + territory %, weights in config.
@@ -243,13 +243,14 @@ function tick(world: World) {
   // Phase B — resolve in a seeded shuffled order (no permanent id advantage)
   for (const c of world.rng.tick.shuffle(world.livingCreatures())) {
     if (!c.alive) continue;                // may have been killed earlier this tick
-    applyAction(world, c, c.intent);       // validated by rules; occupancy & territory stamps updated live
+    applyAction(world, c, c.intent);       // validated by rules; occupancy updated live (a kill frees the tile at once)
   }
 
   for (const c of world.livingCreatures()) applyMetabolism(c);  // drain, regen, age, death
   world.commitMemoryAndCalls();            // this tick's memory & calls become readable next tick
-  if (world.tickCount % config.territoryInterval === 0) world.updateTerritory();  // fade old stamps, recount %
-  world.tickCount++;
+  for (const c of world.livingCreatures()) world.stampTerritory(c);  // owner = tribe, stamp = tickCount
+  if (world.generationTick % config.territory.updateInterval === 0) world.updateTerritory();  // fade old stamps, recount %
+  world.tickCount++; world.generationTick++;
   if (world.generationOver()) runGenerationEnd(world);          // length reached or all dead
 }
 ```
@@ -644,3 +645,10 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - §2.3/§2.4: `brain.memoryNeurons` = 2 in `DEFAULT_CONFIG` (the user's decision before the run, should it pass): the default brain is 20 → 12 → 11 = 383 weights. 0 switches memory off; the memory-off brain stays pinned in the golden hashes.
 - What memory does: zeroing the memory inputs of the evolved champions cuts their arena score to 0.60× (normal) and 0.34× (sparse); with no water in sight they repeat their last move 64 % of the time, muted 92 %, memory-off champions 91 %. Memory mostly lets a creature search instead of walking straight, more than it stores where water was. The arms also differ in brain size (383 vs 333 weights); no capacity-matched control was run.
 - Every run trained before is unplayable in the viewer (new `simVersion` and config hash) until Sprint 5.1 migrates run files. Trainer speed on Medium ~30 % lower (bigger brain, more creatures alive), still ~8× the §3.6 target.
+
+**2026-11-25 — Sprint 4.1 (combat, sharing, territory)** (`simVersion` 10 → 11)
+- `ATTACK` and `SHARE` act as §2.3 describes; a creature killed by an `ATTACK` dies at once inside Phase B (its tile frees up, its own action and metabolism are skipped). First values (tuned in 4.2): `attackDamage` 20, `killEnergyFraction` 0.5, `shareAmount` 10, `shareEfficiency` 0.8.
+- §2.3 `SHARE`: **the giver must keep ≥ 50 % energy** (`shareKeepRatio`), in addition to the recipient being below 50 % (`shareNeedRatio`). With the recipient rule alone two hungry allies could pass energy back and forth, each pass earning the giver +5 fitness for free when thirst, not hunger, limits their lives. Property-tested: energy never flows back between two allies unless the recipient gains energy some other way (eating, a kill's loot).
+- §2.6 territory: per-tile owner + last-visit stamp, decay 300 ticks, recount every 10 ticks, cleared at generation start; reported in generation stats; tribe-score weight stays 0 until 4.2. At generation end it is tiny (Medium: 0.3–1.4 % for all tribes together), because few creatures are alive then; 4.2 may average it over the generation.
+- Combat barely happens yet (Small: ≈ 0.03 kills per generation per seed; Medium: ≤ 0.4); learning on Small is unchanged (50 held-out seeds: tribe score 0.98× Sprint 3.5's, within noise).
+- The seed-42 regression test scores each tribe by the mean of its generation 80/90/100 benchmarks (user's decision): with sharing on, tribe 1's single generation-100 champion fell to 1.31× while generations 80 and 90 were 2.31× and 2.17×.

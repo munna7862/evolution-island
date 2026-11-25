@@ -23,5 +23,8 @@
  *     M inputs and M outputs, creatures carry memory written in Phase A and read on the next
  *     tick, and the world hash covers memory. With memory off creatures behave as in version 8.
  * 10 = Sprint 3.5 result: memory on by default (`brain.memoryNeurons` 2, brain 20 → 12 → 11).
+ * 11 = Sprint 4.1: `ATTACK` (damage, deaths inside Phase B, kill credit and energy) and `SHARE`
+ *     (need/keep rules, efficiency, alliesHelped) act; territory stamps, decay and territory %
+ *     (in the world hash and the tribe outcome).
  */
-export const SIM_VERSION = 10;
+export const SIM_VERSION = 11;

@@ -81,7 +81,8 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
     drain, generation lengths, tournament selection, ±1 initial weights, σ 0.6.
 11. **"It learns" is pinned on seed 42.** `evolution-learns.test.ts` runs Small seed 42 for 100
     generations and requires the Sprint 3.4 bar there (mean ≥ 2× generation 1 and ≥ 2× a STAY-only
-    brain, every tribe ≥ 1.5×), so a change that slows learning fails `pnpm test`.
+    brain, every tribe ≥ 1.5×; since Sprint 4.1 on each tribe’s mean benchmark of generations
+    80–100), so a change that slows learning fails `pnpm test`.
 12. **Memory neurons (Sprint 3.5).** `brain.memoryNeurons` M (default 0 = off) appends M inputs
     after the 18 sensors and M outputs after the 9 actions (M = 2: 20 → 12 → 11, 383 weights).
     The brain policy reads the creature's `memory` as inputs and stores the softsign-squashed
