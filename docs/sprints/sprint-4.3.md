@@ -64,3 +64,32 @@ Tribes rarely meet before ~200 generations (kills 0.72 per generation per seed l
 
 - Enemies overhearing calls (open decision, plan §10: "no" for v1).
 - A tribe-score fitness term (see above).
+
+## Acceptance bar (fixed before the held-out run)
+
+Chosen by the user on 2026-11-25, before any held-out seed was run and before signals-on was
+trained on any seed. Held-out Small seeds **401–450**, each arm run **once**; tribe score = mean of
+its last three benchmarks (as in Sprint 3.5); memory on in both arms; config files in
+`docs/sprints/sprint-4.3/`:
+
+```
+pnpm train --preset small --seeds 401-450 --generations 100 --config docs/sprints/sprint-4.3/signals-off.json --out runs/s43-normal-off
+pnpm train --preset small --seeds 401-450 --generations 100 --config docs/sprints/sprint-4.3/signals-on.json --out runs/s43-normal-on
+pnpm train --preset small --seeds 401-450 --generations 300 --config docs/sprints/sprint-4.3/sparse-water-signals-off.json --out runs/s43-sparse-off
+pnpm train --preset small --seeds 401-450 --generations 300 --config docs/sprints/sprint-4.3/sparse-water-signals-on.json --out runs/s43-sparse-on
+pnpm analyze --runs runs/s43-sparse-on --mute calls
+```
+
+Signals pass only if all hold:
+
+1. **Normal map, not worse:** signals-on arm score ≥ **0.95 ×** signals-off.
+2. **Sparse-water map, better:** signals-on ≥ **1.10 ×** signals-off.
+3. **Sparse-water, on most seeds:** signals-on better on **≥ 30 of 50** seeds.
+4. **Mute test** (sparse, signals on): the 100 champions with their call inputs zeroed score
+   **≤ 0.90 ×** unmuted (mean) and worse for **≥ 60 %** of them — the calls carry information.
+5. **If 1–4 pass:** Sprint 4.2's balance bar re-run on Medium seeds 301–340 with signals on (slot
+   wins ≤ 16 of 40, battle royale ≥ 2 tribes alive at generation 120 in ≥ 28 of 40, no champion
+   above 80 % `STAY`).
+
+Noise (Sprint 3.5, 50 seeds per arm): about ±6 % normal, ±9 % sparse. **If all pass**, signals
+become the default (`SIM_VERSION` bump); **if not**, they stay off and the retro says why.

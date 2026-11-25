@@ -395,7 +395,7 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 - **Mute test:** run signal-on champions with their call inputs zeroed. If they do worse, the calls carry real information; if not, the calls are noise.
 - Viewer: a ripple ring when a creature calls, so spectators can watch calls spread.
 - Re-run the Sprint 4.2 balance check with signals on.
-- ✅ Signal-on tribes beat signal-off tribes in ≥ 2 of 3 seeds; muting lowers the champions' score; the 4.2 balance criteria still hold. If not, leave signals off and record why in the retro.
+- ✅ On held-out Small seeds 401–450, run once (bar in `docs/sprints/sprint-4.3.md`): signals-on ≥ 0.95× signals-off on the normal map; on the sparse-water map ≥ 1.10× and better on ≥ 30 of 50 seeds; muting the call inputs lowers the champions' score to ≤ 0.90× and for ≥ 60 % of them; then the 4.2 balance bar still holds with signals on. If not, leave signals off and record why in the retro.
 
 ### Phase 5 — Persistence & Replays
 **Sprint 5.1 — Runs & resumable training**
@@ -662,3 +662,6 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Rules: battle-royale grace period (`evolution.battleRoyaleFromGeneration` 100), extinct tribes take the places a capped leader can't (population stays at the budget), tribe outcome uses territory averaged over the generation. New `pnpm analyze` tool.
 - Left as is: absolute tribe score (no slot benefits), territory weight 0, combat numbers. Lead: slot 2 led 51 of this sprint's 140 runs, 36 % (expected 25 %); worth a dedicated check.
 
+**2026-11-25 — Sprint 4.3 acceptance bar** (fixed before any held-out run)
+- §4 Sprint 4.3: **50 held-out seeds instead of 3** (user's decision, before any held-out seed was run and before signals-on was trained): conditions as for memory in 3.5, plus the mute test (call inputs zeroed: ≤ 0.90× and worse for ≥ 60 %) and the 4.2 balance bar re-run with signals on. If all pass, signals become the default.
+- §2.5: the optional tribe-score fitness term is **not** added: selection ranks each tribe's own members, so adding the same `w·tribeScore` to every member of a tribe changes no ranking and no parent choice; it would only shift benchmark scores.
