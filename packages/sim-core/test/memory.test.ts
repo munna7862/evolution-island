@@ -38,7 +38,11 @@ const MEMORY: SimConfig = {
   ...DEFAULT_CONFIG,
   brain: { ...DEFAULT_CONFIG.brain, memoryNeurons: 2 },
 };
-const OFF = brainSpecFromConfig(DEFAULT_CONFIG);
+const NO_MEMORY: SimConfig = {
+  ...DEFAULT_CONFIG,
+  brain: { ...DEFAULT_CONFIG.brain, memoryNeurons: 0 },
+};
+const OFF = brainSpecFromConfig(NO_MEMORY);
 const ON = brainSpecFromConfig(MEMORY);
 /** First memory input / output. */
 const MEM_IN = SENSOR_COUNT;
@@ -51,8 +55,9 @@ function everyMemoryValue(world: World, check: (value: number) => void): void {
 }
 
 describe('memory switch and brain spec', () => {
-  it('is off by default; 2 memory neurons make a 20 → 12 → 11 brain (383 weights)', () => {
-    expect(DEFAULT_CONFIG.brain.memoryNeurons).toBe(0);
+  it('is on by default since Sprint 3.5: 2 memory neurons, a 20 → 12 → 11 brain (383 weights)', () => {
+    expect(DEFAULT_CONFIG.brain.memoryNeurons).toBe(2);
+    expect(brainSpecFromConfig(DEFAULT_CONFIG)).toEqual(ON);
     expect(OFF).toMatchObject({ inputs: 18, hidden: 12, outputs: 9 });
     expect(memoryNeuronCount(OFF)).toBe(0);
     expect(ON).toMatchObject({ inputs: 20, hidden: 12, outputs: 11 });
@@ -62,7 +67,7 @@ describe('memory switch and brain spec', () => {
   });
 
   it('is part of the config hash', () => {
-    expect(hashConfig(MEMORY)).not.toBe(hashConfig(DEFAULT_CONFIG));
+    expect(hashConfig(NO_MEMORY)).not.toBe(hashConfig(MEMORY));
   });
 
   it('refuses memory counts that are not whole numbers ≥ 0, and unbalanced specs', () => {
@@ -77,7 +82,7 @@ describe('memory switch and brain spec', () => {
   });
 
   it('gives every creature as many memory values as the config says, all 0 at spawn', () => {
-    const off = createWorld({ preset: 'small', seed: 5 });
+    const off = createWorld({ preset: 'small', seed: 5, config: NO_MEMORY });
     const on = createWorld({ preset: 'small', seed: 5, config: MEMORY });
     expect(off.creatures.every((c) => c.memory.length === 0)).toBe(true);
     expect(on.creatures.length).toBeGreaterThan(0);
@@ -88,6 +93,7 @@ describe('memory switch and brain spec', () => {
     const noMemory = createWorld({
       preset: 'small',
       seed: 5,
+      config: NO_MEMORY,
       policy: createBrainPolicy(ON, () => createZeroGenome(ON)),
     });
     expect(() => {
@@ -276,7 +282,7 @@ describe('migrateGenome', () => {
 describe('a migrated genome behaves exactly as before migration', () => {
   /** Champions of a short memory-off run: they live longer than random genomes. */
   function trainedGenomes(): Float32Array[] {
-    const run = createEvolutionRun({ preset: 'small', seed: 42 });
+    const run = createEvolutionRun({ preset: 'small', seed: 42, config: NO_MEMORY });
     while (run.generation <= 20) run.runGeneration();
     return run.world.creatures.map((c) => c.genome);
   }
@@ -293,6 +299,7 @@ describe('a migrated genome behaves exactly as before migration', () => {
     const before = createWorld({
       preset: 'small',
       seed: 42,
+      config: NO_MEMORY,
       populate: false,
       policy: createBrainPolicy(OFF, (c) => c.genome),
     });
@@ -329,7 +336,7 @@ describe('a migrated genome behaves exactly as before migration', () => {
   }, 60_000);
 
   it('same benchmark-arena score', () => {
-    const offArena = createBenchmarkArena('small', DEFAULT_CONFIG);
+    const offArena = createBenchmarkArena('small', NO_MEMORY);
     const onArena = createBenchmarkArena('small', MEMORY);
     const genomes = trainedGenomes().slice(0, 3);
     for (const genome of genomes) {

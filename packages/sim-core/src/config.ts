@@ -309,8 +309,12 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   brain: {
     hiddenNeurons: 12,
-    // Off unless the Sprint 3.5 A/B shows memory helps (plan §2.3, §4); the experiment uses 2.
-    memoryNeurons: 0,
+    // Sprint 3.5 A/B (50 held-out Small seeds, memory on vs off from scratch): tribe scores 1.11×
+    // on the normal map and 1.67× on a sparse-water map (better on 48 of 50 seeds), so memory is
+    // on. Zeroing the memory inputs of the evolved champions cuts their arena score to 0.60× /
+    // 0.34×: memory carries information (mostly a way to change direction when nothing in sight
+    // changes, i.e. to search). 0 switches it off.
+    memoryNeurons: 2,
   },
   evolution: {
     fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },

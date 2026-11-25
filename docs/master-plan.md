@@ -94,7 +94,7 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 
 *Why a food threshold:* almost every land tile carries some food, and grazed tiles start regrowing at once, so "nearest tile with any food" read (0, 0) for 78–90% of creatures on Small/Medium. Requiring one full bite turns it into a direction to the next real meal.
 
-*Optional:* memory and signal inputs (see **Memory & signals** below); an oscillator input (idea only).
+Plus 2 memory inputs (on by default since Sprint 3.5) and, optionally, signal inputs (see **Memory & signals** below). An oscillator input stays an idea only: memory turned out to provide one (Sprint 3.5).
 
 **Actions (outputs, pick highest — argmax, ties → lowest index):**
 `MOVE_N`, `MOVE_E`, `MOVE_S`, `MOVE_W`, `STAY`, `EAT`, `DRINK`, `ATTACK`, `SHARE`
@@ -103,8 +103,8 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 - `ATTACK` hits the adjacent enemy (8-neighbourhood) with the lowest health (tie → lowest id) for `attackDamage`. The killing blow gets the kill and a fraction of the victim's remaining energy.
 - `SHARE` gives `shareAmount` energy to the adjacent ally with the lowest energy, at `shareEfficiency` (e.g. 80%), **only if that ally is below 50% energy** — prevents two allies passing energy back and forth to farm fitness.
 
-**Memory & signals (experiments, off by default — Sprints 3.5 and 4.3):**
-- **Memory (Sprint 3.5):** 2 extra outputs, squashed to −1..1, are fed back as 2 extra inputs on the next tick. A creature can keep heading toward water that has gone out of sight, or "remember" being attacked. No meaning is programmed in — evolution decides what the values are used for.
+**Memory & signals (experiments — Sprints 3.5 and 4.3; memory kept and on by default since 3.5, signals off):**
+- **Memory (Sprint 3.5):** 2 extra outputs, squashed to −1..1, are fed back as 2 extra inputs on the next tick. A creature can keep heading toward water that has gone out of sight, or "remember" being attacked. No meaning is programmed in — evolution decides what the values are used for. *Measured (Sprint 3.5):* evolved champions mostly use it to change what they do when nothing in sight changes (to search instead of walking straight); zeroing their memory inputs cuts their arena score to 0.34–0.60×.
 - **Signals (Sprint 4.3):** 1 extra output is a **call** (0..1; below `callThreshold` = silent). Allies within `callRadius` (default 16 — farther than vision, so a call can bring help from out of sight) hear it through 3 extra inputs: the loudest call as heard (strength fades with distance) and its offset (dx, dy) ÷ callRadius. Calling costs a little energy (`callCost`) so calls aren't free noise. Enemies can't hear calls in v1.
 - Calling is **not** one of the argmax actions: a creature can move *and* call in the same tick. Argmax runs over the 9 action outputs only; memory and call outputs are read as values.
 - Memory and calls produced on a tick are only sensed on the **next** tick, so the two-phase tick stays independent of update order.
@@ -112,6 +112,7 @@ The fun is in **watching**: generation counters, rising and falling strategies, 
 
 ### 2.4 Brain
 - **v1:** fixed-topology neural network: 18 inputs → 1 hidden layer of 12 neurons (+ a bias unit) → 9 outputs = 18×12 + 13×9 = **333 weights**, stored as a flat `Float32Array` = the creature's **genome**.
+- With memory (the default since Sprint 3.5): 20 inputs → 12 hidden → 11 outputs = 20×12 + 13×11 = **383 weights**. The memory inputs follow the 18 sensors, the memory outputs follow the 9 actions, so migration appends zero weights.
 - With memory and signals both on: 23 inputs → 12 hidden → 12 outputs (9 actions + 2 memory + 1 call) = 23×12 + 13×12 = **432 weights**.
 - Hidden activation: **softsign** `x / (1 + |x|)` (or a rational tanh approximation), **not** `Math.tanh` — see §3.3 for why.
 - Outputs: the 9 action outputs are linear (only their order matters for argmax); memory and call outputs are squashed with softsign.
@@ -154,7 +155,7 @@ Written from scratch in TypeScript (small, fast, no dependency risk).
 Setting expectations up front, so tuning effort goes to the right places:
 - **Very likely:** seeking food and water, avoiding starvation, staying near food-rich areas, attacking when adjacent, fleeing when weak.
 - **Plausible with tuning:** clustering with allies, contesting hotspots, blocking chokepoints, sharing within groups.
-- **Possible once memory and signals are on (Sprints 3.5, 4.3):** returning to water that is out of sight, alarm calls when enemies appear, allies gathering at a call.
+- **Possible once memory and signals are on (Sprints 3.5, 4.3):** returning to water that is out of sight, alarm calls when enemies appear, allies gathering at a call. *(Sprint 3.5: with memory, creatures search for water that is out of sight instead of walking straight; whether they return to known water was not measured.)*
 - **Unlikely without extra work:** coordinated group tactics (flanking, planned raids). One call channel and 2 memory values are a small vocabulary. Further levers: NEAT (Phase 8) and LLM Chiefs (Phase 9).
 
 ---
@@ -518,7 +519,7 @@ Notes:
 | Replays break across browsers or versions | Engine-independent math, separate RNG streams, `simVersion` in every file, cross-engine determinism tests |
 | Performance on Huge maps | Spatial grid from day 1, precomputed water field, chunked terrain textures, typed arrays, worker thread, render culling |
 | One tribe dominates every time | Balanced spawns with fairness check, population caps, extinction respawn, seasonal scarcity |
-| Memory or signals add complexity without helping (calls evolve into noise) | Both behind config switches, judged by A/B tests in the benchmark arena and the mute test; kept off if they don't help |
+| Memory or signals add complexity without helping (calls evolve into noise) | Both behind config switches, judged by A/B tests in the benchmark arena and the mute test; kept off if they don't help (memory passed in Sprint 3.5 and is on) |
 | Scope creep | Phases 8–10 are optional; finish Phase 6 first |
 | Boring to watch | Minimal HUD from Sprint 2.3; full dashboard, events feed and follow-cam in Phase 6 |
 
@@ -633,7 +634,13 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Every run trained before this is unplayable in the viewer (new `SIM_VERSION` and config hash).
 - §4 Sprint 3.4 acceptance: **20 held-out seeds instead of 3** (user's decision, made before any held-out seed was run). A 100-generation outcome is still partly luck per seed (the tuned defaults met the per-seed bar on ≈ 62 % of 40 tuning seeds; about one tribe in seven locks into "always EAT" or "always DRINK"), so 3 of 3 would have passed only 25–40 % of the time. The bar is now on seeds 101–120, run once: mean per-seed ratio ≥ 2.0, ≥ 12 of 20 seeds at 2× gen 1 and 2× STAY-only, ≥ 75 % of tribes at 1.5×. Result: 2.52, 16 of 20, 30 of 40 (75 %, exactly the threshold) — met. On the held-out seeds 10 of 40 tribes stayed below 1.5× (1 in 4, more than the tuning seeds' 1 in 7); 2 of them are hard "always EAT" lock-ins, the other 8 bred creatures that lived through whole generations but their generation-100 champion scored low in the arena. Lock-in and champion noise are known limitations for Sprints 3.5 and 4.2.
 
-**2026-11-25 — Sprint 3.5 acceptance bar** (fixed before any held-out run)
+**2026-11-25 — Sprint 3.5 acceptance bar** (fixed before any held-out run; `simVersion` 8 → 9 for the memory switch)
 - §4 Sprint 3.5: **50 held-out seeds instead of 3** (user's decision, made before any held-out seed was run and before memory-on was trained on any seed). Memory on vs off from scratch, everything else default, on held-out Small seeds 201–250, each arm run once. A tribe's score is the mean of its last three benchmarks (damps the champion noise of Sprint 3.4). Pass: normal map (100 generations) memory-on ≥ 0.95× memory-off; sparse-water map (300 generations) memory-on ≥ 1.10× and better on ≥ 30 of 50 seeds. Measured noise between two equal memory-off arms of 50 seeds is about ±6 % (normal) and ±9 % (sparse). Hard lock-in and champion noise are reported per arm, not blocking.
 - Sparse-water variant = map generator settings via `--config` (`docs/sprints/sprint-3.5/sparse-water.json`): water in sight from 70 % of spawn-zone tiles instead of 99 %, 6.6 tiles away instead of 2.6. Memory off learns slowly there (1.34× at generation 100, 1.92× at 300 on development seeds), hence 300 generations.
 - If memory passes, `brain.memoryNeurons` becomes 2 by default (user's decision); if not, it stays off.
+
+**2026-11-25 — Sprint 3.5 result: memory kept, on by default** (`simVersion` 9 → 10)
+- Held-out seeds 201–250, run once against the bar above: normal map memory-on / memory-off = **1.11×** (needed ≥ 0.95×; better on 35 of 50 seeds), sparse-water map **1.67×** (needed ≥ 1.10×) and better on **48 of 50** seeds (needed ≥ 30). Hard lock-in fell from 3 to 0 (normal) and 12 to 3 (sparse) of 100 tribes; champion noise (~15 % per single benchmark) did not change.
+- §2.3/§2.4: `brain.memoryNeurons` = 2 in `DEFAULT_CONFIG` (the user's decision before the run, should it pass): the default brain is 20 → 12 → 11 = 383 weights. 0 switches memory off; the memory-off brain stays pinned in the golden hashes.
+- What memory does: zeroing the memory inputs of the evolved champions cuts their arena score to 0.60× (normal) and 0.34× (sparse); with no water in sight they repeat their last move 64 % of the time, muted 92 %, memory-off champions 91 %. Memory mostly lets a creature search instead of walking straight, more than it stores where water was. The arms also differ in brain size (383 vs 333 weights); no capacity-matched control was run.
+- Every run trained before is unplayable in the viewer (new `simVersion` and config hash) until Sprint 5.1 migrates run files. Trainer speed on Medium ~30 % lower (bigger brain, more creatures alive), still ~8× the §3.6 target.

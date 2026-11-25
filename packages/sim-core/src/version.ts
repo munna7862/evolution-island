@@ -22,5 +22,6 @@
  * 9 = Sprint 3.5: memory neurons (`brain.memoryNeurons`, off by default): the brain spec grows by
  *     M inputs and M outputs, creatures carry memory written in Phase A and read on the next
  *     tick, and the world hash covers memory. With memory off creatures behave as in version 8.
+ * 10 = Sprint 3.5 result: memory on by default (`brain.memoryNeurons` 2, brain 20 → 12 → 11).
  */
-export const SIM_VERSION = 9;
+export const SIM_VERSION = 10;

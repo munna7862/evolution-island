@@ -26,7 +26,12 @@ import {
   type BrainSpec,
 } from '../src/index.js';
 
+/** The default brain: memory on since Sprint 3.5. */
 const V1 = brainSpecFromConfig(DEFAULT_CONFIG);
+const NO_MEMORY = brainSpecFromConfig({
+  ...DEFAULT_CONFIG,
+  brain: { ...DEFAULT_CONFIG.brain, memoryNeurons: 0 },
+});
 const TINY: BrainSpec = { formatVersion: BRAIN_FORMAT_VERSION, inputs: 2, hidden: 2, outputs: 3 };
 
 /** Independent reference: plain nested sums over the index helpers, same summation order. */
@@ -51,14 +56,21 @@ function referenceForward(spec: BrainSpec, weights: Float32Array, inputs: Float3
 }
 
 describe('brain spec and genome layout', () => {
-  it('derives the plan §2.4 sizes from config: 18 → 12 → 9 = 333 weights', () => {
+  it('derives the plan §2.4 sizes from config: 20 → 12 → 11 = 383 weights (18 → 12 → 9 = 333 without memory)', () => {
     expect(V1).toEqual({
+      formatVersion: BRAIN_FORMAT_VERSION,
+      inputs: SENSOR_COUNT + 2,
+      hidden: 12,
+      outputs: ACTION_COUNT + 2,
+    });
+    expect(weightCount(V1)).toBe(383);
+    expect(NO_MEMORY).toEqual({
       formatVersion: BRAIN_FORMAT_VERSION,
       inputs: SENSOR_COUNT,
       hidden: 12,
       outputs: ACTION_COUNT,
     });
-    expect(weightCount(V1)).toBe(333);
+    expect(weightCount(NO_MEMORY)).toBe(333);
     // With memory + signals on (plan §2.4): 23 → 12 → 12 = 432.
     expect(weightCount({ ...V1, inputs: 23, outputs: 12 })).toBe(432);
   });
@@ -98,12 +110,12 @@ describe('brain spec and genome layout', () => {
     expect(sameBrainSpec(V1, { ...V1, hidden: 13 })).toBe(false);
 
     const genome = createZeroGenome(V1);
-    expect(genome).toHaveLength(333);
+    expect(genome).toHaveLength(383);
     expect(() => {
       validateGenome(V1, genome);
     }).not.toThrow();
     expect(() => {
-      validateGenome(V1, new Float32Array(332));
+      validateGenome(V1, new Float32Array(382));
     }).toThrow(RangeError);
     genome[100] = Number.NaN;
     expect(() => {
@@ -150,8 +162,8 @@ describe('forward pass', () => {
     const input = fc.float({ min: -1, max: 1, noNaN: true });
     fc.assert(
       fc.property(
-        fc.array(weight, { minLength: 333, maxLength: 333 }),
-        fc.array(input, { minLength: 18, maxLength: 18 }),
+        fc.array(weight, { minLength: weightCount(V1), maxLength: weightCount(V1) }),
+        fc.array(input, { minLength: V1.inputs, maxLength: V1.inputs }),
         (ws, xs) => {
           const weights = Float32Array.from(ws);
           const inputs = Float32Array.from(xs);
@@ -159,6 +171,7 @@ describe('forward pass', () => {
           const scratch = createBrainScratch(V1);
           const first = Array.from(forwardPass(V1, weights, inputs, scratch));
           const second = Array.from(forwardPass(V1, weights, inputs, scratch));
+          expect(first.every(Number.isFinite)).toBe(true);
           expect(first).toEqual(referenceForward(V1, weights, inputs));
           expect(second).toEqual(first);
           expect(weights).toEqual(before);

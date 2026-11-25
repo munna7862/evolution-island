@@ -100,10 +100,13 @@ describe('applyConfigOverride', () => {
     ).toBe(0.25);
   });
 
-  it('switches memory neurons on (Sprint 3.5), a whole number', () => {
-    const memory = applyConfigOverride({ brain: { memoryNeurons: 2 } });
-    expect(memory.brain).toEqual({ ...DEFAULT_CONFIG.brain, memoryNeurons: 2 });
-    expect(hashConfig(memory)).not.toBe(hashConfig(DEFAULT_CONFIG));
+  it('switches memory neurons (Sprint 3.5, on by default) off or on, a whole number', () => {
+    const off = applyConfigOverride({ brain: { memoryNeurons: 0 } });
+    expect(off.brain).toEqual({ ...DEFAULT_CONFIG.brain, memoryNeurons: 0 });
+    expect(hashConfig(off)).not.toBe(hashConfig(DEFAULT_CONFIG));
+    expect(hashConfig(applyConfigOverride({ brain: { memoryNeurons: 2 } }))).toBe(
+      hashConfig(DEFAULT_CONFIG),
+    );
     expect(refusal({ brain: { memoryNeurons: 0.5 } })).toBe(
       'brain.memoryNeurons must be a whole number ≥ 0',
     );
