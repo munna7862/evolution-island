@@ -524,6 +524,97 @@ describe('SimRunner', () => {
       send(runner, { type: 'exportReplay', runId: 3, requestId: 8 });
       expect(host.messages.at(-1)).toMatchObject({ type: 'replayExport', text: null });
     });
+
+    it('applies world events in random mode too, with nothing to export (Sprint 7.2)', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 6,
+        preset: 'small',
+        seed: 1,
+        speed: 1,
+        running: false,
+        pauseAtTick: null,
+      });
+      expect(host.latestSnapshot().climate.events).toEqual([]);
+      send(runner, { type: 'worldEvent', runId: 6, event: { kind: 'drought', x: 30, y: 30 } });
+      expect(host.latestSnapshot().climate.events).toEqual([
+        expect.objectContaining({ kind: 'drought', x: 30, y: 30 }),
+      ]);
+      // Stale run ids are ignored like every other control message.
+      send(runner, { type: 'worldEvent', runId: 5, event: { kind: 'flood', x: 3, y: 3 } });
+      expect(host.latestSnapshot().climate.events).toHaveLength(1);
+    });
+
+    it('records spectator world events; the export and its playback in the worker match (Sprint 7.2)', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 4,
+        preset: 'small',
+        seed: 42,
+        speed: 'max',
+        running: false,
+        pauseAtTick: null,
+        start: checkpointStart(),
+      });
+      send(runner, { type: 'step', runId: 4, ticks: 40 });
+      send(runner, { type: 'worldEvent', runId: 4, event: { kind: 'flood', x: 20, y: 30 } });
+      const flooded = host.latestSnapshot().climate;
+      expect(flooded.events).toEqual([
+        expect.objectContaining({
+          kind: 'flood',
+          x: 20,
+          y: 30,
+          radius: DEFAULT_CONFIG.climate.floodRadius,
+        }),
+      ]);
+      send(runner, { type: 'step', runId: 4, ticks: 100 });
+      send(runner, { type: 'worldEvent', runId: 4, event: { kind: 'winter', x: 0, y: 0 } });
+      expect(host.latestSnapshot().climate.winter).toBe(true);
+      send(runner, { type: 'worldEvent', runId: 4, event: { kind: 'drought', x: 999, y: 0 } }); // off the map
+      send(runner, { type: 'step', runId: 4, ticks: 60 });
+      send(runner, { type: 'worldEvent', runId: 4, event: { kind: 'foodZone', x: 5, y: 5 } }); // after the last tick
+      send(runner, { type: 'exportReplay', runId: 4, requestId: 9 });
+      const text = (host.messages.at(-1) as { text: string }).text;
+      const file = parseReplay(text);
+      expect(file.ticks).toBe(200);
+      expect(file.events).toEqual([
+        { tick: 40, kind: 'flood', x: 20, y: 30 },
+        { tick: 140, kind: 'winter', x: 0, y: 0 },
+      ]);
+      // A hash before each event pins the world it changed, then one at the end.
+      expect(file.hashes.map((h) => h.tick)).toEqual([40, 140, 200]);
+      expect(playReplay(file).mismatch).toBeNull();
+
+      // The worker plays it back with the events, every hash matching; spectators can't add more.
+      const hostB = new MockRunnerHost();
+      const runnerB = new SimRunner(hostB);
+      send(runnerB, {
+        type: 'init',
+        runId: 5,
+        preset: 'small',
+        seed: 42,
+        speed: 'max',
+        running: true,
+        pauseAtTick: null,
+        replay: text,
+      });
+      send(runnerB, { type: 'worldEvent', runId: 5, event: { kind: 'flood', x: 3, y: 3 } });
+      expect(hostB.latestSnapshot().climate.events).toEqual([]);
+      hostB.advanceBy(5000);
+      const status = hostB.latestSnapshot().replay!;
+      expect(status).toMatchObject({
+        played: 200,
+        checked: file.hashes.length,
+        matched: file.hashes.length,
+        mismatch: null,
+      });
+      // Without the events the same file no longer matches.
+      expect(playReplay({ ...file, events: [] }).mismatch?.tick).toBe(140);
+    });
   });
 
   it('reports each finished generation to the dashboard (Sprint 6.1)', () => {

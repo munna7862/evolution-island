@@ -42,6 +42,45 @@
           </div>
         </div>
 
+        <div id="event-controls" class="event-group" role="group" aria-label="World events">
+          <button
+            type="button"
+            class="btn event-btn"
+            data-event="drought"
+            aria-pressed="false"
+            title="Click, then click the map: shallow water there dries to sand for a while"
+          >
+            Drought
+          </button>
+          <button
+            type="button"
+            class="btn event-btn"
+            data-event="flood"
+            aria-pressed="false"
+            title="Click, then click the map: land there floods (food lost) for a while"
+          >
+            Flood
+          </button>
+          <button
+            type="button"
+            class="btn event-btn"
+            data-event="winter"
+            aria-pressed="false"
+            title="Winter now: food regrows slowly for a while"
+          >
+            Winter
+          </button>
+          <button
+            type="button"
+            class="btn event-btn"
+            data-event="foodZone"
+            aria-pressed="false"
+            title="Click, then click the map: move the food zone (fast regrowth) there"
+          >
+            Food zone
+          </button>
+        </div>
+
         <form id="map-controls" class="controls">
           <label class="field">
             <span>Preset</span>
@@ -135,6 +174,7 @@
             <span id="hud-tps">0.0 t/s</span>
             <span id="hud-population">Pop 0</span>
           </div>
+          <div id="hud-climate" class="hud-climate" role="status"></div>
           <div id="hud-tribes" class="hud-tribes"></div>
         </aside>
         <aside id="inspector" class="inspector" aria-label="Creature inspector" hidden>

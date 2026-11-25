@@ -77,5 +77,14 @@ describe('run-state files (Sprint 5.1)', () => {
     const good = JSON.parse(serializeRunState(file)) as { state: { spawns: unknown[] } };
     good.state.spawns = [{ tribeId: 0, genomes: [['x']] }];
     expect(() => parseRunState(JSON.stringify(good))).toThrow(/genomes\[0\]\[0\] must be a finite/);
+    // An older file (e.g. simVersion 13, before the climate RNG stream) is refused for its
+    // version, not for a state field it never had.
+    const old = JSON.parse(serializeRunState(file)) as {
+      simVersion: number;
+      state: { rng: Record<string, unknown> };
+    };
+    old.simVersion = SIM_VERSION - 1;
+    delete old.state.rng['climate'];
+    expect(() => parseRunState(JSON.stringify(old))).toThrow(/simVersion .* cannot be continued/);
   });
 });

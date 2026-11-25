@@ -453,4 +453,41 @@ test.describe('Viewer v1', () => {
     await expect(page.locator('#inspector')).toBeHidden();
     expect(errors).toEqual([]);
   });
+
+  test('world events: place a flood on the map, start a winter, cancel with Escape (Sprint 7.2)', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page);
+    await page.goto('/?paused=1');
+    await expect.poll(() => page.evaluate(() => window.__ei?.renderCount ?? 0)).toBeGreaterThan(0);
+    const box = (await page.locator('#viewport canvas').boundingBox())!;
+    const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+    // A plain click inspects; it never drops an event.
+    await page.mouse.click(centre.x, centre.y);
+    expect(await page.evaluate(() => window.__ei!.climate!.events)).toEqual([]);
+
+    await page.click('.event-btn[data-event="flood"]');
+    expect(await page.evaluate(() => window.__ei!.armedEvent)).toBe('flood');
+    await expect(page.locator('#hud-climate')).toContainText('Click the map to place the flood');
+    await page.mouse.click(centre.x, centre.y);
+    await expect.poll(() => page.evaluate(() => window.__ei!.climate!.events.length)).toBe(1);
+    const flood = await page.evaluate(() => window.__ei!.climate!.events[0]!);
+    expect(flood.kind).toBe('flood');
+    // Near the map's centre (Medium is 128 × 128, fitted to the view).
+    expect(Math.abs(flood.x - 64)).toBeLessThan(8);
+    expect(Math.abs(flood.y - 64)).toBeLessThan(8);
+    expect(await page.evaluate(() => window.__ei!.armedEvent)).toBeNull();
+    await expect(page.locator('#hud-climate')).toHaveText('1 flood');
+
+    await page.click('.event-btn[data-event="winter"]');
+    await expect.poll(() => page.evaluate(() => window.__ei!.climate!.winter)).toBe(true);
+    await expect(page.locator('#hud-climate')).toHaveText('Winter · 1 flood');
+
+    await page.click('.event-btn[data-event="drought"]');
+    expect(await page.evaluate(() => window.__ei!.armedEvent)).toBe('drought');
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => window.__ei!.armedEvent)).toBeNull();
+    expect(errors).toEqual([]);
+  });
 });

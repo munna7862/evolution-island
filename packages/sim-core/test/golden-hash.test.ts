@@ -19,7 +19,13 @@ import {
   type DecisionPolicy,
   type SimConfig,
 } from '../src/index.js';
-import { brawlWorld, GOLDEN, goldenBrainGenome } from './golden-hashes.js';
+import {
+  brawlWorld,
+  climateWorld,
+  GOLDEN,
+  GOLDEN_CLIMATE_EVENTS,
+  goldenBrainGenome,
+} from './golden-hashes.js';
 
 /**
  * The same steps as `createBrainPolicy` (sensors and memory → forward pass → memory, argmax), but
@@ -151,5 +157,30 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
       actual[generation] = run.hash();
     }
     expect(actual).toEqual(GOLDEN.evolution);
+  });
+
+  it('reproduce the pinned climate hashes (droughts, floods, winter, food zone, spectator events)', () => {
+    const world = climateWorld();
+    const actual: Record<number, string> = {};
+    const seen = new Set<string>();
+    let next = 0;
+    for (const target of [250, 800] as const) {
+      while (world.tickCount < target) {
+        while (
+          next < GOLDEN_CLIMATE_EVENTS.length &&
+          GOLDEN_CLIMATE_EVENTS[next]!.tick === world.tickCount
+        ) {
+          expect(world.applyWorldEvent(GOLDEN_CLIMATE_EVENTS[next]!)).toBe(true);
+          next++;
+        }
+        world.tick();
+        for (const e of world.climate.activeEvents()) seen.add(`${e.id}:${e.kind}`);
+      }
+      actual[target] = world.hash();
+    }
+    expect(actual).toEqual(GOLDEN.climate);
+    // Both kinds happened, naturally as well as dropped by the spectator.
+    expect([...seen].filter((k) => k.endsWith('flood')).length).toBeGreaterThan(1);
+    expect([...seen].filter((k) => k.endsWith('drought')).length).toBeGreaterThan(1);
   });
 });

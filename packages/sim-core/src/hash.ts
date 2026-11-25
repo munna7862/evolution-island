@@ -220,6 +220,22 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(c.shareKeepRatio)
     .writeFloat64(c.maxAgeMultiplier)
     .writeFloat64(config.food.regrowthRate)
+    .writeBoolean(config.climate.enabled)
+    .writeUint32(config.climate.yearLength)
+    .writeFloat64(config.climate.winterFraction)
+    .writeFloat64(config.climate.winterRegrowthMultiplier)
+    .writeUint32(config.climate.winterEventDuration)
+    .writeUint32(config.climate.disasterCheckInterval)
+    .writeFloat64(config.climate.droughtChance)
+    .writeFloat64(config.climate.droughtRadius)
+    .writeUint32(config.climate.droughtDuration)
+    .writeFloat64(config.climate.floodChance)
+    .writeFloat64(config.climate.floodRadius)
+    .writeUint32(config.climate.floodDuration)
+    .writeFloat64(config.climate.foodZoneRadius)
+    .writeFloat64(config.climate.foodZoneRegrowthMultiplier)
+    .writeUint32(config.climate.foodZoneMoveInterval)
+    .writeUint32(config.climate.foodZoneStep)
     .writeUint32(config.territory.decayTicks)
     .writeUint32(config.territory.updateInterval)
     .writeFloat64(config.sensor.visionRadius)
@@ -330,6 +346,28 @@ export function hashWorldState(world: World): string {
   return hasher.digest();
 }
 
+/** Climate state (Sprint 7.2): events in progress, spectator winter, food zone. */
+function writeClimate(hasher: StateHasher, world: World): void {
+  const climate = world.climate;
+  const events = climate.activeEvents();
+  hasher.writeUint32(events.length);
+  for (const e of events) {
+    hasher
+      .writeUint32(e.id)
+      .writeString(e.kind)
+      .writeInt32(e.x)
+      .writeInt32(e.y)
+      .writeFloat64(e.radius)
+      .writeUint32(e.endTick);
+  }
+  hasher.writeUint32(climate.nextEventIdForHash()).writeUint32(climate.spectatorWinterUntil());
+  const zone = climate.foodZone();
+  hasher
+    .writeBoolean(zone !== null)
+    .writeInt32(zone?.x ?? 0)
+    .writeInt32(zone?.y ?? 0);
+}
+
 function writeWorldState(hasher: StateHasher, world: World): void {
   hasher
     .writeUint32(SIM_VERSION)
@@ -342,6 +380,7 @@ function writeWorldState(hasher: StateHasher, world: World): void {
     .writeUint32(world.livingCount)
     .writeString(world.map.hash)
     .writeFloat32Array(world.map.food)
+    .writeUint8Array(world.map.biomes)
     .writeInt16Array(world.territoryOwner)
     .writeInt32Array(world.territoryStamp);
   const territory = world.territoryTally();
@@ -359,9 +398,12 @@ function writeWorldState(hasher: StateHasher, world: World): void {
     world.rng.evolution.getState(),
     world.rng.tick.getState(),
     world.rng.policy.getState(),
+    world.rng.climate.getState(),
   ]) {
     hasher.writeUint32(state[0]).writeUint32(state[1]).writeUint32(state[2]).writeUint32(state[3]);
   }
+
+  writeClimate(hasher, world);
 
   hasher.writeUint32(world.creatures.length);
   for (const c of world.creatures) {

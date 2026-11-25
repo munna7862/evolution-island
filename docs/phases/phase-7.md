@@ -13,7 +13,7 @@ food — including disasters a spectator drops in, recorded in replays.
 | Sprint | Title | Outcome |
 |--------|-------|---------|
 | 7.1 | Large / Huge optimisation | Profiling, a worst-case benchmark (`pnpm bench`) and an opt-in browser perf test; §3.6 targets met on Large and Huge |
-| 7.2 | Climate & disasters | Winter, droughts, floods (water field recomputed), migrating food zones; spectator-triggered events recorded in replays |
+| 7.2 | Climate & disasters | Winter, droughts, floods (water field recomputed), a wandering food zone; spectator events from the viewer, recorded in replays |
 
 ## Exit criteria (Phase 7 is done when)
 
@@ -30,3 +30,10 @@ food — including disasters a spectator drops in, recorded in replays.
 2. **Fast-speed snapshots below one frame (Sprint 7.1).** At 20× the worker now sends a snapshot
    at most every 12 ms (was 16 ms). Slices run every few ms, so the 16 ms threshold produced a new
    picture only every ~20 ms, and the viewer drew ~45 frames/s with nothing slow anywhere.
+3. **Climate on by default, the benchmark arena calm (Sprint 7.2).** Training worlds get winters,
+   droughts, floods and a wandering food zone (`climate.enabled`). The benchmark arena keeps none
+   of it: it is the fixed yardstick of champions across generations. Every generation starts on
+   the map as generated. The world copies the terrain it changes, because maps can be shared.
+4. **Spectator events are replay events (Sprint 7.2).** Each is recorded with the ticks played
+   before it, and the worker records a hash just before it. Replays apply them between ticks.
+   While a replay plays, only the file's events count.

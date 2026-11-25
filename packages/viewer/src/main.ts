@@ -22,6 +22,8 @@ import {
   type EvolutionStart,
   type MapPresetId,
   type Seed,
+  type WorldEvent,
+  type WorldEventKind,
 } from '@evolution-island/sim-core';
 import type {
   EvolutionIslandDebugHook,
@@ -29,6 +31,7 @@ import type {
   PlayingCheckpoint,
 } from './debug-hook.js';
 import type { TileCoord } from './renderer/camera.js';
+import { climateAt, climateSummary } from './renderer/climate-overlay.js';
 import { MapView } from './renderer/map-view.js';
 import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
 import { sourcesFromDrop, sourcesFromFileList } from './run-drop.js';
@@ -46,6 +49,14 @@ import {
 import { chartPaths, DashboardData, type ChartMetric } from './dashboard.js';
 import { statusLine } from './status.js';
 import './styles.css';
+
+/** How the HUD names each world event (Sprint 7.2). */
+const EVENT_LABELS: Record<WorldEventKind, string> = {
+  drought: 'drought',
+  flood: 'flood',
+  winter: 'winter',
+  foodZone: 'food zone',
+};
 
 interface ExportRequestEntry {
   readonly resolve: (text: string) => void;
@@ -154,6 +165,12 @@ async function boot(): Promise<void> {
   const speedButtons = Array.from(
     speedControlsEl.querySelectorAll<HTMLButtonElement>('.speed-btn'),
   );
+  const eventButtons = Array.from(
+    requireEl('#event-controls', HTMLElement).querySelectorAll<HTMLButtonElement>('.event-btn'),
+  );
+  const hudClimateEl = requireEl('#hud-climate', HTMLElement);
+  // World events (Sprint 7.2): a drought, flood or food zone waits for a click on the map.
+  let armedEvent: 'drought' | 'flood' | 'foodZone' | null = null;
   const viewport = requireEl('#viewport', HTMLElement);
   const mapStatsEl = requireEl('#map-stats', HTMLElement);
   const hoverInfoEl = requireEl('#hover-info', HTMLElement);
@@ -271,6 +288,18 @@ async function boot(): Promise<void> {
 
   const updateHud = (): void => {
     if (latestSnapshot === null) return;
+    const summary = climateSummary(latestSnapshot.climate);
+    const placing =
+      armedEvent === null ? '' : `Click the map to place the ${EVENT_LABELS[armedEvent]}`;
+    hudClimateEl.textContent = [summary, placing].filter((t) => t !== '').join(' · ');
+    // A replay's events come from its file: spectators can't add any while it plays.
+    const replaying = latestSnapshot.replay !== null;
+    for (const btn of eventButtons) {
+      btn.disabled = replaying;
+      const active = btn.dataset['event'] === armedEvent;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    }
     hudTickEl.textContent = `Tick ${latestSnapshot.tick}`;
     hudGenEl.textContent = `Gen ${latestSnapshot.generation}`;
     hudTpsEl.textContent = `${latestSnapshot.actualTicksPerSec.toFixed(1)} t/s`;
@@ -322,12 +351,20 @@ async function boot(): Promise<void> {
     const biomeIdx = currentMap.biomes[idx]!;
     const biomeName = (BIOME_NAMES as Record<number, string>)[biomeIdx] ?? 'Unknown';
     const maxFood = currentMap.maxFood[idx]!;
-    hoverInfoEl.textContent = `(${tile.x}, ${tile.y}) · ${biomeName} · max food ${maxFood}`;
+    const climate =
+      latestSnapshot === null ? [] : climateAt(latestSnapshot.climate, tile.x, tile.y);
+    hoverInfoEl.textContent =
+      `(${tile.x}, ${tile.y}) · ${biomeName} · max food ${maxFood}` +
+      (climate.length > 0 ? ` · ${climate.join(', ')} here` : '');
   };
 
   const mapView = await MapView.create(viewport, {
     onHoverTile: updateHover,
     onClickTile: (tile) => {
+      if (armedEvent !== null) {
+        sendWorldEvent({ kind: armedEvent, x: tile.x, y: tile.y });
+        return;
+      }
       inspectAtTile(tile.x, tile.y);
     },
     onViewChange: updateStats,
@@ -372,6 +409,13 @@ async function boot(): Promise<void> {
   };
 
   const worker = new Worker(new URL('./worker/sim.worker.ts', import.meta.url), { type: 'module' });
+
+  /** Sends a world event to the worker (Sprint 7.2) and ends placing. */
+  const sendWorldEvent = (event: WorldEvent): void => {
+    armedEvent = null;
+    postToWorker({ type: 'worldEvent', runId: activeRunId, seq: nextSeq(), event });
+    updateHud();
+  };
 
   const postToWorker = (msg: MainToWorkerMessage): void => {
     worker.postMessage(msg);
@@ -696,6 +740,8 @@ async function boot(): Promise<void> {
       runMessageIsError,
       dashboard: dashboard.state(),
       inspection: latestInspection,
+      climate: latestSnapshot.climate,
+      armedEvent,
       feed: dashboard.feed(),
       familyTree:
         latestTree === null
@@ -804,6 +850,12 @@ async function boot(): Promise<void> {
     get following() {
       return getState().following;
     },
+    get climate() {
+      return getState().climate;
+    },
+    get armedEvent() {
+      return getState().armedEvent;
+    },
     get feed() {
       return getState().feed;
     },
@@ -864,6 +916,7 @@ async function boot(): Promise<void> {
 
       mapView.setMap(msg.map);
       mapView.setOverlaysVisible(overlaysToggle.checked);
+      mapView.setClimate(msg.snapshot.climate);
       mapView.setCreatureSnapshot(
         msg.snapshot.creatures,
         performance.now(),
@@ -893,6 +946,7 @@ async function boot(): Promise<void> {
       latestSnapshot = msg.snapshot;
       if (msg.snapshot.replay !== null) showReplayStatus(msg.snapshot.replay);
       renderInspector(msg.snapshot.inspection);
+      mapView.setClimate(msg.snapshot.climate);
       if (msg.snapshot.ackSeq >= lastControlSeq) {
         desiredRunning = msg.snapshot.running;
         desiredSpeed = msg.snapshot.speed;
@@ -988,6 +1042,7 @@ async function boot(): Promise<void> {
     syncUrlParams(preset, seed);
 
     activeRunId++;
+    armedEvent = null; // a placement never carries over to another world
     rejectPendingHashes('Simulation restarted');
     postToWorker({
       type: 'init',
@@ -1203,6 +1258,19 @@ async function boot(): Promise<void> {
     });
   }
 
+  for (const btn of eventButtons) {
+    btn.addEventListener('click', (event) => {
+      blurMouseTarget(event);
+      const kind = btn.dataset['event'];
+      if (kind === 'winter') {
+        sendWorldEvent({ kind, x: 0, y: 0 });
+      } else if (kind === 'drought' || kind === 'flood' || kind === 'foodZone') {
+        armedEvent = armedEvent === kind ? null : kind;
+        updateHud();
+      }
+    });
+  }
+
   viewport.addEventListener('pointerdown', () => {
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body) {
@@ -1211,6 +1279,11 @@ async function boot(): Promise<void> {
   });
 
   window.addEventListener('keydown', (event) => {
+    if (event.code === 'Escape' && armedEvent !== null) {
+      armedEvent = null;
+      updateHud();
+      return;
+    }
     if (event.code !== 'Space' || event.repeat) return;
     const active = document.activeElement;
     if (

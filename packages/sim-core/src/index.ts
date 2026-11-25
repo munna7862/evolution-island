@@ -19,6 +19,7 @@ export {
   type EvolutionConfig,
   type ExtinctionMode,
   type FitnessWeights,
+  type ClimateConfig,
   type FoodConfig,
   type MapGenConfig,
   type MapPreset,
@@ -79,6 +80,14 @@ export {
   type TribeSpawn,
 } from './world.js';
 export { SpatialGrid } from './spatial-grid.js';
+export {
+  Climate,
+  WORLD_EVENT_KINDS,
+  type ClimateTerrain,
+  type TerrainEvent,
+  type WorldEvent,
+  type WorldEventKind,
+} from './climate.js';
 export {
   CALL_SENSOR_COUNT,
   readCallSensors,
