@@ -19,5 +19,8 @@
  *     its stored benchmark score instead of being benchmarked and added again.
  * 8 = Sprint 3.4 tuning (config defaults only, no rule change): energy drain 0.25 → 0.2,
  *     generation lengths doubled, tournament selection, ±1 initial weights, mutation σ 0.6.
+ * 9 = Sprint 3.5: memory neurons (`brain.memoryNeurons`, off by default): the brain spec grows by
+ *     M inputs and M outputs, creatures carry memory written in Phase A and read on the next
+ *     tick, and the world hash covers memory. With memory off creatures behave as in version 8.
  */
-export const SIM_VERSION = 8;
+export const SIM_VERSION = 9;

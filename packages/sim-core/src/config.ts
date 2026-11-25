@@ -96,6 +96,11 @@ export interface SensorConfig {
 export interface BrainConfig {
   /** Hidden-layer size of the fixed-topology MLP (plan §2.4). */
   readonly hiddenNeurons: number;
+  /**
+   * Memory neurons (plan §2.3, Sprint 3.5): this many extra outputs, squashed to −1..1, are fed
+   * back as as many extra inputs on the next tick. 0 = memory off.
+   */
+  readonly memoryNeurons: number;
 }
 
 /** Per-creature fitness weights (plan §2.5). */
@@ -304,6 +309,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   brain: {
     hiddenNeurons: 12,
+    // Off unless the Sprint 3.5 A/B shows memory helps (plan §2.3, §4); the experiment uses 2.
+    memoryNeurons: 0,
   },
   evolution: {
     fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },

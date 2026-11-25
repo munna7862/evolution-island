@@ -11,15 +11,15 @@ import { weightCount, type BrainSpec } from '../src/index.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 8,
+  simVersion: 9,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: '1ba379a07ba15d99',
-    100: '7cd52945f8afd9e8',
-    600: '298dbb40cb327ba9',
+    0: '1d18ff3713b139b4',
+    100: '170b70f0615397e2',
+    600: '664d63175174e426',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome`: adds the
@@ -27,8 +27,8 @@ export const GOLDEN = {
    * are covered too.
    */
   brainPolicy: {
-    100: 'e85af2fddccfbc00',
-    600: '694e2a0ac9ef887a',
+    100: '0174cc2134f12839',
+    600: '5d4fb6b17ea33f9e',
   },
   /**
    * Running digest of every sensor vector and every raw forward-pass output (float64 bits) of the
@@ -40,14 +40,24 @@ export const GOLDEN = {
     600: '43c46f7b4e57eff9',
   },
   /**
+   * Like `brainPolicy`, but with 2 memory neurons (`brain.memoryNeurons` 2, Sprint 3.5) and the
+   * 383-weight `goldenBrainGenome` of that brain: adds memory read-back and the softsign-squashed
+   * memory outputs, which the world hash covers. Almost every memory value differs (≈ 52,000
+   * distinct float32 values up to tick 600, |value| ≤ 0.86); all 50 creatures are dead by 600.
+   */
+  memoryPolicy: {
+    100: '7781e3332ff3711f',
+    600: '26b909ea37008459',
+  },
+  /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
    * initial genomes, fitness, selection, crossover, mutation, tribe sizes, the benchmark arena
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: '6700e1c4b510af4f',
-    3: '1eed9eaabc283d98',
-    4: 'fe38449c7859693b',
+    2: '2d4577fbc5a1febb',
+    3: 'ca4466ae5751de75',
+    4: '88b64e4cb5f44f8f',
   },
 } as const;
 

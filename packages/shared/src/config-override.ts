@@ -40,6 +40,7 @@ const INTEGER_FIELDS = new Set([
   'map.maxGenerationAttempts',
   'creature.slowTileMoveCooldown',
   'brain.hiddenNeurons',
+  'brain.memoryNeurons',
   'evolution.tournamentSize',
   'evolution.eliteCount',
   'evolution.hallOfFameSize',

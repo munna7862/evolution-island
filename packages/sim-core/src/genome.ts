@@ -1,4 +1,11 @@
-import { inputWeightIndex, outputBiasIndex, outputWeightIndex, weightCount } from './brain.js';
+import {
+  inputWeightIndex,
+  outputBiasIndex,
+  outputWeightIndex,
+  validateBrainSpec,
+  validateGenome,
+  weightCount,
+} from './brain.js';
 import type { BrainSpec } from './brain.js';
 import type { RngStream } from './rng.js';
 
@@ -55,6 +62,41 @@ export function crossoverPerNeuron(
   const biasStart = outputBiasIndex(spec, 0);
   child.set(biasParent.subarray(biasStart, biasStart + spec.outputs), biasStart);
   return child;
+}
+
+/**
+ * Genome migration (plan §2.4, CLAUDE.md): `weights` of a `from` brain as a `to` brain with more
+ * inputs and/or outputs (appended after the existing ones, e.g. memory, Sprint 3.5) and the same
+ * hidden layer. Every existing weight keeps its meaning; new inputs and outputs get weight 0, so
+ * the actions come out exactly as before: a new input adds 0 to every hidden sum, a new output
+ * adds nothing to the existing ones. Returns a new array; `weights` is not changed.
+ */
+export function migrateGenome(from: BrainSpec, to: BrainSpec, weights: Float32Array): Float32Array {
+  validateBrainSpec(from);
+  validateBrainSpec(to);
+  validateGenome(from, weights);
+  if (from.formatVersion !== to.formatVersion || from.hidden !== to.hidden) {
+    throw new RangeError(
+      `Cannot migrate a ${from.hidden}-hidden format-${from.formatVersion} genome to a ` +
+        `${to.hidden}-hidden format-${to.formatVersion} brain`,
+    );
+  }
+  if (to.inputs < from.inputs || to.outputs < from.outputs) {
+    throw new RangeError(
+      `Migration only adds inputs/outputs: ${from.inputs}→${to.inputs} inputs, ` +
+        `${from.outputs}→${to.outputs} outputs`,
+    );
+  }
+  const migrated = new Float32Array(weightCount(to));
+  for (let h = 0; h < from.hidden; h++) {
+    const fromIn = inputWeightIndex(from, h, 0);
+    migrated.set(weights.subarray(fromIn, fromIn + from.inputs), inputWeightIndex(to, h, 0));
+    const fromOut = outputWeightIndex(from, h, 0);
+    migrated.set(weights.subarray(fromOut, fromOut + from.outputs), outputWeightIndex(to, h, 0));
+  }
+  const fromBias = outputBiasIndex(from, 0);
+  migrated.set(weights.subarray(fromBias, fromBias + from.outputs), outputBiasIndex(to, 0));
+  return migrated;
 }
 
 export interface MutationSettings {

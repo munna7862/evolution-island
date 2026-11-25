@@ -211,7 +211,8 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.sensor.countNormalization)
     .writeFloat64(config.sensor.foodNormalization)
     .writeFloat64(config.sensor.minVisibleFood)
-    .writeUint32(config.brain.hiddenNeurons);
+    .writeUint32(config.brain.hiddenNeurons)
+    .writeUint32(config.brain.memoryNeurons);
 
   const e = config.evolution;
   hasher
@@ -276,13 +277,38 @@ export function hashMap(map: Omit<WorldMap, 'hash'>): string {
   return hasher.digest();
 }
 
+/**
+ * Full world state: `hashWorldState` plus the config hash and every creature's genome and memory.
+ * Same hash = same world, bit for bit (determinism tests, golden hashes, replays).
+ */
 export function hashWorld(world: World): string {
   const hasher = new StateHasher();
+  hasher.writeString(hashConfig(world.config));
+  writeWorldState(hasher, world);
+  for (const c of world.creatures) {
+    hasher.writeFloat32Array(c.genome).writeFloat32Array(c.memory);
+  }
+  return hasher.digest();
+}
+
+/**
+ * What happens in the world, without how the brains are built: everything `hashWorld` covers
+ * except the config hash and the creatures' genomes and memory values. Two worlds whose brains
+ * differ only in layout (e.g. a genome and its migration, Sprint 3.5) have the same state hash
+ * exactly when they put the same creatures in the same places with the same stats, food and RNG
+ * draws.
+ */
+export function hashWorldState(world: World): string {
+  const hasher = new StateHasher();
+  writeWorldState(hasher, world);
+  return hasher.digest();
+}
+
+function writeWorldState(hasher: StateHasher, world: World): void {
   hasher
     .writeUint32(SIM_VERSION)
     .writeString(world.preset)
     .writeString(normalizeSeed(world.seed))
-    .writeString(hashConfig(world.config))
     .writeUint32(world.maxAge)
     .writeUint32(world.tickCount)
     .writeUint32(world.generation)
@@ -323,9 +349,6 @@ export function hashWorld(world: World): string {
       .writeFloat64(c.stats.waterDrunk)
       .writeUint32(c.stats.kills)
       .writeFloat64(c.stats.alliesHelped)
-      .writeUint32(c.stats.callsMade)
-      .writeFloat32Array(c.genome);
+      .writeUint32(c.stats.callsMade);
   }
-
-  return hasher.digest();
 }

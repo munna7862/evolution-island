@@ -15,6 +15,7 @@ import {
   StateHasher,
   type BrainSpec,
   type DecisionPolicy,
+  type SimConfig,
 } from '../src/index.js';
 import { GOLDEN, goldenBrainGenome } from './golden-hashes.js';
 
@@ -38,13 +39,20 @@ function recordingBrainPolicy(
   };
 }
 
+const MEMORY_CONFIG: SimConfig = {
+  ...DEFAULT_CONFIG,
+  brain: { ...DEFAULT_CONFIG.brain, memoryNeurons: 2 },
+};
+
 function hashesAt(
   ticks: Readonly<Record<number, string>>,
   policy?: DecisionPolicy,
+  config: SimConfig = DEFAULT_CONFIG,
 ): Record<number, string> {
   const world = createWorld({
     preset: GOLDEN.preset,
     seed: GOLDEN.seed,
+    config,
     ...(policy === undefined ? {} : { policy }),
   });
   const targets = Object.keys(ticks)
@@ -76,6 +84,13 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     const genome = goldenBrainGenome(spec);
     const policy = createBrainPolicy(spec, () => genome);
     expect(hashesAt(GOLDEN.brainPolicy, policy)).toEqual(GOLDEN.brainPolicy);
+  });
+
+  it('reproduce the pinned world hashes with memory neurons (memory read-back + squash)', () => {
+    const spec = brainSpecFromConfig(MEMORY_CONFIG);
+    const genome = goldenBrainGenome(spec);
+    const policy = createBrainPolicy(spec, () => genome);
+    expect(hashesAt(GOLDEN.memoryPolicy, policy, MEMORY_CONFIG)).toEqual(GOLDEN.memoryPolicy);
   });
 
   it('reproduce every sensor vector and raw forward-pass output bit for bit', () => {
