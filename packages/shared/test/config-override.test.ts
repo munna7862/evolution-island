@@ -112,6 +112,9 @@ describe('applyConfigOverride', () => {
     expect(refusal({ territory: { updateInterval: 2.5 } })).toBe(
       'territory.updateInterval must be a whole number ≥ 0',
     );
+    expect(refusal({ evolution: { battleRoyaleFromGeneration: 0.5 } })).toBe(
+      'evolution.battleRoyaleFromGeneration must be a whole number ≥ 0',
+    );
   });
 
   it('switches memory neurons (Sprint 3.5, on by default) off or on, a whole number', () => {

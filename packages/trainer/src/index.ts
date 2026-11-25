@@ -12,6 +12,21 @@ export {
   type TrainCommand,
   type TrainOptions,
 } from './args.js';
+export {
+  analyzeRun,
+  DEGENERATE_STAY_SHARE,
+  findRunDirs,
+  formatReport,
+  LATE_BENCHMARKS,
+  LOCK_IN_FITNESS,
+  LOCK_IN_WINDOW,
+  summarize,
+  type AnalysisSummary,
+  type AnalyzeIo,
+  type ChampionAnalysis,
+  type RunAnalysis,
+  type TribeAnalysis,
+} from './analyze.js';
 export { banner } from './banner.js';
 export { formatProgress, formatSummary, main, type CliIo, type SeedRunners } from './main.js';
 export { runPool, type Settled } from './pool.js';

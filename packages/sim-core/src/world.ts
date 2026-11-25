@@ -69,6 +69,10 @@ export class World implements ActionWorldContext {
   private gridDirty = true;
   /** Territory % per tribe id at the last `updateTerritory` (plan §2.6). */
   private territoryPct: number[] = [];
+  /** Per tribe id: the sum of its territory % over this generation's recounts (Sprint 4.2). */
+  private territorySum: number[] = [];
+  /** Recounts so far this generation. */
+  private territoryRecounts = 0;
   /**
    * 1 + the highest tribe id among `creatures` (spawned since the last generation start): the
    * length of the territory tally. Derived from hashed state, so it needs no hash of its own.
@@ -276,6 +280,16 @@ export class World implements ActionWorldContext {
     return this.territoryPct[tribeId] ?? 0;
   }
 
+  /**
+   * A tribe's mean territory % over this generation's recounts so far (Sprint 4.2): ground held
+   * through the generation, not only by whoever is still alive at its end.
+   */
+  territoryAverage(tribeId: number): number {
+    return this.territoryRecounts > 0
+      ? (this.territorySum[tribeId] ?? 0) / this.territoryRecounts
+      : 0;
+  }
+
   private stampTile(idx: number, tribeId: number): void {
     this.territoryOwner[idx] = tribeId;
     this.territoryStamp[idx] = this.tickCount;
@@ -301,6 +315,10 @@ export class World implements ActionWorldContext {
     }
     const walkable = this.map.walkableCount;
     this.territoryPct = counts.map((n) => (walkable > 0 ? (100 * n) / walkable : 0));
+    this.territoryPct.forEach((pct, tribe) => {
+      this.territorySum[tribe] = (this.territorySum[tribe] ?? 0) + pct;
+    });
+    this.territoryRecounts++;
   }
 
   /** Stamps every living creature's tile with its tribe (after metabolism, ascending id). */
@@ -313,9 +331,13 @@ export class World implements ActionWorldContext {
     }
   }
 
-  /** Territory % of every tribe slot at the last update, for hashing. */
-  territorySnapshot(): readonly number[] {
-    return this.territoryPct;
+  /** The territory tally, for hashing: last recount, sums over the generation, recounts. */
+  territoryTally(): {
+    readonly last: readonly number[];
+    readonly sum: readonly number[];
+    readonly recounts: number;
+  } {
+    return { last: this.territoryPct, sum: this.territorySum, recounts: this.territoryRecounts };
   }
 
   rebuildGrid(): void {
@@ -444,6 +466,8 @@ export class World implements ActionWorldContext {
     this.territoryOwner.fill(NO_OWNER);
     this.territoryStamp.fill(0);
     this.territoryPct = [];
+    this.territorySum = [];
+    this.territoryRecounts = 0;
     // Recomputed from the new creatures as they spawn: a tribe gone since (battle royale) must not
     // lengthen the hashed territory tally, or two worlds with equal hashes would drift apart.
     this.tribeSlots = 0;

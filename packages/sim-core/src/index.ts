@@ -109,7 +109,13 @@ export {
   randomGenome,
   type MutationSettings,
 } from './genome.js';
-export { createBenchmarkArena, runBenchmark, type BenchmarkArena } from './benchmark.js';
+export {
+  createBenchmarkArena,
+  runBenchmark,
+  runBenchmarkDetailed,
+  type BenchmarkArena,
+  type BenchmarkResult,
+} from './benchmark.js';
 export {
   addToHallOfFame,
   allocateTribeSizes,

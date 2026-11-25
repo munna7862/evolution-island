@@ -169,6 +169,12 @@ export interface EvolutionConfig {
   readonly initialWeightRange: number;
   readonly tribeScore: TribeScoreWeights;
   readonly extinction: ExtinctionMode;
+  /**
+   * Battle royale only (Sprint 4.2): the first generation whose end can eliminate a tribe. Before
+   * it, extinct tribes respawn as in normal mode; untrained tribes all die out in generation 1,
+   * which would end a battle royale at once.
+   */
+  readonly battleRoyaleFromGeneration: number;
   /** Champions kept per tribe, best benchmark score first. */
   readonly hallOfFameSize: number;
   /** Benchmark champions at generation 1 and every N generations. */
@@ -370,6 +376,9 @@ export const DEFAULT_CONFIG: SimConfig = {
     initialWeightRange: 1,
     tribeScore: { survivors: 1, foodGathered: 1, territory: 0 },
     extinction: 'respawn',
+    // Sprint 4.2: on Medium, after ~100 generations a tribe dies out in only 5–11 % of
+    // generations (tribes of 60+ never), so a battle royale is decided by play, not by luck.
+    battleRoyaleFromGeneration: 100,
     hallOfFameSize: 5,
     benchmarkInterval: 10,
     benchmarkSeed: 'benchmark-arena',

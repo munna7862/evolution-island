@@ -19,15 +19,15 @@ import { makeMiniMap } from './mini-map.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 11,
+  simVersion: 12,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: '847292cbd10c4481',
-    100: 'bcb7442960d9fe2e',
-    600: '4d92fc652049a1ef',
+    0: '3e27c3bdcedbaf4d',
+    100: 'aba4012cdbbf330b',
+    600: 'd7710dcaa799fe16',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome` of the default
@@ -36,8 +36,8 @@ export const GOLDEN = {
    * creatures have died by tick 600, so deaths are covered too.
    */
   brainPolicy: {
-    100: 'f2c3492cee0729d5',
-    600: '9087ac1ba1f22d3d',
+    100: '5488f81fb2055db0',
+    600: 'd93edd39000dde81',
   },
   /**
    * Running digest of every input vector (sensors + memory) and every raw forward-pass output
@@ -53,8 +53,8 @@ export const GOLDEN = {
    * 18 → 12 → 9, 333 weights). 26 of the 50 creatures have died by tick 600 (all by 700).
    */
   noMemoryPolicy: {
-    100: '427ab268562bb994',
-    600: '5254f6288e0db199',
+    100: '52e2a87b927b2995',
+    600: 'fa6c0c59063ae9cd',
   },
   /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
@@ -62,9 +62,9 @@ export const GOLDEN = {
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: 'e0d2a3e9e2e23410',
-    3: 'ca50dce930fc4042',
-    4: 'c748d2d67fcd68d2',
+    2: 'e76966792889e82a',
+    3: 'a2c2c974b3244977',
+    4: 'f131367fe25bf86e',
   },
   /**
    * `world.hash()` of `brawlWorld()` (a 7×7 grass block packed with 3 tribes, random policy,
@@ -73,8 +73,8 @@ export const GOLDEN = {
    * 42.9 / 40.8 / 16.3 %.
    */
   brawl: {
-    20: '470b134939d42647',
-    60: 'c8e86c6018cbc346',
+    20: 'b14816e3448a9492',
+    60: '3f43301e737ff0b9',
   },
 } as const;
 
