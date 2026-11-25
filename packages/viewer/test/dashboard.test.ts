@@ -80,3 +80,52 @@ describe('chartPaths', () => {
     expect(chartPaths([], 100, 50).paths).toEqual([]);
   });
 });
+
+describe('events feed (Sprint 6.3)', () => {
+  const name = (id: number) => ['Amber', 'Sky'][id]!;
+
+  it('announces extinction after survival, elimination, territory levels, records and a new leader', () => {
+    const d = new DashboardData(name);
+    d.add([
+      gen(1, [
+        tribe(0, { survivors: 3, tribeScore: 20, benchmarkScore: 600, maxFitness: 900 }),
+        tribe(1, { survivors: 1, tribeScore: 10, territoryPct: 0.5 }),
+      ]),
+    ]);
+    expect(d.feed().map((e) => e.text)).toEqual(['Amber reached 1% territory']);
+    d.add([
+      gen(2, [
+        tribe(0, { survivors: 0, tribeScore: 5, benchmarkScore: 700, maxFitness: 950 }),
+        tribe(1, { survivors: 2, tribeScore: 30, territoryPct: 5.5, maxFitness: 1200 }),
+      ]),
+    ]);
+    expect(
+      d
+        .feed()
+        .filter((e) => e.generation === 2)
+        .map((e) => e.text),
+    ).toEqual([
+      'Sky takes the lead',
+      'New fitness record: a Sky creature scored 1200',
+      'Sky reached 5% territory',
+      'Amber champion set a benchmark record: 700',
+      'Amber went extinct and returns from its hall of fame',
+    ]);
+    // No repeats: same territory level, no new records, extinct again without survivors before.
+    d.add([
+      gen(3, [
+        tribe(0, { survivors: 0, tribeScore: 1 }),
+        tribe(1, { alive: false, territoryPct: 5.5, tribeScore: 40 }),
+      ]),
+    ]);
+    expect(
+      d
+        .feed()
+        .filter((e) => e.generation === 3)
+        .map((e) => e.text),
+    ).toEqual(['Sky was eliminated']);
+    expect(d.feed()[0]!.generation).toBe(3); // newest first
+    d.reset();
+    expect(d.feed()).toEqual([]);
+  });
+});

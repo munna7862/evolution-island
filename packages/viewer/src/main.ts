@@ -13,6 +13,7 @@ import {
   type WorkerToMainMessage,
 } from '@evolution-island/shared';
 import {
+  type LineageTree,
   brainSpecFromConfig,
   DEFAULT_CONFIG,
   hashConfig,
@@ -170,7 +171,14 @@ async function boot(): Promise<void> {
     benchmarkScore: requireEl('#chart-benchmark', HTMLCanvasElement),
     population: requireEl('#chart-population', HTMLCanvasElement),
   } as const;
-  const dashboard = new DashboardData();
+  const dashboard = new DashboardData(tribeName);
+  const dashFeedEl = requireEl('#dash-feed', HTMLElement);
+  const dashTreeEl = requireEl('#dash-tree', HTMLElement);
+  const dashTreeTitleEl = requireEl('#dash-tree-title', HTMLElement);
+  // Family tree (Sprint 6.3): the tribe shown (null = the leader) and the latest tree.
+  let treeTribe: number | null = null;
+  let latestTree: LineageTree | null = null;
+  let nextLineageRequestId = 1;
   const inspectorEl = requireEl('#inspector', HTMLElement);
   const inspTitleEl = requireEl('#insp-title', HTMLElement);
   const inspStatsEl = requireEl('#insp-stats', HTMLElement);
@@ -426,6 +434,8 @@ async function boot(): Promise<void> {
         tr.title = `Inspect ${tribeName(row.tribeId)}'s champion`;
         tr.addEventListener('click', () => {
           setInspect({ kind: 'champion', tribeId: row.tribeId });
+          treeTribe = row.tribeId;
+          requestTree();
         });
         tr.dataset['tribe'] = String(row.tribeId);
         tr.classList.toggle('is-eliminated', !row.alive);
@@ -454,6 +464,80 @@ async function boot(): Promise<void> {
     drawChart(chartCanvases.avgFitness, 'avgFitness');
     drawChart(chartCanvases.benchmarkScore, 'benchmarkScore');
     drawChart(chartCanvases.population, 'population');
+    dashFeedEl.replaceChildren(
+      ...dashboard.feed().map((event) => {
+        const li = document.createElement('li');
+        const gen = document.createElement('span');
+        gen.className = 'feed-gen';
+        gen.textContent = `Gen ${event.generation}`;
+        li.append(gen, event.text);
+        return li;
+      }),
+    );
+  };
+
+  /** Asks the worker for the shown tribe's champion and its ancestors (Sprint 6.3). */
+  const requestTree = (): void => {
+    const tribeId = treeTribe ?? dashboard.state().rows[0]?.tribeId;
+    if (tribeId === undefined) return;
+    postToWorker({
+      type: 'requestLineage',
+      runId: activeRunId,
+      requestId: nextLineageRequestId++,
+      tribeId,
+      depth: 4,
+    });
+  };
+
+  /** The tree as levels: the champion, its parents, their parents… (shared ancestors once). */
+  const treeLevels = (tree: LineageTree): LineageTree[][] => {
+    const levels: LineageTree[][] = [[tree]];
+    for (;;) {
+      const seen = new Set<string>();
+      const next = levels[levels.length - 1]!.flatMap((n) => n.parents).filter((n) => {
+        const key = `${n.generation}:${n.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (next.length === 0) return levels;
+      levels.push(next);
+    }
+  };
+
+  const renderTree = (tree: LineageTree | null): void => {
+    latestTree = tree;
+    if (tree === null) {
+      dashTreeTitleEl.textContent = 'Family tree';
+      dashTreeEl.replaceChildren(document.createTextNode('After the first generation ends'));
+      return;
+    }
+    dashTreeTitleEl.textContent = `Family tree of ${tribeName(tree.tribeId)}'s champion`;
+    dashTreeEl.replaceChildren(
+      ...treeLevels(tree).map((level, depth) => {
+        const row = document.createElement('div');
+        row.className = 'tree-level';
+        const gen = document.createElement('span');
+        gen.className = 'tree-gen';
+        gen.textContent = `Gen ${level[0]!.generation}`;
+        row.append(
+          gen,
+          ...level.map((n) => {
+            const chip = document.createElement('span');
+            chip.className = 'tree-node';
+            chip.classList.toggle('is-champion', depth === 0);
+            chip.classList.toggle('is-hof', n.fromHallOfFame);
+            chip.textContent = `#${n.id}${n.rank === null ? '' : ` · ${n.rank + 1}.`}`;
+            chip.title =
+              (n.fitness === null ? '' : `fitness ${n.fitness.toFixed(0)}`) +
+              (n.fromHallOfFame ? ' · back from the hall of fame' : '') +
+              (n.parents.length === 0 && !n.fromHallOfFame ? ' · no recorded parents' : '');
+            return chip;
+          }),
+        );
+        return row;
+      }),
+    );
   };
 
   /** Asks the worker to inspect a target (null closes the inspector). */
@@ -612,6 +696,13 @@ async function boot(): Promise<void> {
       runMessageIsError,
       dashboard: dashboard.state(),
       inspection: latestInspection,
+      feed: dashboard.feed(),
+      familyTree:
+        latestTree === null
+          ? null
+          : treeLevels(latestTree).map((level) =>
+              level.map((n) => ({ generation: n.generation, id: n.id, rank: n.rank })),
+            ),
       following: mapView.getFollow(),
     };
   };
@@ -712,6 +803,12 @@ async function boot(): Promise<void> {
     },
     get following() {
       return getState().following;
+    },
+    get feed() {
+      return getState().feed;
+    },
+    get familyTree() {
+      return getState().familyTree;
     },
     inspect(target: InspectTarget) {
       setInspect(target);
@@ -820,6 +917,13 @@ async function boot(): Promise<void> {
       if (msg.runId !== activeRunId) return;
       dashboard.add(msg.reports);
       renderDashboard();
+      requestTree();
+      return;
+    }
+
+    if (msg.type === 'lineage') {
+      if (msg.runId !== activeRunId) return;
+      renderTree(msg.tree);
       return;
     }
 
@@ -870,6 +974,8 @@ async function boot(): Promise<void> {
   ): void => {
     exportReplayBtn.hidden = start === undefined && replayText === undefined;
     dashboard.reset();
+    treeTribe = null;
+    renderTree(null);
     inspectTarget = null;
     latestInspection = null;
     inspectorEl.hidden = true;

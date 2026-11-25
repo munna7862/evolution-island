@@ -108,6 +108,7 @@ export class SimRunner {
         msg.type !== 'requestHash' &&
         msg.type !== 'exportReplay' &&
         msg.type !== 'inspect' &&
+        msg.type !== 'requestLineage' &&
         msg.seq !== undefined
       ) {
         this.lastAckSeq = msg.seq;
@@ -125,6 +126,17 @@ export class SimRunner {
           break;
         case 'setPauseAtTick':
           this.handleSetPauseAtTick(msg.targetTick);
+          break;
+        case 'requestLineage':
+          this.host.emit(
+            {
+              type: 'lineage',
+              runId: this.runId,
+              requestId: msg.requestId,
+              tree: this.played?.run.championLineage(msg.tribeId, msg.depth) ?? null,
+            },
+            [],
+          );
           break;
         case 'inspect':
           this.inspectTarget = msg.target;

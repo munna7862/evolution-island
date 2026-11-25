@@ -21,7 +21,9 @@ import {
   hashConfig,
 } from '@evolution-island/sim-core';
 import { expect, test, type Page } from '@playwright/test';
+import { DashboardData } from '../src/dashboard.js';
 import type {} from '../src/debug-hook.js';
+import { tribeName } from '../src/renderer/palette.js';
 
 const TRAINER_CLI = fileURLToPath(new URL('../../trainer/dist/cli.js', import.meta.url));
 
@@ -352,6 +354,43 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     await expect.poll(() => page.evaluate(() => window.__ei!.dashboard.generation)).toBe(4);
     expect(await shownRows()).toEqual(expectedRows(4));
     await expect(page.locator('#dash-generation')).toHaveText('Generation 4 finished');
+
+    // Events feed (Sprint 6.3): the same events Node's reports give.
+    const reports = [3, 4].map((generation) => ({
+      generation,
+      tribes: node.tribes.map((t) => {
+        const h = t.history.find((x) => x.generation === generation)!;
+        return {
+          tribeId: t.id,
+          alive: true,
+          population: h.population,
+          survivors: h.survivors,
+          avgFitness: h.avgFitness,
+          maxFitness: h.maxFitness,
+          territoryPct: h.territoryPct,
+          kills: h.kills,
+          tribeScore: h.tribeScore,
+          benchmarkScore: h.benchmarkScore,
+        };
+      }),
+    }));
+    const expectedFeed = new DashboardData(tribeName);
+    expectedFeed.add(reports);
+    expect(await page.evaluate(() => window.__ei!.feed)).toEqual(expectedFeed.feed());
+    await expect(page.locator('#dash-feed li')).toHaveCount(expectedFeed.feed().length);
+
+    // Family tree (Sprint 6.3): the leader's champion of generation 4 and its parents in 3.
+    const leader = expectedRows(4)[0]!.tribeId;
+    const tree = node.championLineage(leader, 4)!;
+    await expect
+      .poll(() => page.evaluate(() => window.__ei!.familyTree?.[0]?.[0]?.generation))
+      .toBe(4);
+    const shownTree = (await page.evaluate(() => window.__ei!.familyTree))!;
+    expect(shownTree[0]).toEqual([{ generation: 4, id: tree.id, rank: 0 }]);
+    expect(shownTree[1]?.map((n) => n.id).sort((a, b) => a - b)).toEqual(
+      [...new Set(tree.parents.map((n) => n.id))].sort((a, b) => a - b),
+    );
+    await expect(page.locator('#dash-tree-title')).toContainText(tribeName(leader));
     expect(errors).toEqual([]);
   });
 

@@ -684,3 +684,6 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 
 **2026-11-25 — Sprint 6.2 (creature inspector & follow-cam)**
 - Click a creature (or a dashboard row for a tribe's champion): live stats, sensors, actions, memory and call values, hidden and output activations computed exactly as the brain policy does, attached by the worker to every snapshot; follow-cam. No rule changed (`simVersion` 13).
+
+**2026-11-25 — Sprint 6.3 (family tree & events feed)** — Phase 6 done (M5 "Spectator ready")
+- Breeding records each genome's parents (same random draws, golden hashes unchanged); `EvolutionRun` keeps the last 30 generations of parents, ranks and fitness and returns a champion's family tree. Dashboard: events feed (extinction, elimination, territory levels, benchmark and fitness records, a new leader) and the leader's (or a clicked tribe's) champion tree. No rule changed (`simVersion` 13).

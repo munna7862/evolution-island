@@ -53,7 +53,11 @@ export function pickParent(
   evolution: EvolutionConfig,
   rng: RngStream,
 ): Float32Array {
-  const n = candidates.length;
+  return candidates[pickParentIndex(candidates.length, evolution, rng)]!;
+}
+
+/** `pickParent`'s choice as an index into the candidates (same draws). */
+export function pickParentIndex(n: number, evolution: EvolutionConfig, rng: RngStream): number {
   if (n === 0) {
     throw new RangeError('pickParent needs at least one candidate');
   }
@@ -63,10 +67,20 @@ export function pickParent(
     for (let t = 0; t < rounds; t++) {
       best = Math.min(best, rng.nextInt(0, n));
     }
-    return candidates[best]!;
+    return best;
   }
   const parents = Math.max(1, Math.min(n, Math.ceil(evolution.parentFraction * n)));
-  return candidates[rng.nextInt(0, parents)]!;
+  return rng.nextInt(0, parents);
+}
+
+/**
+ * Where a bred genome came from (Sprint 6.3 family tree): indices into the candidates it was bred
+ * from (one for an elite or a mutation-only copy, two for a crossover, none for a fresh random
+ * genome), and whether those candidates were the hall of fame rather than the tribe's members.
+ */
+export interface Parentage {
+  readonly parents: readonly number[];
+  readonly fromHallOfFame: boolean;
 }
 
 /**
@@ -80,17 +94,21 @@ export function breedGenomes(
   count: number,
   evolution: EvolutionConfig,
   rng: RngStream,
+  /** Filled with each genome's `Parentage`, in order (optional; draws are the same). */
+  parentsOut?: Parentage[],
 ): Float32Array[] {
   const next: Float32Array[] = [];
   if (candidates.length === 0) {
     for (let i = 0; i < count; i++) {
       next.push(randomGenome(spec, rng, evolution.initialWeightRange));
+      parentsOut?.push({ parents: [], fromHallOfFame: false });
     }
     return next;
   }
   const elites = Math.max(0, Math.min(Math.floor(evolution.eliteCount), count, candidates.length));
   for (let i = 0; i < elites; i++) {
     next.push(Float32Array.from(candidates[i]!));
+    parentsOut?.push({ parents: [i], fromHallOfFame: false });
   }
   const mutation = {
     rate: evolution.mutationRate,
@@ -98,10 +116,17 @@ export function breedGenomes(
     clamp: evolution.weightClamp,
   };
   while (next.length < count) {
-    const a = pickParent(candidates, evolution, rng);
-    const child = evolution.crossover
-      ? crossoverPerNeuron(spec, a, pickParent(candidates, evolution, rng), rng)
-      : Float32Array.from(a);
+    const ia = pickParentIndex(candidates.length, evolution, rng);
+    const a = candidates[ia]!;
+    let child: Float32Array;
+    if (evolution.crossover) {
+      const ib = pickParentIndex(candidates.length, evolution, rng);
+      child = crossoverPerNeuron(spec, a, candidates[ib]!, rng);
+      parentsOut?.push({ parents: [ia, ib], fromHallOfFame: false });
+    } else {
+      child = Float32Array.from(a);
+      parentsOut?.push({ parents: [ia], fromHallOfFame: false });
+    }
     mutateGenome(child, rng, mutation);
     next.push(child);
   }
@@ -122,23 +147,29 @@ export function respawnGenomes(
   count: number,
   evolution: EvolutionConfig,
   rng: RngStream,
+  parentsOut?: Parentage[],
 ): Float32Array[] {
   if (members.length === 0) {
-    return breedGenomes(
+    const fromHof: Parentage[] = [];
+    const genomes = breedGenomes(
       spec,
       hallOfFame.map((e) => e.genome),
       count,
       evolution,
       rng,
+      fromHof,
     );
+    parentsOut?.push(...fromHof.map((p) => ({ ...p, fromHallOfFame: true })));
+    return genomes;
   }
   const champion = hallOfFame[0];
   if (champion === undefined || count < 1) {
-    return breedGenomes(spec, members, count, evolution, rng);
+    return breedGenomes(spec, members, count, evolution, rng, parentsOut);
   }
+  parentsOut?.push({ parents: [0], fromHallOfFame: true });
   return [
     Float32Array.from(champion.genome),
-    ...breedGenomes(spec, members, count - 1, evolution, rng),
+    ...breedGenomes(spec, members, count - 1, evolution, rng, parentsOut),
   ];
 }
 
@@ -387,6 +418,27 @@ export interface EvolutionRunOptions {
   readonly resume?: EvolutionRunState;
 }
 
+/** Generations the family tree keeps (Sprint 6.3). */
+export const LINEAGE_GENERATIONS = 30;
+
+/** One creature in the family tree (Sprint 6.3). */
+export interface LineageNode {
+  readonly generation: number;
+  readonly id: number;
+  readonly tribeId: number;
+  /** Rank in its tribe at its generation's end (0 = champion); null while it is running. */
+  rank: number | null;
+  fitness: number | null;
+  /** Ids of its parents in the generation before (none for founders and hall-of-fame returns). */
+  readonly parents: readonly number[];
+  /** A hall-of-fame genome brought back (extinct tribe), not bred from the last generation. */
+  readonly fromHallOfFame: boolean;
+}
+
+export interface LineageTree extends Omit<LineageNode, 'parents'> {
+  readonly parents: readonly LineageTree[];
+}
+
 /** Benchmark at generation 1 and every `interval` generations. */
 export function isBenchmarkGeneration(generation: number, interval: number): boolean {
   return generation === 1 || (interval > 0 && generation % interval === 0);
@@ -408,6 +460,12 @@ export class EvolutionRun {
   winner: number | null = null;
 
   private arena: BenchmarkArena | null = null;
+  /**
+   * Family tree (Sprint 6.3): per generation, every creature's parents (ids in the generation
+   * before), rank and fitness, for the last `LINEAGE_GENERATIONS` generations. Not part of the
+   * run's state or hash: it records what happened, it never changes what happens.
+   */
+  private readonly lineage = new Map<number, Map<number, LineageNode>>();
   /** The last generation start: what `captureState` saves (Sprint 5.1). */
   private lastStart: Omit<EvolutionRunState, 'tribes' | 'finished' | 'winner'> | null = null;
 
@@ -428,6 +486,7 @@ export class EvolutionRun {
     }
     if (options.start !== undefined) {
       this.tribes = this.startFrom(options.start, tribeIds);
+      this.recordBirths(this.world.generation, () => null);
       return;
     }
     const startSize = this.config.presets[options.preset].startingCreaturesPerTribe;
@@ -447,6 +506,7 @@ export class EvolutionRun {
         genomes: Array.from({ length: t.size }, () => randomGenome(this.spec, rng, range)),
       })),
     );
+    this.recordBirths(1, () => null);
   }
 
   /** Validates `start` against the map and brain, then spawns its genomes (no RNG draws). */
@@ -488,6 +548,79 @@ export class EvolutionRun {
 
   get generation(): number {
     return this.world.generation;
+  }
+
+  /** Records the creatures of a generation that just started and where each came from. */
+  private recordBirths(
+    generation: number,
+    sourceOf: (
+      tribeId: number,
+    ) => { parentage: readonly Parentage[]; parentIds: readonly number[] } | null,
+  ): void {
+    const nodes = new Map<number, LineageNode>();
+    const indexInTribe = new Map<number, number>();
+    for (const c of this.world.creatures) {
+      const k = indexInTribe.get(c.tribeId) ?? 0;
+      indexInTribe.set(c.tribeId, k + 1);
+      const source = sourceOf(c.tribeId);
+      const p = source?.parentage[k];
+      const fromHallOfFame = p?.fromHallOfFame ?? false;
+      nodes.set(c.id, {
+        generation,
+        id: c.id,
+        tribeId: c.tribeId,
+        rank: null,
+        fitness: null,
+        parents:
+          source === null || p === undefined || fromHallOfFame
+            ? []
+            : p.parents.map((i) => source.parentIds[i]!),
+        fromHallOfFame,
+      });
+    }
+    this.lineage.set(generation, nodes);
+    for (const g of this.lineage.keys()) {
+      if (g <= generation - LINEAGE_GENERATIONS) this.lineage.delete(g);
+    }
+  }
+
+  /**
+   * A tribe's champion of the last finished generation (rank 0) with its ancestors up to `depth`
+   * generations back, or null if that generation isn't recorded (Sprint 6.3 family tree).
+   */
+  championLineage(tribeId: number, depth = 4): LineageTree | null {
+    const generation = this.finished ? this.world.generation : this.world.generation - 1;
+    const nodes = this.lineage.get(generation);
+    if (nodes === undefined) return null;
+    for (const node of nodes.values()) {
+      if (node.tribeId === tribeId && node.rank === 0) return this.treeOf(node, depth);
+    }
+    return null;
+  }
+
+  /**
+   * The tree under `node`. Ancestors are shared (elites, parents of several children), so
+   * subtrees are memoised: the same ancestor at the same remaining depth is one object, which
+   * keeps the tree as small as the recorded generations instead of doubling with every level.
+   */
+  private treeOf(
+    node: LineageNode,
+    depth: number,
+    memo = new Map<string, LineageTree>(),
+  ): LineageTree {
+    const key = `${node.generation}:${node.id}:${depth}`;
+    const known = memo.get(key);
+    if (known !== undefined) return known;
+    const parents =
+      depth <= 0
+        ? []
+        : node.parents.flatMap((id) => {
+            const parent = this.lineage.get(node.generation - 1)?.get(id);
+            return parent === undefined ? [] : [this.treeOf(parent, depth - 1, memo)];
+          });
+    const tree = { ...node, parents };
+    memo.set(key, tree);
+    return tree;
   }
 
   /** Starts a world generation, remembering what `captureState` needs to redo it exactly. */
@@ -571,6 +704,7 @@ export class EvolutionRun {
     rng.policy.setState(state.rng.policy);
     this.world.tickCount = state.tickCount;
     this.beginGeneration(state.generation, state.spawns);
+    this.recordBirths(state.generation, () => null);
     return tribes;
   }
 
@@ -725,19 +859,40 @@ export class EvolutionRun {
 
     const rng = this.world.rng.evolution;
     const spawns: TribeSpawn[] = [];
+    const parentageByTribe = new Map<number, Parentage[]>();
+    // Family tree (Sprint 6.3): this generation's ranks and fitness.
+    for (const r of results) {
+      r.ranked.forEach((x, rank) => {
+        const node = this.lineage.get(generation)?.get(x.id);
+        if (node !== undefined) {
+          node.rank = rank;
+          node.fitness = x.fitness;
+        }
+      });
+    }
     for (const r of results) {
       if (!r.tribe.alive) continue;
       const size = sizes[this.tribes.indexOf(r.tribe)]!;
       const memberGenomes = r.ranked.map((x) => x.genome);
+      const parentage: Parentage[] = [];
+      parentageByTribe.set(r.tribe.id, parentage);
       r.tribe.size = size;
       spawns.push({
         tribeId: r.tribe.id,
         genomes: r.extinct
-          ? respawnGenomes(this.spec, r.tribe.hallOfFame, memberGenomes, size, evo, rng)
-          : breedGenomes(this.spec, memberGenomes, size, evo, rng),
+          ? respawnGenomes(this.spec, r.tribe.hallOfFame, memberGenomes, size, evo, rng, parentage)
+          : breedGenomes(this.spec, memberGenomes, size, evo, rng, parentage),
       });
     }
     this.beginGeneration(generation + 1, spawns);
+    this.recordBirths(generation + 1, (tribeId) => {
+      const r = results.find((x) => x.tribe.id === tribeId);
+      if (r === undefined) return null;
+      return {
+        parentage: parentageByTribe.get(tribeId) ?? [],
+        parentIds: r.ranked.map((x) => x.id),
+      };
+    });
   }
 }
 

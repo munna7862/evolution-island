@@ -34,11 +34,88 @@ export interface ChartSeries {
 
 export type ChartMetric = 'avgFitness' | 'benchmarkScore' | 'population';
 
+/** One line of the events feed (Sprint 6.3). */
+export interface FeedEvent {
+  readonly generation: number;
+  readonly text: string;
+}
+
+/** Territory % levels announced when a tribe first reaches them. */
+export const TERRITORY_LEVELS: readonly number[] = [1, 2, 5, 10, 20, 40];
+/** Events kept in the feed. */
+export const FEED_LENGTH = 100;
+
+/**
+ * The notable things in a finished generation (Sprint 6.3), given the one before (if any) and
+ * the records so far: a tribe dying out after having survivors, being eliminated (battle
+ * royale), reaching a territory level for the first time, a new best fitness of all tribes, a
+ * tribe's new best benchmark, a new leader by tribe score. `name` turns a tribe id into a name.
+ */
+export function generationEvents(
+  previous: GenerationReport | undefined,
+  current: GenerationReport,
+  records: {
+    readonly bestFitness: number;
+    readonly bestBenchmark: ReadonlyMap<number, number>;
+    readonly territoryLevel: ReadonlyMap<number, number>;
+  },
+  name: (tribeId: number) => string,
+): string[] {
+  const events: string[] = [];
+  const before = new Map(previous?.tribes.map((t) => [t.tribeId, t]));
+  for (const t of current.tribes) {
+    const prev = before.get(t.tribeId);
+    if (!t.alive) {
+      events.push(`${name(t.tribeId)} was eliminated`);
+    } else if (t.survivors === 0 && prev !== undefined && prev.survivors > 0) {
+      events.push(`${name(t.tribeId)} went extinct and returns from its hall of fame`);
+    }
+    const level = [...TERRITORY_LEVELS].reverse().find((l) => t.territoryPct >= l);
+    if (level !== undefined && level > (records.territoryLevel.get(t.tribeId) ?? 0)) {
+      events.push(`${name(t.tribeId)} reached ${level}% territory`);
+    }
+    const bestBench = records.bestBenchmark.get(t.tribeId);
+    if (t.benchmarkScore !== null && bestBench !== undefined && t.benchmarkScore > bestBench) {
+      events.push(
+        `${name(t.tribeId)} champion set a benchmark record: ${t.benchmarkScore.toFixed(0)}`,
+      );
+    }
+  }
+  const top = [...current.tribes].sort(
+    (a, b) => b.maxFitness - a.maxFitness || a.tribeId - b.tribeId,
+  )[0];
+  if (previous !== undefined && top !== undefined && top.maxFitness > records.bestFitness) {
+    events.push(
+      `New fitness record: a ${name(top.tribeId)} creature scored ${top.maxFitness.toFixed(0)}`,
+    );
+  }
+  const leader = (r: GenerationReport | undefined) =>
+    r === undefined
+      ? undefined
+      : [...r.tribes].sort((a, b) => b.tribeScore - a.tribeScore || a.tribeId - b.tribeId)[0]
+          ?.tribeId;
+  const now = leader(current);
+  if (previous !== undefined && now !== undefined && now !== leader(previous)) {
+    events.push(`${name(now)} takes the lead`);
+  }
+  return events;
+}
+
 export class DashboardData {
   private readonly reports: GenerationReport[] = [];
+  private readonly events: FeedEvent[] = [];
+  private bestFitness = Number.NEGATIVE_INFINITY;
+  private readonly bestBenchmark = new Map<number, number>();
+  private readonly territoryLevel = new Map<number, number>();
+
+  constructor(private readonly name: (tribeId: number) => string = (id) => `Tribe ${id}`) {}
 
   reset(): void {
     this.reports.length = 0;
+    this.events.length = 0;
+    this.bestFitness = Number.NEGATIVE_INFINITY;
+    this.bestBenchmark.clear();
+    this.territoryLevel.clear();
   }
 
   /** Adds finished generations (in order; repeats of a known generation are ignored). */
@@ -46,8 +123,39 @@ export class DashboardData {
     for (const report of reports) {
       const last = this.reports[this.reports.length - 1];
       if (last !== undefined && report.generation <= last.generation) continue;
+      const texts = generationEvents(
+        last,
+        report,
+        {
+          bestFitness: this.bestFitness,
+          bestBenchmark: this.bestBenchmark,
+          territoryLevel: this.territoryLevel,
+        },
+        this.name,
+      );
+      for (const text of texts) this.events.unshift({ generation: report.generation, text });
+      this.events.length = Math.min(this.events.length, FEED_LENGTH);
+      for (const t of report.tribes) {
+        this.bestFitness = Math.max(this.bestFitness, t.maxFitness);
+        if (t.benchmarkScore !== null) {
+          this.bestBenchmark.set(
+            t.tribeId,
+            Math.max(this.bestBenchmark.get(t.tribeId) ?? 0, t.benchmarkScore),
+          );
+        }
+        const level = [...TERRITORY_LEVELS].reverse().find((l) => t.territoryPct >= l) ?? 0;
+        this.territoryLevel.set(
+          t.tribeId,
+          Math.max(this.territoryLevel.get(t.tribeId) ?? 0, level),
+        );
+      }
       this.reports.push(report);
     }
+  }
+
+  /** The events feed, newest first (Sprint 6.3). */
+  feed(): readonly FeedEvent[] {
+    return this.events;
   }
 
   generations(): number[] {

@@ -35,3 +35,7 @@ that makes runs worth watching.
 3. **The inspection rides on every snapshot (Sprint 6.2).** The viewer sets a target (creature or
    tribe champion) once; the worker attaches `inspectCreature` (pure, read-only, same inputs as
    the brain policy) to each snapshot. Follow-cam centres on the creature's drawn position.
+4. **Lineage is recorded at breeding, for 30 generations (Sprint 6.3).** Breeding reports each
+   genome's parents (same draws); `EvolutionRun` keeps parents, rank and fitness per creature for
+   the last 30 generations (not run state, not hashed) and returns champion trees with shared
+   ancestors memoised. The events feed is derived in the viewer from generation reports.

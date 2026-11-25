@@ -7,6 +7,7 @@ import {
   type Seed,
   type SpawnZone,
   type World,
+  type LineageTree,
 } from '@evolution-island/sim-core';
 
 export const BASE_TICKS_PER_SECOND = 10;
@@ -181,6 +182,14 @@ export type MainToWorkerMessage =
       readonly requestId: number;
     }
   | {
+      /** A tribe's champion of the last finished generation and its ancestors (Sprint 6.3). */
+      readonly type: 'requestLineage';
+      readonly runId: number;
+      readonly requestId: number;
+      readonly tribeId: number;
+      readonly depth: number;
+    }
+  | {
       /** Inspect a creature (Sprint 6.2); its live data then rides on every snapshot. */
       readonly type: 'inspect';
       readonly runId: number;
@@ -213,6 +222,13 @@ export type WorkerToMainMessage =
       readonly type: 'generationStats';
       readonly runId: number;
       readonly reports: readonly GenerationReport[];
+    }
+  | {
+      readonly type: 'lineage';
+      readonly runId: number;
+      readonly requestId: number;
+      /** Null when no generation has finished yet or nothing is recorded (random mode). */
+      readonly tree: LineageTree | null;
     }
   | {
       readonly type: 'replayExport';
