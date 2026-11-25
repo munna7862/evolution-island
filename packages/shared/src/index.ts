@@ -64,3 +64,13 @@ export {
   type TransferableMapData,
   type WorkerToMainMessage,
 } from './worker-protocol.js';
+export {
+  assertRunStateCompatible,
+  parseRunState,
+  RUN_STATE_FILE_FORMAT,
+  RUN_STATE_FILE_NAME,
+  RUN_STATE_FILE_VERSION,
+  RunStateError,
+  serializeRunState,
+  type RunStateFile,
+} from './run-state.js';

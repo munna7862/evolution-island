@@ -670,3 +670,8 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Held-out seeds 401–450, run once against the bar above: normal map 0.99× (pass), sparse-water **0.87×** (needed ≥ 1.10×) and better on only **19 of 50** seeds (needed ≥ 30): **fail**. The mute test passes (call inputs zeroed: 0.71×, worse for 93 of 100), so calls carry information, but tribes that can call do worse and lock in more (11 vs 4 of 100). `signals.enabled` stays false; the switch, hearing sensors, ripple rings and `pnpm analyze --mute` stay.
 - Likely causes, for a later try on development seeds: `callCost` 0.1 is half the base energy drain; calls may matter only where allies fight together (Medium).
 
+**2026-11-25 — Sprint 5.1 (runs & resumable training)**
+- Runs resume at generation boundaries: `resume.json` (run state: RNG streams, tick count and spawns before the generation, tribes with hall of fame and history) is written with every checkpoint; `pnpm train --resume <run folder> --generations N`. A run killed mid-way and resumed leaves exactly the files of an uninterrupted run (tested). No rule changed (`simVersion` 13).
+- Viewer run browser: Run → Saved generation → Tribe (all, or one tribe's champions alone).
+- Files from another `simVersion` are refused with the reason, not migrated: the rules changed, so a migrated genome would not behave as trained; `migrateGenome` covers brain growth within one version.
+

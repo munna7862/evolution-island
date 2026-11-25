@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import {
   checkpointStart,
   parseCheckpoint,
@@ -224,6 +224,64 @@ describe('statsToCsv', () => {
     };
     expect(statsToCsv([row]).split('\n')[1]).toBe(
       '2,1,25,3,22,512.25,900,0.30000000000000004,0,0,3.3,,25',
+    );
+  });
+});
+
+describe('kill and resume (Sprint 5.1)', () => {
+  /** Every file of a run folder except run.json's wall-clock timing, as path → text. */
+  function snapshotFolder(dir: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    const walk = (d: string) => {
+      for (const name of readdirSync(d, { withFileTypes: true })) {
+        const full = join(d, name.name);
+        if (name.isDirectory()) walk(full);
+        else {
+          let text = readFileSync(full, 'utf8');
+          if (name.name === 'run.json') text = text.replace(/"timing": \{[^}]*\}/, '"timing": {}');
+          out[relative(dir, full).split(sep).join('/')] = text;
+        }
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  it('a run killed during generation 5 and resumed to 7 equals a run of 7', () => {
+    const straight = tempDir();
+    trainSeed(job(straight, { generations: 7 }));
+    // Kill: the process dies right after generation 5 (checkpoints at 1 and 3 were written, the
+    // one at 6 never is). The folder is left as it was at checkpoint 3.
+    const killed = tempDir();
+    expect(() =>
+      trainSeed(job(killed, { generations: 7 }), (p) => {
+        if (p.generation === 5) throw new Error('killed');
+      }),
+    ).toThrow('killed');
+    const summary = trainSeed(job(killed, { generations: 7, resume: true }));
+    expect(summary.completedGenerations).toBe(7);
+    expect(snapshotFolder(killed)).toEqual(snapshotFolder(straight));
+  });
+
+  it('resumes again and again from regular checkpoints', () => {
+    const straight = tempDir();
+    trainSeed(job(straight, { generations: 7, saveEvery: 2 }));
+    const resumed = tempDir();
+    trainSeed(job(resumed, { generations: 2, saveEvery: 2 }));
+    trainSeed(job(resumed, { generations: 4, saveEvery: 2, resume: true }));
+    trainSeed(job(resumed, { generations: 7, saveEvery: 2, resume: true }));
+    expect(snapshotFolder(resumed)).toEqual(snapshotFolder(straight));
+  });
+
+  it('refuses to resume with another config, or with nothing left to do', () => {
+    const dir = tempDir();
+    trainSeed(job(dir, { generations: 3 }));
+    const other: SimConfig = { ...FAST, evolution: { ...FAST.evolution, mutationRate: 0.5 } };
+    expect(() => trainSeed(job(dir, { generations: 5, resume: true, config: other }))).toThrow(
+      /config/,
+    );
+    expect(() => trainSeed(job(dir, { generations: 3, resume: true }))).toThrow(
+      /already has 3 generations/,
     );
   });
 });

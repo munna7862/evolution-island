@@ -112,3 +112,38 @@ export async function loadCheckpoint(
   }
   return checkpointStart(found.checkpoint, genomes, expected);
 }
+
+/** The runs among found checkpoints (`preset-seed`), in the order they were found (Sprint 5.1). */
+export function runNames(checkpoints: readonly FoundCheckpoint[]): string[] {
+  const names: string[] = [];
+  for (const c of checkpoints) {
+    const name = runName(c.checkpoint);
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** One run's checkpoints, by generation. */
+export function checkpointsOfRun(
+  checkpoints: readonly FoundCheckpoint[],
+  name: string,
+): FoundCheckpoint[] {
+  return checkpoints.filter((c) => runName(c.checkpoint) === name);
+}
+
+/**
+ * The run browser's tribe choice (Sprint 5.1): `null` plays every tribe; a tribe id plays only
+ * that tribe's champions, the other tribes left out (as if eliminated) so their zones stay empty.
+ */
+export function onlyTribe(start: EvolutionStart, tribeId: number | null): EvolutionStart {
+  if (tribeId === null) return start;
+  if (!start.tribes.some((t) => t.tribeId === tribeId && t.alive)) {
+    throw new RangeError(`Tribe ${tribeId} has no champions in this generation`);
+  }
+  return {
+    generation: start.generation,
+    tribes: start.tribes.map((t) =>
+      t.tribeId === tribeId ? t : { ...t, alive: false, genomes: [] },
+    ),
+  };
+}

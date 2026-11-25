@@ -28,8 +28,12 @@ import { MapView } from './renderer/map-view.js';
 import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
 import { sourcesFromDrop, sourcesFromFileList } from './run-drop.js';
 import {
+  checkpointsOfRun,
   defaultCheckpoint,
   loadCheckpoint,
+  onlyTribe,
+  runName,
+  runNames,
   scanRunFiles,
   type FoundCheckpoint,
   type RunFileSource,
@@ -152,6 +156,10 @@ async function boot(): Promise<void> {
   const runInput = requireEl('#run-input', HTMLInputElement);
   const checkpointField = requireEl('#checkpoint-field', HTMLElement);
   const checkpointSelect = requireEl('#checkpoint-select', HTMLSelectElement);
+  const runField = requireEl('#run-field', HTMLElement);
+  const runSelect = requireEl('#run-select', HTMLSelectElement);
+  const tribeField = requireEl('#tribe-field', HTMLElement);
+  const tribeSelect = requireEl('#tribe-select', HTMLSelectElement);
   const runInfoEl = requireEl('#run-info', HTMLElement);
   const dropOverlay = requireEl('#drop-overlay', HTMLElement);
 
@@ -182,6 +190,11 @@ async function boot(): Promise<void> {
   };
   let runSources: readonly RunFileSource[] = [];
   let runCheckpoints: readonly FoundCheckpoint[] = [];
+  // Run browser (Sprint 5.1): the generations of the chosen run, the checkpoint playing, and the
+  // tribe filter (null = every tribe).
+  let shownCheckpoints: readonly FoundCheckpoint[] = [];
+  let playingFound: FoundCheckpoint | null = null;
+  let tribeChoice: number | null = null;
   let playing: PlayingCheckpoint | null = null;
   let runMessage = '';
   let runMessageIsError = false;
@@ -351,7 +364,7 @@ async function boot(): Promise<void> {
       camera: mapView.getCamera(),
       mode: playing === null ? 'random' : 'checkpoint',
       checkpoint: playing,
-      checkpointOptions: runCheckpoints.map((c) => c.label),
+      checkpointOptions: shownCheckpoints.map((c) => c.label),
       runMessage,
       runMessageIsError,
     };
@@ -590,6 +603,7 @@ async function boot(): Promise<void> {
     const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
     if (playing !== null) {
       playing = null;
+      playingFound = null;
       checkpointSelect.selectedIndex = -1;
       setRunMessage('', false);
     }
@@ -600,7 +614,7 @@ async function boot(): Promise<void> {
   const playCheckpoint = async (found: FoundCheckpoint): Promise<void> => {
     let start: EvolutionStart;
     try {
-      start = await loadCheckpoint(found, runSources, expectedCheckpoint);
+      start = onlyTribe(await loadCheckpoint(found, runSources, expectedCheckpoint), tribeChoice);
     } catch (error: unknown) {
       setRunMessage(`Can't play ${found.label}: ${errorMessage(error)}`, true);
       return;
@@ -613,8 +627,12 @@ async function boot(): Promise<void> {
       seed,
       tribeSizes: start.tribes.map((t) => t.genomes.length),
     };
-    checkpointSelect.selectedIndex = runCheckpoints.indexOf(found);
-    setRunMessage(`Watching ${found.label} champions`, false);
+    checkpointSelect.selectedIndex = shownCheckpoints.indexOf(found);
+    playingFound = found;
+    setRunMessage(
+      `Watching ${found.label} champions${tribeChoice === null ? '' : ` · ${tribeName(tribeChoice)} only`}`,
+      false,
+    );
     startWorld(preset, seed, start);
   };
 
@@ -629,8 +647,25 @@ async function boot(): Promise<void> {
     }
     runSources = sources;
     runCheckpoints = scan.checkpoints;
+    runSelect.replaceChildren(
+      ...runNames(runCheckpoints).map((name) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        return option;
+      }),
+    );
+    runField.hidden = false;
+    showRun(runName(first.checkpoint));
+    await playCheckpoint(first);
+  };
+
+  /** Run browser: lists a run's saved generations and its tribes (Sprint 5.1). */
+  const showRun = (name: string): void => {
+    runSelect.value = name;
+    shownCheckpoints = checkpointsOfRun(runCheckpoints, name);
     checkpointSelect.replaceChildren(
-      ...runCheckpoints.map((c, i) => {
+      ...shownCheckpoints.map((c, i) => {
         const option = document.createElement('option');
         option.value = String(i);
         option.textContent = c.label;
@@ -641,7 +676,22 @@ async function boot(): Promise<void> {
     // refused first option would look selected, and picking it again would fire no 'change'.
     checkpointSelect.selectedIndex = -1;
     checkpointField.hidden = false;
-    await playCheckpoint(first);
+    tribeChoice = null;
+    const tribes = shownCheckpoints[shownCheckpoints.length - 1]?.checkpoint.tribes ?? [];
+    const all = document.createElement('option');
+    all.value = 'all';
+    all.textContent = 'All tribes';
+    tribeSelect.replaceChildren(
+      all,
+      ...tribes.map((t) => {
+        const option = document.createElement('option');
+        option.value = String(t.tribeId);
+        option.textContent = tribeName(t.tribeId);
+        return option;
+      }),
+    );
+    tribeSelect.value = 'all';
+    tribeField.hidden = false;
   };
 
   const loadRunSafely = (sources: Promise<readonly RunFileSource[]>): void => {
@@ -757,8 +807,21 @@ async function boot(): Promise<void> {
 
   checkpointSelect.addEventListener('change', () => {
     checkpointSelect.blur();
-    const found = runCheckpoints[Number(checkpointSelect.value)];
+    const found = shownCheckpoints[Number(checkpointSelect.value)];
     if (found !== undefined) void playCheckpoint(found);
+  });
+
+  runSelect.addEventListener('change', () => {
+    runSelect.blur();
+    showRun(runSelect.value);
+    const latest = shownCheckpoints[shownCheckpoints.length - 1];
+    if (latest !== undefined) void playCheckpoint(latest);
+  });
+
+  tribeSelect.addEventListener('change', () => {
+    tribeSelect.blur();
+    tribeChoice = tribeSelect.value === 'all' ? null : Number(tribeSelect.value);
+    if (playingFound !== null) void playCheckpoint(playingFound);
   });
 
   const isFileDrag = (event: DragEvent): boolean =>

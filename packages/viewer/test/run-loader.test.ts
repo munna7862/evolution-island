@@ -10,13 +10,18 @@ import {
   DEFAULT_CONFIG,
   hashConfig,
   weightCount,
+  type EvolutionStart,
 } from '@evolution-island/sim-core';
 import { describe, expect, it } from 'vitest';
 import {
+  checkpointsOfRun,
   defaultCheckpoint,
   loadCheckpoint,
   normalizeRunPath,
+  onlyTribe,
+  runNames,
   scanRunFiles,
+  type FoundCheckpoint,
   type RunFileSource,
 } from '../src/run-loader.js';
 
@@ -146,5 +151,46 @@ describe('loadCheckpoint', () => {
     await expect(
       loadCheckpoint(scan.checkpoints[0]!, sources, { ...EXPECTED, configHash: '0'.repeat(16) }),
     ).rejects.toThrow(/config/);
+  });
+});
+
+describe('run browser helpers (Sprint 5.1)', () => {
+  const found = (preset: 'small' | 'medium', seed: number, generation: number) =>
+    ({
+      label: `Gen ${generation} · ${preset}-${seed}`,
+      dir: '',
+      checkpoint: { preset, seed, generation },
+    }) as unknown as FoundCheckpoint;
+
+  it('lists runs in order and a run’s checkpoints', () => {
+    const list = [
+      found('small', 1, 1),
+      found('small', 1, 5),
+      found('medium', 2, 1),
+      found('small', 3, 1),
+    ];
+    expect(runNames(list)).toEqual(['small-1', 'medium-2', 'small-3']);
+    expect(checkpointsOfRun(list, 'small-1').map((c) => c.label)).toEqual([
+      'Gen 1 · small-1',
+      'Gen 5 · small-1',
+    ]);
+  });
+
+  it('plays one tribe alone: the others are left out, its own genomes kept', () => {
+    const g = new Float32Array(1);
+    const start: EvolutionStart = {
+      generation: 4,
+      tribes: [
+        { tribeId: 0, alive: true, genomes: [g, g], hallOfFame: [] },
+        { tribeId: 1, alive: true, genomes: [g], hallOfFame: [] },
+      ],
+    };
+    expect(onlyTribe(start, null)).toBe(start);
+    const one = onlyTribe(start, 1);
+    expect(one.tribes.map((t) => [t.alive, t.genomes.length])).toEqual([
+      [false, 0],
+      [true, 1],
+    ]);
+    expect(() => onlyTribe(start, 7)).toThrow(/no champions/);
   });
 });

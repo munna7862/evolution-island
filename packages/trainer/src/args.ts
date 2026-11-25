@@ -28,6 +28,8 @@ export interface TrainOptions {
   readonly force: boolean;
   /** Print only the summary, no per-checkpoint progress. */
   readonly quiet: boolean;
+  /** `--resume <dir>`: continue that run (Sprint 5.1); preset, seed and config come from it. */
+  readonly resume: string | null;
 }
 
 export type TrainCommand =
@@ -63,6 +65,9 @@ export const USAGE = `Usage: pnpm train [options]
                                       (the "config" object copied out of a run.json) works
                                       too. Runs store the full config.
   --workers <n>                       worker threads for --seeds (default: CPU count - 1)
+  --resume <dir>                      continue the run in <dir> (from its resume.json) up to
+                                      --generations; preset, seed, config and --save-every
+                                      come from its run.json
   --force                             overwrite a run already in the output folder
   --quiet                             print only the summary
   --help                              show this text
@@ -138,6 +143,7 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
         config: { type: 'string' },
         workers: { type: 'string' },
         force: { type: 'boolean' },
+        resume: { type: 'string' },
         quiet: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -146,6 +152,25 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
     throw new UsageError(error instanceof Error ? error.message : String(error));
   }
   if (values.help === true) return { kind: 'help' };
+  const resume = values.resume ?? null;
+  if (resume !== null) {
+    if (resume.trim().length === 0) throw new UsageError('--resume must not be empty');
+    for (const flag of [
+      'preset',
+      'seed',
+      'seeds',
+      'out',
+      'config',
+      'save-every',
+      'force',
+    ] as const) {
+      if (values[flag] !== undefined) {
+        throw new UsageError(
+          `--resume takes everything but --generations from the run; drop --${flag}`,
+        );
+      }
+    }
+  }
 
   const preset = values.preset ?? DEFAULT_PRESET;
   if (!isPresetId(preset)) {
@@ -198,6 +223,7 @@ export function parseTrainArgs(argv: readonly string[], cpus: number): TrainComm
       workers,
       force: values.force === true,
       quiet: values.quiet === true,
+      resume,
     },
   };
 }
