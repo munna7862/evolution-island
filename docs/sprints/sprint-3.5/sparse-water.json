@@ -1,0 +1,10 @@
+{
+  "map": {
+    "shallowWaterThreshold": -0.22,
+    "islandCoreLift": 0.3,
+    "pondRadius": 1.5,
+    "pondDistanceRatio": 1.3,
+    "minFairnessWaterTiles": 3,
+    "targetFairnessWaterTiles": 6
+  }
+}

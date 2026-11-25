@@ -373,8 +373,8 @@ Each sprint ≈ one focused Claude Code session (or a few). Every sprint ends wi
 
 **Sprint 3.5 — Memory experiment**
 - 2 memory neurons (§2.3) behind a config switch; Sprint 3.4 champions migrated with zero memory weights.
-- A/B in the benchmark arena: memory on vs off, 3 seeds, on the normal map and on a sparse-water variant (where remembering water matters most).
-- ✅ Unit tests: memory values stay within −1..1; a migrated genome with zero memory weights gives the same state hash as before migration. Memory-on tribes score ≥ memory-off on the normal map and better on the sparse-water map in ≥ 2 of 3 seeds. If not, leave memory off and record why in the retro.
+- A/B in the benchmark arena: memory on vs off, 50 held-out seeds, on the normal map and on a sparse-water variant (where remembering water matters most).
+- ✅ Unit tests: memory values stay within −1..1; a migrated genome with zero memory weights gives the same state hash as before migration. On held-out Small seeds 201–250, run once (tribe score = mean of its last three benchmarks): memory-on ≥ 0.95× memory-off on the normal map (100 generations); on the sparse-water map (300 generations) ≥ 1.10× memory-off and better on ≥ 30 of 50 seeds (bar in `docs/sprints/sprint-3.5.md`). If it passes, memory is switched on by default; if not, leave memory off and record why in the retro.
 
 ### Phase 4 — Tribes & Competition
 **Sprint 4.1 — Combat, sharing, territory**
@@ -632,3 +632,8 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Tried and dropped: cheaper moves, faster thirst, wider vision, weight clamp 8, intake weights ×5–×20, crossover off, unit-length food/water direction sensors (a local experiment; learning got worse).
 - Every run trained before this is unplayable in the viewer (new `SIM_VERSION` and config hash).
 - §4 Sprint 3.4 acceptance: **20 held-out seeds instead of 3** (user's decision, made before any held-out seed was run). A 100-generation outcome is still partly luck per seed (the tuned defaults met the per-seed bar on ≈ 62 % of 40 tuning seeds; about one tribe in seven locks into "always EAT" or "always DRINK"), so 3 of 3 would have passed only 25–40 % of the time. The bar is now on seeds 101–120, run once: mean per-seed ratio ≥ 2.0, ≥ 12 of 20 seeds at 2× gen 1 and 2× STAY-only, ≥ 75 % of tribes at 1.5×. Result: 2.52, 16 of 20, 30 of 40 (75 %, exactly the threshold) — met. On the held-out seeds 10 of 40 tribes stayed below 1.5× (1 in 4, more than the tuning seeds' 1 in 7); 2 of them are hard "always EAT" lock-ins, the other 8 bred creatures that lived through whole generations but their generation-100 champion scored low in the arena. Lock-in and champion noise are known limitations for Sprints 3.5 and 4.2.
+
+**2026-11-25 — Sprint 3.5 acceptance bar** (fixed before any held-out run)
+- §4 Sprint 3.5: **50 held-out seeds instead of 3** (user's decision, made before any held-out seed was run and before memory-on was trained on any seed). Memory on vs off from scratch, everything else default, on held-out Small seeds 201–250, each arm run once. A tribe's score is the mean of its last three benchmarks (damps the champion noise of Sprint 3.4). Pass: normal map (100 generations) memory-on ≥ 0.95× memory-off; sparse-water map (300 generations) memory-on ≥ 1.10× and better on ≥ 30 of 50 seeds. Measured noise between two equal memory-off arms of 50 seeds is about ±6 % (normal) and ±9 % (sparse). Hard lock-in and champion noise are reported per arm, not blocking.
+- Sparse-water variant = map generator settings via `--config` (`docs/sprints/sprint-3.5/sparse-water.json`): water in sight from 70 % of spawn-zone tiles instead of 99 %, 6.6 tiles away instead of 2.6. Memory off learns slowly there (1.34× at generation 100, 1.92× at 300 on development seeds), hence 300 generations.
+- If memory passes, `brain.memoryNeurons` becomes 2 by default (user's decision); if not, it stays off.
