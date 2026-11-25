@@ -412,3 +412,100 @@ body {
   background: rgba(255, 255, 255, 0.03);
   border-radius: 4px;
 }
+
+/* Sprint 6.2: creature inspector, bottom left over the map. */
+.inspector {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 10;
+  width: 280px;
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(11, 19, 30, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector[hidden] {
+  display: none;
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.insp-head #insp-title {
+  flex: 1;
+}
+
+.insp-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.insp-close {
+  padding: 0 6px;
+}
+
+.insp-stats {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 2px 6px;
+  margin: 0;
+}
+
+.insp-stats dt {
+  color: var(--muted);
+}
+
+.insp-stats dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.insp-section summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.insp-bars {
+  display: grid;
+  grid-template-columns: 82px 1fr 44px;
+  gap: 1px 6px;
+  align-items: center;
+  margin-top: 3px;
+}
+
+.insp-bar {
+  height: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.insp-bar.is-negative {
+  background: #f97316;
+}
+
+.insp-bars .is-group {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.dash-table tbody tr {
+  cursor: pointer;
+}

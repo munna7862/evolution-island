@@ -1,5 +1,5 @@
 import type { DashboardState } from './dashboard.js';
-import type { ReplayStatus } from '@evolution-island/shared';
+import type { CreatureInspection, InspectTarget, ReplayStatus } from '@evolution-island/shared';
 import type { SimSpeed } from '@evolution-island/shared';
 import type { MapPresetId, Seed } from '@evolution-island/sim-core';
 import type { CameraState } from './renderer/camera.js';
@@ -55,6 +55,9 @@ export interface EvolutionIslandDebugState {
   readonly runMessageIsError: boolean;
   /** Live dashboard (Sprint 6.1): the last finished generation's leaderboard. */
   readonly dashboard: DashboardState;
+  /** The inspected creature, live (Sprint 6.2), and the creature the camera follows. */
+  readonly inspection: CreatureInspection | null;
+  readonly following: number | null;
 }
 
 export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {
@@ -63,6 +66,10 @@ export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {
   requestHash(): Promise<{ readonly tick: number; readonly worldHash: string }>;
   /** The replay of what was played since the start (what "Export replay" saves). */
   exportReplay(): Promise<string>;
+  /** Opens the inspector on a target (what a click or a dashboard row does). */
+  inspect(target: InspectTarget): void;
+  /** Every living creature's tile in the latest snapshot. */
+  creatureTiles(): { readonly id: number; readonly x: number; readonly y: number }[];
 }
 
 declare global {

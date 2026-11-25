@@ -43,6 +43,8 @@ export type RenderableMap = Pick<
 
 export interface MapViewCallbacks {
   readonly onHoverTile?: (tile: TileCoord | null) => void;
+  /** A click (press and release without dragging) on a map tile (Sprint 6.2). */
+  readonly onClickTile?: (tile: TileCoord) => void;
   readonly onViewChange?: () => void;
 }
 
@@ -50,6 +52,9 @@ interface ChunkEntry {
   readonly descriptor: ChunkDescriptor;
   readonly sprite: Sprite;
 }
+
+/** A press that moves less than this is a click, not a drag (Sprint 6.2). */
+const CLICK_SLOP_PX = 4;
 
 const RENDERER_WEBGL: number = RendererType.WEBGL;
 const RENDERER_WEBGPU: number = RendererType.WEBGPU;
@@ -89,6 +94,9 @@ export class MapView {
   private creatureRenderDirty = false;
   private camera: CameraState = { x: 0, y: 0, zoom: 1, minZoom: 1e-4, maxZoom: 16 };
   private draggingPointerId: number | null = null;
+  private pressX = 0;
+  private pressY = 0;
+  private followId: number | null = null;
   private lastPointerX = 0;
   private lastPointerY = 0;
 
@@ -186,6 +194,26 @@ export class MapView {
     this.callbacks.onViewChange?.();
   }
 
+  /** Follow-cam (Sprint 6.2): keep creature `id` centred (null stops following). */
+  setFollow(id: number | null): void {
+    this.followId = id;
+  }
+
+  getFollow(): number | null {
+    return this.followId;
+  }
+
+  /** Centres the camera on the followed creature; true if the camera moved. */
+  private followCamera(): boolean {
+    if (this.followId === null) return false;
+    const pos = this.creatureLayer.worldPositionOf(this.followId);
+    if (pos === null || (pos.x === this.camera.x && pos.y === this.camera.y)) return false;
+    this.camera = { ...this.camera, x: pos.x, y: pos.y };
+    this.applyCamera();
+    this.callbacks.onViewChange?.();
+    return true;
+  }
+
   getCamera(): CameraState {
     return this.camera;
   }
@@ -223,7 +251,8 @@ export class MapView {
     readonly needsMoreFrames: boolean;
   } {
     const needsMoreFrames = this.creatureLayer.updateInterpolation(nowMs);
-    const rendered = this.creatureRenderDirty || this.creatureLayer.didPositionChange();
+    const followed = this.followCamera();
+    const rendered = this.creatureRenderDirty || this.creatureLayer.didPositionChange() || followed;
     if (rendered) {
       this.creatureRenderDirty = false;
       this.app.render();
@@ -321,6 +350,8 @@ export class MapView {
     this.draggingPointerId = event.pointerId;
     this.lastPointerX = event.clientX;
     this.lastPointerY = event.clientY;
+    this.pressX = event.clientX;
+    this.pressY = event.clientY;
     this.hostEl.classList.add('is-dragging');
     this.hostEl.setPointerCapture(event.pointerId);
   };
@@ -363,6 +394,21 @@ export class MapView {
   private readonly handlePointerUp = (event: PointerEvent): void => {
     if (this.draggingPointerId !== event.pointerId) return;
     this.draggingPointerId = null;
+    const moved = Math.hypot(event.clientX - this.pressX, event.clientY - this.pressY);
+    if (moved <= CLICK_SLOP_PX && this.map !== null) {
+      const rect = this.hostEl.getBoundingClientRect();
+      const { width, height } = this.viewportSize();
+      const tile = screenToTile(
+        this.camera,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        width,
+        height,
+        this.map.width,
+        this.map.height,
+      );
+      if (tile !== null) this.callbacks.onClickTile?.(tile);
+    }
     this.hostEl.classList.remove('is-dragging');
     if (this.hostEl.hasPointerCapture(event.pointerId)) {
       this.hostEl.releasePointerCapture(event.pointerId);

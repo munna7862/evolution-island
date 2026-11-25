@@ -237,6 +237,19 @@ export class CreatureLayer {
     return changed || (this.running && alpha < 1) || this.ripples.length > 0;
   }
 
+  /** Where creature `id` is drawn now (world units), or null if it isn't in the snapshot. */
+  worldPositionOf(id: number): { readonly x: number; readonly y: number } | null {
+    const snap = this.snapshot;
+    if (snap === null) return null;
+    for (let i = 0; i < snap.count; i++) {
+      if (snap.ids[i] === id) {
+        const sprite = this.spritePool[i]!;
+        return { x: sprite.position.x, y: sprite.position.y };
+      }
+    }
+    return null;
+  }
+
   /** Calling creatures in the latest snapshot (for tests and the HUD). */
   getRippleCount(): number {
     return this.ripples.length;

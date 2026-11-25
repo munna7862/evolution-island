@@ -380,4 +380,77 @@ test.describe('Viewer v1', () => {
     expect(actual).toEqual(GOLDEN.randomPolicy);
     expect(errors).toEqual([]);
   });
+
+  test('clicking a creature opens the inspector with live values; follow-cam keeps it centred (Sprint 6.2)', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page);
+    await page.goto('/?preset=small&seed=42&paused=1&speed=max');
+    await expect.poll(() => page.evaluate(() => window.__ei?.creatureTiles().length ?? 0)).toBe(50);
+    await expect(page.locator('#inspector')).toBeHidden();
+
+    /** Screen point of a tile's centre, from the camera. */
+    const screenOf = async (tx: number, ty: number) => {
+      const box = (await page.locator('#viewport').boundingBox())!;
+      const cam = await page.evaluate(() => window.__ei!.camera);
+      return {
+        x: box.x + box.width / 2 + ((tx + 0.5) * 8 - cam.x) * cam.zoom,
+        y: box.y + box.height / 2 + ((ty + 0.5) * 8 - cam.y) * cam.zoom,
+      };
+    };
+    const runTicks = async (target: number) => {
+      await page.evaluate((t) => {
+        window.__ei!.pauseAtTick(t);
+      }, target);
+      await page.click('#play-pause-btn');
+      await expect
+        .poll(
+          () => page.evaluate((t) => window.__ei!.tick === t && !window.__ei!.running, target),
+          {
+            timeout: 30_000,
+          },
+        )
+        .toBe(true);
+    };
+
+    const [first] = await page.evaluate(() => window.__ei!.creatureTiles());
+    const at = await screenOf(first!.x, first!.y);
+    await page.mouse.click(at.x, at.y);
+    await expect(page.locator('#inspector')).toBeVisible();
+    await expect(page.locator('#insp-title')).toContainText(`#${first!.id}`);
+    await expect.poll(() => page.evaluate(() => window.__ei!.inspection?.id)).toBe(first!.id);
+    expect(await page.evaluate(() => window.__ei!.inspection!.inputs.length)).toBe(18);
+
+    // Live: the inspected creature's age follows the ticks.
+    await runTicks(12);
+    await expect.poll(() => page.evaluate(() => window.__ei!.inspection?.age)).toBe(12);
+
+    // Follow-cam: after more ticks the camera is centred on the creature.
+    await page.locator('#insp-follow').check();
+    await runTicks(40);
+    await expect
+      .poll(async () => {
+        const { inspection, camera } = await page.evaluate(() => window.__ei!.getState());
+        const cx = (inspection!.x + 0.5) * 8;
+        const cy = (inspection!.y + 0.5) * 8;
+        return Math.abs(camera.x - cx) < 0.5 && Math.abs(camera.y - cy) < 0.5;
+      })
+      .toBe(true);
+    expect(await page.evaluate(() => window.__ei!.following)).toBe(first!.id);
+
+    // Clicking a tile with nobody on it closes the inspector.
+    await page.locator('#insp-follow').uncheck();
+    const occupied = new Set(
+      (await page.evaluate(() => window.__ei!.creatureTiles())).map((c) => `${c.x},${c.y}`),
+    );
+    const cam = await page.evaluate(() => window.__ei!.camera);
+    const tx = Math.floor(cam.x / 8);
+    const ty = Math.floor(cam.y / 8);
+    let free = { x: tx, y: ty };
+    for (let d = 1; occupied.has(`${free.x},${free.y}`); d++) free = { x: tx + d, y: ty };
+    const empty = await screenOf(free.x, free.y);
+    await page.mouse.click(empty.x, empty.y);
+    await expect(page.locator('#inspector')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
 });

@@ -1,6 +1,8 @@
 import {
   formatSpeed,
   parseReplay,
+  type CreatureInspection,
+  type InspectTarget,
   parseSeed,
   SIM_SPEEDS,
   type MainToWorkerMessage,
@@ -169,6 +171,16 @@ async function boot(): Promise<void> {
     population: requireEl('#chart-population', HTMLCanvasElement),
   } as const;
   const dashboard = new DashboardData();
+  const inspectorEl = requireEl('#inspector', HTMLElement);
+  const inspTitleEl = requireEl('#insp-title', HTMLElement);
+  const inspStatsEl = requireEl('#insp-stats', HTMLElement);
+  const inspBrainEl = requireEl('#insp-brain', HTMLElement);
+  const inspInputsEl = requireEl('#insp-inputs', HTMLElement);
+  const inspFollow = requireEl('#insp-follow', HTMLInputElement);
+  const inspClose = requireEl('#insp-close', HTMLButtonElement);
+  // Inspector (Sprint 6.2): what is inspected, and the latest data the worker sent for it.
+  let inspectTarget: InspectTarget = null;
+  let latestInspection: CreatureInspection | null = null;
   const loadRunBtn = requireEl('#load-run-btn', HTMLButtonElement);
   const runInput = requireEl('#run-input', HTMLInputElement);
   const loadReplayBtn = requireEl('#load-replay-btn', HTMLButtonElement);
@@ -307,6 +319,9 @@ async function boot(): Promise<void> {
 
   const mapView = await MapView.create(viewport, {
     onHoverTile: updateHover,
+    onClickTile: (tile) => {
+      inspectAtTile(tile.x, tile.y);
+    },
     onViewChange: updateStats,
   });
 
@@ -408,6 +423,10 @@ async function boot(): Promise<void> {
     dashRowsEl.replaceChildren(
       ...state.rows.map((row) => {
         const tr = document.createElement('tr');
+        tr.title = `Inspect ${tribeName(row.tribeId)}'s champion`;
+        tr.addEventListener('click', () => {
+          setInspect({ kind: 'champion', tribeId: row.tribeId });
+        });
         tr.dataset['tribe'] = String(row.tribeId);
         tr.classList.toggle('is-eliminated', !row.alive);
         const name = document.createElement('td');
@@ -435,6 +454,124 @@ async function boot(): Promise<void> {
     drawChart(chartCanvases.avgFitness, 'avgFitness');
     drawChart(chartCanvases.benchmarkScore, 'benchmarkScore');
     drawChart(chartCanvases.population, 'population');
+  };
+
+  /** Asks the worker to inspect a target (null closes the inspector). */
+  const setInspect = (target: InspectTarget): void => {
+    inspectTarget = target;
+    if (target === null) {
+      latestInspection = null;
+      inspectorEl.hidden = true;
+      inspFollow.checked = false;
+      mapView.setFollow(null);
+    }
+    postToWorker({ type: 'inspect', runId: activeRunId, target });
+  };
+
+  /** A click on the map: inspect the creature on that tile, or close the inspector. */
+  const inspectAtTile = (x: number, y: number): void => {
+    const buf = latestSnapshot?.creatures;
+    if (buf === undefined) return;
+    for (let i = 0; i < buf.count; i++) {
+      if (buf.x[i] === x && buf.y[i] === y) {
+        setInspect({ kind: 'creature', id: buf.ids[i]! });
+        return;
+      }
+    }
+    setInspect(null);
+  };
+
+  const fmt = (v: number): string => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
+
+  /** Bar rows: name, a bar as long as |value| (relative to `scale`), the value. */
+  const barRows = (
+    group: string | null,
+    values: readonly { name: string; value: number }[],
+    scale: number,
+  ): HTMLElement[] => {
+    const out: HTMLElement[] = [];
+    if (group !== null) {
+      const g = document.createElement('span');
+      g.className = 'is-group';
+      g.textContent = group;
+      out.push(g);
+    }
+    for (const { name, value } of values) {
+      const label = document.createElement('span');
+      label.textContent = name;
+      const track = document.createElement('span');
+      const bar = document.createElement('span');
+      bar.className = value < 0 ? 'insp-bar is-negative' : 'insp-bar';
+      bar.style.display = 'block';
+      bar.style.width = `${Math.min(100, (100 * Math.abs(value)) / scale).toFixed(1)}%`;
+      track.append(bar);
+      const num = document.createElement('span');
+      num.textContent = fmt(value);
+      num.style.textAlign = 'right';
+      out.push(label, track, num);
+    }
+    return out;
+  };
+
+  /** Draws the inspector from the worker's live data (Sprint 6.2). */
+  const renderInspector = (inspection: CreatureInspection | null): void => {
+    latestInspection = inspection;
+    if (inspectTarget === null) return;
+    if (inspection === null) {
+      inspectorEl.hidden = false;
+      inspTitleEl.textContent =
+        inspectTarget.kind === 'creature'
+          ? "That creature's generation is over"
+          : 'Nobody of that tribe is alive';
+      inspStatsEl.replaceChildren();
+      inspBrainEl.replaceChildren();
+      inspInputsEl.replaceChildren();
+      return;
+    }
+    inspectorEl.hidden = false;
+    if (inspFollow.checked) mapView.setFollow(inspection.alive ? inspection.id : null);
+    inspTitleEl.textContent =
+      `${tribeName(inspection.tribeId)} #${inspection.id}` +
+      (inspectTarget.kind === 'champion' ? ' · champion' : '') +
+      (inspection.alive ? '' : ' · dead');
+    const stats: [string, string][] = [
+      ['Health', fmt(inspection.health)],
+      ['Energy', fmt(inspection.energy)],
+      ['Water', fmt(inspection.hydration)],
+      ['Age', String(inspection.age)],
+      ['Fitness', fmt(inspection.fitness)],
+      ['Tile', `${inspection.x}, ${inspection.y}`],
+      ['Chose', inspection.intent],
+      ['Did', inspection.lastAction],
+      ['Kills', String(inspection.kills)],
+      ['Helped', String(inspection.alliesHelped)],
+    ];
+    if (inspection.memory.length > 0)
+      stats.push(['Memory', inspection.memory.map(fmt).join(' / ')]);
+    if (inspection.call > 0) stats.push(['Calling', fmt(inspection.call)]);
+    inspStatsEl.replaceChildren(
+      ...stats.flatMap(([k, v]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = k;
+        const dd = document.createElement('dd');
+        dd.textContent = v;
+        return [dt, dd];
+      }),
+    );
+    if (inspection.hidden === null || inspection.outputs === null) {
+      inspBrainEl.replaceChildren(document.createTextNode('No brain (random policy)'));
+    } else {
+      const outScale = Math.max(1e-9, ...inspection.outputs.map((o) => Math.abs(o.value)));
+      inspBrainEl.replaceChildren(
+        ...barRows(
+          'Hidden',
+          inspection.hidden.map((value, i) => ({ name: `h${i + 1}`, value })),
+          1,
+        ),
+        ...barRows('Outputs', inspection.outputs, outScale),
+      );
+    }
+    inspInputsEl.replaceChildren(...barRows(null, inspection.inputs, 1));
   };
 
   const getState = (): EvolutionIslandDebugState => {
@@ -474,6 +611,8 @@ async function boot(): Promise<void> {
       runMessage,
       runMessageIsError,
       dashboard: dashboard.state(),
+      inspection: latestInspection,
+      following: mapView.getFollow(),
     };
   };
 
@@ -568,6 +707,24 @@ async function boot(): Promise<void> {
     exportReplay() {
       return requestReplayExport();
     },
+    get inspection() {
+      return getState().inspection;
+    },
+    get following() {
+      return getState().following;
+    },
+    inspect(target: InspectTarget) {
+      setInspect(target);
+    },
+    creatureTiles() {
+      const buf = latestSnapshot?.creatures;
+      if (buf === undefined) return [];
+      return Array.from({ length: buf.count }, (_, i) => ({
+        id: buf.ids[i]!,
+        x: buf.x[i]!,
+        y: buf.y[i]!,
+      }));
+    },
     get checkpointOptions() {
       return getState().checkpointOptions;
     },
@@ -638,6 +795,7 @@ async function boot(): Promise<void> {
       if (msg.snapshot.runId !== activeRunId) return;
       latestSnapshot = msg.snapshot;
       if (msg.snapshot.replay !== null) showReplayStatus(msg.snapshot.replay);
+      renderInspector(msg.snapshot.inspection);
       if (msg.snapshot.ackSeq >= lastControlSeq) {
         desiredRunning = msg.snapshot.running;
         desiredSpeed = msg.snapshot.speed;
@@ -712,6 +870,11 @@ async function boot(): Promise<void> {
   ): void => {
     exportReplayBtn.hidden = start === undefined && replayText === undefined;
     dashboard.reset();
+    inspectTarget = null;
+    latestInspection = null;
+    inspectorEl.hidden = true;
+    inspFollow.checked = false;
+    mapView.setFollow(null);
     dashboardEl.hidden = start === undefined && replayText === undefined;
     if (replayText === undefined) replayName = null;
     seedInput.value = String(seed);
@@ -979,6 +1142,17 @@ async function boot(): Promise<void> {
     if (isMapPresetId(val)) {
       generateAndRun(val, nextSeed);
     }
+  });
+
+  inspFollow.addEventListener('change', () => {
+    mapView.setFollow(
+      inspFollow.checked && latestInspection?.alive === true ? latestInspection.id : null,
+    );
+  });
+
+  inspClose.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    setInspect(null);
   });
 
   loadReplayBtn.addEventListener('click', (event) => {

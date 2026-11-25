@@ -32,3 +32,6 @@ that makes runs worth watching.
 2. **Charts are drawn on a canvas by the viewer itself (Sprint 6.1)**, not with uPlot (plan §3.1):
    three small line charts need ~40 lines of code, and a new dependency would have meant another
    download for little gain. Revisit if charts need zoom or tooltips.
+3. **The inspection rides on every snapshot (Sprint 6.2).** The viewer sets a target (creature or
+   tribe champion) once; the worker attaches `inspectCreature` (pure, read-only, same inputs as
+   the brain policy) to each snapshot. Follow-cam centres on the creature's drawn position.

@@ -137,6 +137,31 @@
           </div>
           <div id="hud-tribes" class="hud-tribes"></div>
         </aside>
+        <aside id="inspector" class="inspector" aria-label="Creature inspector" hidden>
+          <div class="insp-head">
+            <span id="insp-title"></span>
+            <label class="insp-follow" title="Keep the camera on this creature">
+              <input id="insp-follow" type="checkbox" /> Follow
+            </label>
+            <button
+              id="insp-close"
+              type="button"
+              class="btn insp-close"
+              aria-label="Close inspector"
+            >
+              ×
+            </button>
+          </div>
+          <dl id="insp-stats" class="insp-stats"></dl>
+          <details class="insp-section" open>
+            <summary>Brain</summary>
+            <div id="insp-brain" class="insp-bars"></div>
+          </details>
+          <details class="insp-section">
+            <summary>Sensors</summary>
+            <div id="insp-inputs" class="insp-bars"></div>
+          </details>
+        </aside>
         <aside id="dashboard" class="dashboard" aria-label="Tribe dashboard" hidden>
           <div id="dash-generation" class="dash-generation">No generation finished yet</div>
           <table class="dash-table">
