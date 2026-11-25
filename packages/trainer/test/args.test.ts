@@ -54,6 +54,7 @@ describe('parseTrainArgs', () => {
       workers: 1,
       force: false,
       quiet: false,
+      resume: null,
     });
   });
 
@@ -123,5 +124,19 @@ describe('runFolderName', () => {
   it('is <preset>-<seed>, with unsafe characters replaced', () => {
     expect(runFolderName('small', 42)).toBe('small-42');
     expect(runFolderName('huge', 'my island/2')).toBe('huge-my_island_2');
+  });
+});
+
+describe('--resume (Sprint 5.1)', () => {
+  it('takes a run folder and --generations, nothing else that the run already decided', () => {
+    const cmd = parseTrainArgs(['--resume', 'runs/small-1', '--generations', '9'], 4);
+    expect(cmd.kind === 'train' && cmd.options.resume).toBe('runs/small-1');
+    expect(cmd.kind === 'train' && cmd.options.generations).toBe(9);
+    for (const extra of [['--seed', '2'], ['--config', 'x.json'], ['--force'], ['--out', 'o']]) {
+      expect(() => parseTrainArgs(['--resume', 'runs/small-1', ...extra], 4)).toThrow(
+        /--resume takes everything but --generations/,
+      );
+    }
+    expect(() => parseTrainArgs(['--resume', ' '], 4)).toThrow(/must not be empty/);
   });
 });

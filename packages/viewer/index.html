@@ -79,6 +79,10 @@
             Load run…
           </button>
           <input id="run-input" type="file" webkitdirectory multiple hidden />
+          <label id="run-field" class="field" title="The run to watch" hidden>
+            <span>Run</span>
+            <select id="run-select" name="run"></select>
+          </label>
           <label
             id="checkpoint-field"
             class="field"
@@ -87,6 +91,15 @@
           >
             <span>Saved</span>
             <select id="checkpoint-select" name="checkpoint"></select>
+          </label>
+          <label
+            id="tribe-field"
+            class="field"
+            title="Watch every tribe, or one tribe's champions alone on its zone"
+            hidden
+          >
+            <span>Tribe</span>
+            <select id="tribe-select" name="tribe"></select>
           </label>
           <span id="run-info" class="run-info" role="status"></span>
         </div>

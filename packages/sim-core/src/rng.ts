@@ -108,6 +108,15 @@ export class RngStream {
     return new RngStream(nums[0]!, nums[1]!, nums[2]!, nums[3]!);
   }
 
+  /** Puts the stream back to a state `getState()` returned (resuming a run, Sprint 5.1). */
+  setState(state: RngState): void {
+    const restored = RngStream.fromState(state);
+    this.a = restored.a;
+    this.b = restored.b;
+    this.c = restored.c;
+    this.d = restored.d;
+  }
+
   getState(): RngState {
     return [this.a >>> 0, this.b >>> 0, this.c >>> 0, this.d >>> 0];
   }

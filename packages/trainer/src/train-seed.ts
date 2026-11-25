@@ -1,21 +1,28 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import {
   CHECKPOINT_FILE_NAME,
   CHECKPOINTS_DIR_NAME,
   checkpointDirName,
+  assertRunStateCompatible,
   hallOfFameFileName,
+  parseRunManifest,
+  parseRunState,
   RUN_MANIFEST_NAME,
+  RUN_STATE_FILE_NAME,
+  serializeRunState,
   serializeCheckpoint,
   serializeGenome,
   serializeRunManifest,
   type CheckpointTribe,
 } from '@evolution-island/shared';
 import {
+  brainSpecFromConfig,
   createEvolutionRun,
   DEFAULT_CONFIG,
   hashConfig,
+  SIM_VERSION,
   type EvolutionRun,
   type MapPresetId,
   type Seed,
@@ -34,6 +41,11 @@ export interface SeedJob {
   readonly force: boolean;
   /** Defaults to `DEFAULT_CONFIG` (tests pass short generations). */
   readonly config?: SimConfig;
+  /**
+   * Continue the run already in `outDir` from its `resume.json` (Sprint 5.1) instead of
+   * starting a new one; `config` must be the run's own (from its `run.json`).
+   */
+  readonly resume?: boolean;
 }
 
 export interface SeedProgress {
@@ -75,7 +87,13 @@ export function isCheckpointGeneration(
   return last || generation === 1 || generation % saveEvery === 0;
 }
 
-const RUN_FILES = [RUN_MANIFEST_NAME, 'stats.json', 'stats.csv', CHECKPOINTS_DIR_NAME];
+const RUN_FILES = [
+  RUN_MANIFEST_NAME,
+  'stats.json',
+  'stats.csv',
+  RUN_STATE_FILE_NAME,
+  CHECKPOINTS_DIR_NAME,
+];
 
 /** Creates the folder; refuses to overwrite an earlier run unless `force` (then clears it). */
 function prepareRunFolder(outDir: string, force: boolean): void {
@@ -116,6 +134,49 @@ function writeCheckpoint(outDir: string, run: EvolutionRun, generation: number, 
     join(dir, CHECKPOINT_FILE_NAME),
     serializeCheckpoint({ configHash, preset: run.world.preset, seed, generation, tribes }),
   );
+  // Everything `--resume` needs to continue after this generation (Sprint 5.1).
+  writeFileSync(
+    join(outDir, RUN_STATE_FILE_NAME),
+    serializeRunState({
+      simVersion: SIM_VERSION,
+      configHash,
+      brain: run.spec,
+      state: run.captureState(),
+    }),
+  );
+}
+
+interface Resumed {
+  readonly run: EvolutionRun;
+  readonly rows: StatsRow[];
+  readonly checkpoints: number[];
+}
+
+/** Reads a run folder's `resume.json`, stats and checkpoint list (`--resume`, Sprint 5.1). */
+function resumeRun(job: SeedJob, config: SimConfig): Resumed {
+  const file = parseRunState(readFileSync(join(job.outDir, RUN_STATE_FILE_NAME), 'utf8'));
+  const manifest = parseRunManifest(readFileSync(join(job.outDir, RUN_MANIFEST_NAME), 'utf8'));
+  assertRunStateCompatible(file, {
+    configHash: manifest.configHash,
+    brain: brainSpecFromConfig(config),
+  });
+  if (hashConfig(config) !== manifest.configHash) {
+    throw new Error(`${job.outDir}: the config to resume with is not the run's own`);
+  }
+  const next = file.state.generation;
+  if (next > job.generations && !file.state.finished) {
+    throw new Error(
+      `${job.outDir} already has ${next - 1} generations; ask for more than that with --generations`,
+    );
+  }
+  const stats = JSON.parse(readFileSync(join(job.outDir, 'stats.json'), 'utf8')) as {
+    rows: StatsRow[];
+  };
+  return {
+    run: createEvolutionRun({ preset: job.preset, seed: job.seed, config, resume: file.state }),
+    rows: stats.rows.filter((r) => r.generation < next),
+    checkpoints: manifest.checkpoints.filter((g) => g < next),
+  };
 }
 
 /** Read through a call: TypeScript would keep the loop condition's narrowing of the field. */
@@ -145,13 +206,18 @@ export function trainSeed(
   onProgress?: (progress: SeedProgress) => void,
   now: () => number = () => performance.now(),
 ): SeedSummary {
-  prepareRunFolder(job.outDir, job.force);
   const config = job.config ?? DEFAULT_CONFIG;
-  const run = createEvolutionRun({ preset: job.preset, seed: job.seed, config });
-  const rows: StatsRow[] = [];
-  const checkpoints: number[] = [];
+  let run: EvolutionRun;
+  let rows: StatsRow[] = [];
+  let checkpoints: number[] = [];
+  if (job.resume === true) {
+    ({ run, rows, checkpoints } = resumeRun(job, config));
+  } else {
+    prepareRunFolder(job.outDir, job.force);
+    run = createEvolutionRun({ preset: job.preset, seed: job.seed, config });
+  }
   const started = now();
-  let completed = 0;
+  let completed = run.generation - 1;
 
   const timing = () => {
     const elapsedSeconds = (now() - started) / 1000;

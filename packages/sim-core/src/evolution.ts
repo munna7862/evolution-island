@@ -15,7 +15,7 @@ import type { Creature } from './creature.js';
 import { creatureFitness, tribeOutcome, tribeScore } from './fitness.js';
 import { crossoverPerNeuron, mutateGenome, randomGenome } from './genome.js';
 import { StateHasher } from './hash.js';
-import type { RngStream, Seed } from './rng.js';
+import type { RngState, RngStream, Seed } from './rng.js';
 import { createWorld, type TribeSpawn, type World } from './world.js';
 
 /**
@@ -354,12 +354,37 @@ export interface EvolutionStart {
   readonly tribes: readonly TribeStart[];
 }
 
+/** The RNG streams a run's world uses, by name (Sprint 5.1). */
+export type RunRngStates = Readonly<
+  Record<'map' | 'spawn' | 'evolution' | 'tick' | 'policy', RngState>
+>;
+
+/**
+ * A run between two generations (Sprint 5.1): everything needed to continue it exactly. The world
+ * right after `World.startGeneration` depends only on the map, the generation, the spawns and the
+ * RNG streams and tick count *before* that call, so those are what is kept.
+ */
+export interface EvolutionRunState {
+  readonly generation: number;
+  /** `world.tickCount` before the generation started. */
+  readonly tickCount: number;
+  /** RNG stream states before the generation started. */
+  readonly rng: RunRngStates;
+  /** What the generation was started with: each living tribe's genomes, in spawn order. */
+  readonly spawns: readonly TribeSpawn[];
+  readonly tribes: readonly TribeState[];
+  readonly finished: boolean;
+  readonly winner: number | null;
+}
+
 export interface EvolutionRunOptions {
   readonly preset: MapPresetId;
   readonly seed: Seed;
   readonly config?: SimConfig;
   /** Omitted: generation 1 with random genomes drawn from `rng.evolution`. */
   readonly start?: EvolutionStart;
+  /** Continue a run from `captureState()` (Sprint 5.1); `start` is then ignored. */
+  readonly resume?: EvolutionRunState;
 }
 
 /** Benchmark at generation 1 and every `interval` generations. */
@@ -383,6 +408,8 @@ export class EvolutionRun {
   winner: number | null = null;
 
   private arena: BenchmarkArena | null = null;
+  /** The last generation start: what `captureState` saves (Sprint 5.1). */
+  private lastStart: Omit<EvolutionRunState, 'tribes' | 'finished' | 'winner'> | null = null;
 
   constructor(options: EvolutionRunOptions) {
     this.config = options.config ?? DEFAULT_CONFIG;
@@ -395,6 +422,10 @@ export class EvolutionRun {
       policy: brainPolicyForConfig(this.config, (c) => c.genome),
     });
     const tribeIds = this.world.map.spawnZones.map((z) => z.tribeId).sort((a, b) => a - b);
+    if (options.resume !== undefined) {
+      this.tribes = this.resumeFrom(options.resume, tribeIds);
+      return;
+    }
     if (options.start !== undefined) {
       this.tribes = this.startFrom(options.start, tribeIds);
       return;
@@ -409,7 +440,7 @@ export class EvolutionRun {
     }));
     const rng = this.world.rng.evolution;
     const range = this.config.evolution.initialWeightRange;
-    this.world.startGeneration(
+    this.beginGeneration(
       1,
       this.tribes.map((t) => ({
         tribeId: t.id,
@@ -448,7 +479,7 @@ export class EvolutionRun {
       }
       return { id, size: t.genomes.length, alive: t.alive, hallOfFame, history: [] };
     });
-    this.world.startGeneration(
+    this.beginGeneration(
       start.generation,
       start.tribes.filter((t) => t.alive).map((t) => ({ tribeId: t.tribeId, genomes: t.genomes })),
     );
@@ -457,6 +488,90 @@ export class EvolutionRun {
 
   get generation(): number {
     return this.world.generation;
+  }
+
+  /** Starts a world generation, remembering what `captureState` needs to redo it exactly. */
+  private beginGeneration(generation: number, spawns: readonly TribeSpawn[]): void {
+    const rng = this.world.rng;
+    this.lastStart = {
+      generation,
+      tickCount: this.world.tickCount,
+      rng: {
+        map: rng.map.getState(),
+        spawn: rng.spawn.getState(),
+        evolution: rng.evolution.getState(),
+        tick: rng.tick.getState(),
+        policy: rng.policy.getState(),
+      },
+      spawns: spawns.map((s) => ({
+        tribeId: s.tribeId,
+        genomes: s.genomes.map((g) => Float32Array.from(g)),
+      })),
+    };
+    this.world.startGeneration(generation, spawns);
+  }
+
+  /**
+   * The run between generations (Sprint 5.1), as `restore` needs it: only valid before the first
+   * tick of a generation (e.g. right after `runGeneration`), or once the run has finished.
+   */
+  captureState(): EvolutionRunState {
+    const start = this.lastStart;
+    if (start === null || (!this.finished && this.world.generationTick !== 0)) {
+      throw new Error('captureState: only between generations (call it after runGeneration)');
+    }
+    return {
+      ...start,
+      spawns: start.spawns.map((s) => ({
+        tribeId: s.tribeId,
+        genomes: s.genomes.map((g) => Float32Array.from(g)),
+      })),
+      tribes: this.tribes.map((t) => ({
+        id: t.id,
+        size: t.size,
+        alive: t.alive,
+        hallOfFame: t.hallOfFame.map((e) => ({ ...e, genome: Float32Array.from(e.genome) })),
+        history: t.history.map((h) => ({ ...h })),
+      })),
+      finished: this.finished,
+      winner: this.winner,
+    };
+  }
+
+  /** Rebuilds the run a `captureState` came from: same RNG streams, tick count and spawns. */
+  private resumeFrom(state: EvolutionRunState, tribeIds: readonly number[]): TribeState[] {
+    const ids = state.tribes.map((t) => t.id).sort((a, b) => a - b);
+    if (ids.length !== tribeIds.length || ids.some((id, i) => id !== tribeIds[i])) {
+      throw new RangeError(
+        `Run state lists tribes ${ids.join(',')}, the map has ${tribeIds.join(',')}`,
+      );
+    }
+    for (const spawn of state.spawns) {
+      for (const genome of spawn.genomes) validateGenome(this.spec, genome);
+    }
+    for (const t of state.tribes) {
+      for (const e of t.hallOfFame) validateGenome(this.spec, e.genome);
+    }
+    const tribes = [...state.tribes]
+      .sort((a, b) => a.id - b.id)
+      .map((t): TribeState => ({
+        id: t.id,
+        size: t.size,
+        alive: t.alive,
+        hallOfFame: t.hallOfFame.map((e) => ({ ...e, genome: Float32Array.from(e.genome) })),
+        history: t.history.map((h) => ({ ...h })),
+      }));
+    this.finished = state.finished;
+    this.winner = state.winner;
+    const rng = this.world.rng;
+    rng.map.setState(state.rng.map);
+    rng.spawn.setState(state.rng.spawn);
+    rng.evolution.setState(state.rng.evolution);
+    rng.tick.setState(state.rng.tick);
+    rng.policy.setState(state.rng.policy);
+    this.world.tickCount = state.tickCount;
+    this.beginGeneration(state.generation, state.spawns);
+    return tribes;
   }
 
   /** One world tick, then generation end if the generation is over. No-op once finished. */
@@ -622,7 +737,7 @@ export class EvolutionRun {
           : breedGenomes(this.spec, memberGenomes, size, evo, rng),
       });
     }
-    this.world.startGeneration(generation + 1, spawns);
+    this.beginGeneration(generation + 1, spawns);
   }
 }
 

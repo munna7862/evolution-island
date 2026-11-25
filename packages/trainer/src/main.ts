@@ -1,6 +1,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseConfigOverride } from '@evolution-island/shared';
+import {
+  applyConfigOverride,
+  parseConfigOverride,
+  parseRunManifest,
+  RUN_MANIFEST_NAME,
+} from '@evolution-island/shared';
 import { DEFAULT_CONFIG, hashConfig, type SimConfig } from '@evolution-island/sim-core';
 import { parseTrainArgs, runFolderName, USAGE, UsageError, type TrainOptions } from './args.js';
 import { banner } from './banner.js';
@@ -84,6 +89,25 @@ function saveInterval(options: TrainOptions, config: SimConfig): number {
   return interval > 0 ? interval : DEFAULT_CONFIG.evolution.benchmarkInterval;
 }
 
+/** The job that continues `options.resume`'s run (Sprint 5.1), from its `run.json`. */
+function resumeJob(options: TrainOptions, io: CliIo): SeedJob {
+  const dir = options.resume!;
+  const text = io.readTextFile(join(dir, RUN_MANIFEST_NAME));
+  const manifest = parseRunManifest(text);
+  const raw = JSON.parse(text) as { config?: unknown; saveEvery?: unknown };
+  const saveEvery = typeof raw.saveEvery === 'number' && raw.saveEvery > 0 ? raw.saveEvery : 10;
+  return {
+    preset: manifest.preset,
+    seed: manifest.seed,
+    generations: options.generations,
+    saveEvery,
+    outDir: dir,
+    force: false,
+    config: applyConfigOverride(raw.config),
+    resume: true,
+  };
+}
+
 /** `DEFAULT_CONFIG`, or the `--config` file merged onto it. Throws with the reason. */
 function loadConfig(options: TrainOptions, io: CliIo): SimConfig {
   if (options.configPath === null) return DEFAULT_CONFIG;
@@ -126,6 +150,30 @@ export async function main(
   }
 
   const { options } = command;
+  if (options.resume !== null) {
+    let job: SeedJob;
+    try {
+      job = resumeJob(options, io);
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : String(error);
+      io.error(`Error: --resume ${options.resume}: ${reason}`);
+      return 2;
+    }
+    io.log(banner());
+    io.log(`Resuming ${options.resume} up to generation ${options.generations}`);
+    const [result] = await runPool([job], 1, (j) =>
+      runners.inProcess(j, (p) => {
+        if (p.checkpoint && !options.quiet) io.log(formatProgress(p));
+      }),
+    );
+    if (result!.ok) {
+      io.log(formatSummary(result!.value));
+      return 0;
+    }
+    const message = result!.error instanceof Error ? result!.error.message : String(result!.error);
+    io.error(`[resume] failed: ${message}`);
+    return 1;
+  }
   let config: SimConfig;
   try {
     config = loadConfig(options, io);

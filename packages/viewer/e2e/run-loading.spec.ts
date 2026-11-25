@@ -219,6 +219,39 @@ test.describe('Loading a trained run (Sprint 3.3)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('run browser: pick run, generation and one tribe (Sprint 5.1)', async ({ page }) => {
+    const errors = trackErrors(page);
+    await page.goto('/?paused=1&speed=max');
+    await expect.poll(() => page.evaluate(() => window.__ei?.mode)).toBe('random');
+
+    // The folder of both runs: the first run's latest generation plays.
+    await page.locator('#run-input').setInputFiles(runsDir);
+    await waitForCheckpoint(page, 'Gen 3 · small-1', 3);
+    await expect(page.locator('#run-select option')).toHaveText(['small-1', 'small-2']);
+
+    // Another run: its generations replace the menu, its latest plays.
+    await page.locator('#run-select').selectOption('small-2');
+    await waitForCheckpoint(page, 'Gen 3 · small-2', 3);
+    expect(await page.evaluate(() => window.__ei!.checkpointOptions)).toEqual([
+      'Gen 1 · small-2',
+      'Gen 2 · small-2',
+      'Gen 3 · small-2',
+    ]);
+
+    // One tribe alone: the other tribe's zone stays empty.
+    await page.locator('#tribe-select').selectOption({ index: 2 });
+    await expect
+      .poll(() => page.evaluate(() => window.__ei?.runMessage))
+      .toMatch(/Watching Gen 3 · small-2 champions · .+ only/);
+    await expect
+      .poll(() => page.evaluate(() => window.__ei!.getState().tribePopulations[0]))
+      .toBe(0);
+    expect(
+      (await page.evaluate(() => window.__ei!.getState().tribePopulations))[1],
+    ).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+
   test('plays a checkpoint folder dropped on the map', async ({ page }) => {
     const errors = trackErrors(page);
     await page.goto('/?paused=1&speed=max');

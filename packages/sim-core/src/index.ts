@@ -139,6 +139,8 @@ export {
   respawnGenomes,
   sameGenome,
   type EvolutionRunOptions,
+  type EvolutionRunState,
+  type RunRngStates,
   type EvolutionStart,
   type GenerationStats,
   type HallOfFameEntry,
