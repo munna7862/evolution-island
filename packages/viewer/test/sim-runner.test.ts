@@ -552,4 +552,61 @@ describe('SimRunner', () => {
       }),
     );
   });
+
+  it('sends the inspected creature with every snapshot, by id or as a champion (Sprint 6.2)', () => {
+    const host = new MockRunnerHost();
+    const runner = new SimRunner(host);
+    send(runner, {
+      type: 'init',
+      runId: 9,
+      preset: 'small',
+      seed: 42,
+      speed: 1,
+      running: false,
+      pauseAtTick: null,
+    });
+    expect(host.latestSnapshot().inspection).toBeNull();
+    send(runner, { type: 'inspect', runId: 9, target: { kind: 'creature', id: 3 } });
+    expect(host.latestSnapshot().inspection).toMatchObject({ id: 3, hidden: null });
+    send(runner, { type: 'step', runId: 9, ticks: 5 });
+    expect(host.latestSnapshot().inspection!.age).toBe(5);
+    send(runner, { type: 'inspect', runId: 9, target: { kind: 'champion', tribeId: 1 } });
+    expect(host.latestSnapshot().inspection!.tribeId).toBe(1);
+    send(runner, { type: 'inspect', runId: 9, target: null });
+    expect(host.latestSnapshot().inspection).toBeNull();
+  });
+});
+
+describe('inspection across generations (Sprint 6.2 review)', () => {
+  it('ends an inspection by id when its generation ends (ids restart at 0)', () => {
+    const spec = brainSpecFromConfig(DEFAULT_CONFIG);
+    const start: EvolutionStart = {
+      generation: 2,
+      tribes: [0, 1].map((tribeId) => ({
+        tribeId,
+        alive: true,
+        genomes: [0.2, -0.3].map((v) => new Float32Array(weightCount(spec)).fill(v)),
+        hallOfFame: [],
+      })),
+    };
+    const node = createEvolutionRun({ preset: 'small', seed: 42, start });
+    node.runGeneration();
+    const host = new MockRunnerHost();
+    const runner = new SimRunner(host);
+    send(runner, {
+      type: 'init',
+      runId: 1,
+      preset: 'small',
+      seed: 42,
+      speed: 1,
+      running: false,
+      pauseAtTick: null,
+      start,
+    });
+    send(runner, { type: 'inspect', runId: 1, target: { kind: 'creature', id: 0 } });
+    expect(host.latestSnapshot().inspection?.id).toBe(0);
+    send(runner, { type: 'step', runId: 1, ticks: node.world.tickCount });
+    expect(host.latestSnapshot().generation).toBe(3);
+    expect(host.latestSnapshot().inspection).toBeNull();
+  });
 });

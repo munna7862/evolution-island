@@ -1,3 +1,4 @@
+import type { CreatureInspection } from './inspect.js';
 import {
   SIM_VERSION,
   type EvolutionStart,
@@ -74,7 +75,15 @@ export interface SimSnapshot {
   readonly worldHash: string | null;
   /** While playing a replay (Sprint 5.2): how far it got and whether its hashes still match. */
   readonly replay: ReplayStatus | null;
+  /** The inspected creature, live (Sprint 6.2), or null. */
+  readonly inspection: CreatureInspection | null;
 }
+
+/** What to inspect (Sprint 6.2): a creature by id, a tribe's current champion, or nothing. */
+export type InspectTarget =
+  | { readonly kind: 'creature'; readonly id: number }
+  | { readonly kind: 'champion'; readonly tribeId: number }
+  | null;
 
 /** One tribe's line of a generation report (Sprint 6.1 dashboard). */
 export interface TribeReport {
@@ -170,6 +179,12 @@ export type MainToWorkerMessage =
       readonly type: 'exportReplay';
       readonly runId: number;
       readonly requestId: number;
+    }
+  | {
+      /** Inspect a creature (Sprint 6.2); its live data then rides on every snapshot. */
+      readonly type: 'inspect';
+      readonly runId: number;
+      readonly target: InspectTarget;
     };
 
 export type WorkerToMainMessage =
@@ -331,6 +346,7 @@ export interface SnapshotMeta {
   readonly tickDurationMs: number;
   readonly includeHash: boolean;
   readonly replay?: ReplayStatus | null;
+  readonly inspection?: CreatureInspection | null;
 }
 
 export function buildSimSnapshot(world: World, meta: SnapshotMeta): SimSnapshot {
@@ -349,6 +365,7 @@ export function buildSimSnapshot(world: World, meta: SnapshotMeta): SimSnapshot 
     creatures,
     worldHash: meta.includeHash ? world.hash() : null,
     replay: meta.replay ?? null,
+    inspection: meta.inspection ?? null,
   };
 }
 

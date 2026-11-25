@@ -6,7 +6,11 @@ import {
   parseReplay,
   serializeReplay,
   startReplayRun,
+  currentChampion,
+  inspectCreature,
+  type CreatureInspection,
   type GenerationReport,
+  type InspectTarget,
   type MainToWorkerMessage,
   type ReplayHash,
   type ReplayStatus,
@@ -67,6 +71,10 @@ export class SimRunner {
   private replay: PlayingReplay | null = null;
   /** Generations already reported to the dashboard (Sprint 6.1). */
   private reportedThrough = 0;
+  /** What the inspector shows (Sprint 6.2). */
+  private inspectTarget: InspectTarget = null;
+  /** Ids restart every generation: an inspection by id ends with its generation. */
+  private inspectGeneration = 0;
   private runId = -1;
   private lastAckSeq = 0;
   private running = false;
@@ -96,7 +104,12 @@ export class SimRunner {
         return;
       }
 
-      if (msg.type !== 'requestHash' && msg.type !== 'exportReplay' && msg.seq !== undefined) {
+      if (
+        msg.type !== 'requestHash' &&
+        msg.type !== 'exportReplay' &&
+        msg.type !== 'inspect' &&
+        msg.seq !== undefined
+      ) {
         this.lastAckSeq = msg.seq;
       }
 
@@ -112,6 +125,11 @@ export class SimRunner {
           break;
         case 'setPauseAtTick':
           this.handleSetPauseAtTick(msg.targetTick);
+          break;
+        case 'inspect':
+          this.inspectTarget = msg.target;
+          this.inspectGeneration = this.world.generation;
+          this.emitSnapshot(false, 0);
           break;
         case 'exportReplay':
           this.host.emit(this.exportReplay(msg.requestId), []);
@@ -160,6 +178,7 @@ export class SimRunner {
     this.pauseAtTick = msg.pauseAtTick;
     this.played = null;
     this.replay = null;
+    this.inspectTarget = null;
     if (msg.replay !== undefined) {
       const file = parseReplay(msg.replay);
       const run = startReplayRun(file);
@@ -473,6 +492,20 @@ export class SimRunner {
     }
   }
 
+  /** The inspected creature now: by id, or its tribe's current champion (Sprint 6.2). */
+  private inspection(): CreatureInspection | null {
+    const target = this.inspectTarget;
+    const world = this.world;
+    if (target === null || world === null) return null;
+    if (target.kind === 'creature' && world.generation !== this.inspectGeneration) return null;
+    const creature =
+      target.kind === 'creature'
+        ? world.creatures[target.id]
+        : (currentChampion(world, target.tribeId) ?? undefined);
+    if (creature === undefined) return null;
+    return inspectCreature(world, creature, this.played !== null);
+  }
+
   private replayStatus(): ReplayStatus | null {
     const r = this.replay;
     if (r === null) return null;
@@ -570,6 +603,7 @@ export class SimRunner {
       tickDurationMs,
       includeHash,
       replay: this.replayStatus(),
+      inspection: this.inspection(),
     });
     this.host.emit({ type: 'snapshot', snapshot }, [snapshot.creatures.buffer]);
   }

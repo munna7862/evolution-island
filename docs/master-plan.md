@@ -681,3 +681,6 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 
 **2026-11-25 — Sprint 6.1 (live dashboard)**
 - Leaderboard (live population; territory %, kills, average fitness, latest benchmark per finished generation), generation counter, charts of average fitness, benchmark and population per tribe, fed by the worker at each generation end. §3.1: charts are drawn on a canvas by the viewer instead of uPlot (three small line charts don't justify a dependency). No rule changed (`simVersion` 13).
+
+**2026-11-25 — Sprint 6.2 (creature inspector & follow-cam)**
+- Click a creature (or a dashboard row for a tribe's champion): live stats, sensors, actions, memory and call values, hidden and output activations computed exactly as the brain policy does, attached by the worker to every snapshot; follow-cam. No rule changed (`simVersion` 13).

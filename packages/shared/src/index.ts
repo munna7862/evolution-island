@@ -58,6 +58,7 @@ export {
   speedToTicksPerSecond,
   type CreatureBuffer,
   type GenerationReport,
+  type InspectTarget,
   type MainToWorkerMessage,
   type TribeReport,
   type ReplayStatus,
@@ -97,3 +98,10 @@ export {
   type ReplayMismatch,
   type ReplayResult,
 } from './replay.js';
+export {
+  actionName,
+  currentChampion,
+  inspectCreature,
+  type CreatureInspection,
+  type InspectedValue,
+} from './inspect.js';

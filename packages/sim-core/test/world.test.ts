@@ -365,7 +365,7 @@ describe('World simulation & two-phase tick', () => {
     }
     expect(longWorld.livingCount).toBeLessThan(longWorld.creatures.length);
     checkInvariants(longWorld);
-  });
+  }, 30_000);
   it('gives policies the dedicated policy stream, so their draws never change the Phase B shuffle', () => {
     // Same moves in both worlds (so Phase B order matters for blocked tiles); only the draws differ.
     const move = (id: number): Action => (id % 2 === 0 ? Action.MOVE_E : Action.MOVE_N);

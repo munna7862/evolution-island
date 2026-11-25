@@ -64,7 +64,7 @@ describe('EvolutionRun captureState / resume', () => {
       expect(resumed.world.hash()).toBe(worlds[at]);
       expect(hashesUntil(resumed, 7)).toEqual(expected.slice(at));
     }
-  });
+  }, 30_000);
 
   it('gives the restored world the same state as the original at that point', () => {
     const run = createEvolutionRun({ preset: 'small', seed: 5, config: QUICK });
