@@ -28,7 +28,7 @@ export {
   type SimConfig,
   type TribeScoreWeights,
 } from './config.js';
-export { hashConfig, hashMap, hashWorld, StateHasher } from './hash.js';
+export { hashConfig, hashMap, hashWorld, hashWorldState, StateHasher } from './hash.js';
 export {
   Biome,
   computeWaterField,
@@ -86,10 +86,12 @@ export {
   createZeroGenome,
   forwardPass,
   inputWeightIndex,
+  memoryNeuronCount,
   outputBiasIndex,
   outputWeightIndex,
   sameBrainSpec,
   softsign,
+  storeMemoryOutputs,
   validateBrainSpec,
   validateGenome,
   weightCount,
@@ -100,6 +102,7 @@ export { creatureFitness, tribeOutcome, tribeScore, type TribeOutcome } from './
 export {
   crossoverPerNeuron,
   gaussian,
+  migrateGenome,
   mutateGenome,
   randomGenome,
   type MutationSettings,

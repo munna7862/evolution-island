@@ -17,7 +17,7 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | 3.2 | Generations & genetic algorithm | Fitness from effective intake, selection, elitism, per-hidden-neuron crossover, mutation, per-tribe gene pools, tribe-size re-allocation, extinction handling, hall of fame, benchmark arena, exploit tests |
 | 3.3 | Headless trainer CLI | `pnpm train ...`, multi-seed `worker_threads`, saved hall-of-fame genomes + stats, viewer loads a run |
 | 3.4 | "It learns!" milestone | Tuning until benchmark score clearly rises on 20 held-out seeds (bar fixed in the sprint plan) |
-| 3.5 | Memory experiment | 2 memory neurons behind a config switch, genome migration with zero weights, A/B in the arena |
+| 3.5 | Memory experiment | 2 memory neurons behind a config switch, genome migration with zero weights, A/B on 50 held-out seeds (normal and sparse-water maps): memory kept, on by default |
 
 ## Exit criteria (Phase 3 is done when)
 
@@ -30,7 +30,8 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
    — Sprint 3.3.
 4. Benchmark score clearly rising on 20 held-out seeds (bar in the Sprint 3.4 file), with gen 1 vs
    gen 100 recorded — Sprint 3.4.
-5. Memory experiment decided and recorded (kept only if the A/B shows it helps) — Sprint 3.5.
+5. Memory experiment decided and recorded (kept only if the A/B shows it helps) — Sprint 3.5:
+   kept (1.11× on the normal map, 1.67× and 48 of 50 seeds on the sparse-water map), on by default.
 
 ## Architecture decisions taken in this phase
 
@@ -81,6 +82,19 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 11. **"It learns" is pinned on seed 42.** `evolution-learns.test.ts` runs Small seed 42 for 100
     generations and requires the Sprint 3.4 bar there (mean ≥ 2× generation 1 and ≥ 2× a STAY-only
     brain, every tribe ≥ 1.5×), so a change that slows learning fails `pnpm test`.
+12. **Memory neurons (Sprint 3.5).** `brain.memoryNeurons` M (default 0 = off) appends M inputs
+    after the 18 sensors and M outputs after the 9 actions (M = 2: 20 → 12 → 11, 383 weights).
+    The brain policy reads the creature's `memory` as inputs and stores the softsign-squashed
+    memory outputs back (−1..1), read on the next tick; a creature only reads its own memory, so
+    no commit step is needed. `migrateGenome` appends zero weights; `hashWorldState` (the world
+    hash without config hash, genomes and memory) proves a migrated genome acts exactly as before.
+    `SIM_VERSION` 9 (with memory off, behaviour and benchmark scores equal version 8's); after the
+    A/B memory is on by default (`SIM_VERSION` 10, brain 20 → 12 → 11).
+13. **Feature A/Bs are sized from measured noise.** Sprint 3.5 measured how much two equal
+    memory-off arms differ (random 20/20 splits of development seeds) before fixing its bar, scored
+    each tribe by its last three benchmarks, ran 50 held-out seeds per arm once, and used a mute
+    test (memory inputs zeroed) to check that the evolved brains really use the feature. Sprint 4.3
+    (signals) can reuse the recipe.
 
 ## Risks
 
@@ -90,4 +104,5 @@ fitness, with a headless trainer fast enough to tune with hundreds of generation
 | Forward pass differs between engines | Softsign only, fixed summation order, golden hashes checked in Node and Chromium |
 | Brain cost dominates Huge maps | Allocation-free forward pass with reused scratch buffers; benchmark against the §3.6 budget in 3.1 |
 | Tuning eats weeks (3.4) | Trainer first (3.3), multi-seed runs, timebox and record what was tried (3.4: ~60 sweeps in one session, recorded in its sprint file) |
-| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance. After 100 generations about 1 tribe in 7 (tuning seeds) to 1 in 4 (held-out seeds: 10 of 40) is still below 1.5× its generation-1 score; only some are hard lock-ins ("always EAT"/"always DRINK", 2 of the 10 held-out), the rest have a noisy generation-100 champion |
+| Memory adds complexity without helping (3.5) | A/B on 50 held-out seeds against a noise-sized bar, plus a mute test: memory passed (1.11× / 1.67×) and is used by the evolved brains (muted: 0.60× / 0.34×) |
+| Learning is a coin toss per seed (3.4) | Bars and comparisons over many seeds, held-out seeds for acceptance. After 100 generations about 1 tribe in 7 (tuning seeds) to 1 in 4 (held-out seeds: 10 of 40) is still below 1.5× its generation-1 score; only some are hard lock-ins ("always EAT"/"always DRINK", 2 of the 10 held-out), the rest have a noisy generation-100 champion. With memory (Sprint 3.5, seeds 201–250): 6 of 100 tribes below 1.5×, none locked in; a single benchmark still varies by ~15 %, so tribes are scored by their last three |

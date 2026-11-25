@@ -9,13 +9,18 @@ import type { DecisionPolicy } from './world.js';
  *
  * Genome layout ("hidden-neuron-major"), for `I` inputs, `H` hidden neurons, `O` outputs:
  *
- *   [0, H·I)            hidden h's incoming weights at h·I + i (the bias input is just the last
- *                       sensor, constant 1, so hidden neurons need no separate bias)
+ *   [0, H·I)            hidden h's incoming weights at h·I + i (the bias input is just sensor
+ *                       17, constant 1, so hidden neurons need no separate bias)
  *   [H·I, H·I + H·O)    hidden h's outgoing weights at H·I + h·O + o
  *   [H·I + H·O, +O)     output biases (the "+1 bias unit" of plan §2.4)
  *
  * Every hidden neuron's weights are two contiguous slices, so per-neuron crossover (Sprint 3.2) is
  * two slice copies. Total = H·I + (H + 1)·O: 18 → 12 → 9 gives 333 weights.
+ *
+ * Memory (plan §2.3, Sprint 3.5): with M memory neurons the inputs are the 18 sensors followed by
+ * the M memory values, and the outputs the 9 actions followed by the M memory outputs, so a
+ * memory-off genome migrates by appending zero weights (`migrateGenome`). 20 → 12 → 11 (M = 2)
+ * gives 383 weights.
  */
 
 /** Bump when the network layout or activation changes (e.g. NEAT would be 2). */
@@ -23,10 +28,10 @@ export const BRAIN_FORMAT_VERSION = 1;
 
 export interface BrainSpec {
   readonly formatVersion: number;
-  /** Includes the constant bias input (sensor 17). */
+  /** The SENSOR_COUNT sensors (including the constant bias, sensor 17), then the memory inputs. */
   readonly inputs: number;
   readonly hidden: number;
-  /** The first ACTION_COUNT outputs are the actions; later ones (memory, call) arrive in 3.5/4.3. */
+  /** The first ACTION_COUNT outputs are the actions, then the memory outputs (calls: 4.3). */
   readonly outputs: number;
 }
 
@@ -48,12 +53,38 @@ const ACTION_BY_INDEX: readonly Action[] = [
 ];
 
 export function brainSpecFromConfig(config: SimConfig): BrainSpec {
+  const memory = config.brain.memoryNeurons;
+  if (!Number.isSafeInteger(memory) || memory < 0) {
+    throw new RangeError(`brain.memoryNeurons must be a whole number ≥ 0, got ${memory}`);
+  }
   return {
     formatVersion: BRAIN_FORMAT_VERSION,
-    inputs: SENSOR_COUNT,
+    inputs: SENSOR_COUNT + memory,
     hidden: config.brain.hiddenNeurons,
-    outputs: ACTION_COUNT,
+    outputs: ACTION_COUNT + memory,
   };
+}
+
+/**
+ * Memory neurons of a brain spec: its inputs beyond the sensors, which must match its outputs
+ * beyond the actions. Throws for a spec the creature brain can't run.
+ */
+export function memoryNeuronCount(spec: BrainSpec): number {
+  const memoryInputs = spec.inputs - SENSOR_COUNT;
+  const memoryOutputs = spec.outputs - ACTION_COUNT;
+  if (memoryInputs < 0) {
+    throw new RangeError(`Brain has ${spec.inputs} inputs, needs at least ${SENSOR_COUNT}`);
+  }
+  if (memoryOutputs < 0) {
+    throw new RangeError(`Brain has ${spec.outputs} outputs, needs at least ${ACTION_COUNT}`);
+  }
+  if (memoryInputs !== memoryOutputs) {
+    throw new RangeError(
+      `Brain has ${memoryInputs} memory inputs but ${memoryOutputs} memory outputs ` +
+        `(${spec.inputs} inputs, ${spec.outputs} outputs)`,
+    );
+  }
+  return memoryInputs;
 }
 
 function isPositiveInt(value: number): boolean {
@@ -192,8 +223,21 @@ export function argmaxAction(outputs: ArrayLike<number>): Action {
 }
 
 /**
- * Decision policy that feeds each creature's 18 sensors through its genome and picks the argmax
- * action. Pure: it ignores the policy RNG stream. `genomeFor` supplies each creature's weights
+ * Stores the memory outputs (the outputs after the ACTION_COUNT actions) squashed with softsign,
+ * so every stored value is within −1..1 (plan §2.3). `memory.length` says how many there are.
+ */
+export function storeMemoryOutputs(outputs: ArrayLike<number>, memory: Float32Array): void {
+  for (let k = 0; k < memory.length; k++) {
+    memory[k] = softsign(outputs[ACTION_COUNT + k]!);
+  }
+}
+
+/**
+ * Decision policy that feeds each creature's 18 sensors (then its memory values, if the brain has
+ * memory) through its genome and picks the argmax action. With memory it also stores the squashed
+ * memory outputs as the creature's memory, read back on the next tick (plan §2.3): a creature only
+ * reads its own memory, and reads it before writing it, so the update order inside Phase A does
+ * not matter. Pure: it ignores the policy RNG stream. `genomeFor` supplies each creature's weights
  * (Sprint 3.2 gives every creature its own genome from its tribe's gene pool).
  * Genomes are length-checked per call; validate their values once with `validateGenome`.
  */
@@ -202,15 +246,10 @@ export function createBrainPolicy(
   genomeFor: (creature: Creature) => Float32Array,
 ): DecisionPolicy {
   validateBrainSpec(spec);
-  if (spec.inputs !== SENSOR_COUNT) {
-    throw new RangeError(`Brain expects ${spec.inputs} inputs but creatures have ${SENSOR_COUNT}`);
-  }
-  if (spec.outputs < ACTION_COUNT) {
-    throw new RangeError(`Brain has ${spec.outputs} outputs, needs at least ${ACTION_COUNT}`);
-  }
+  const memorySize = memoryNeuronCount(spec);
 
   const expectedWeights = weightCount(spec);
-  const sensors = new Float32Array(SENSOR_COUNT);
+  const inputs = new Float32Array(spec.inputs);
   const scratch = createBrainScratch(spec);
 
   return (world, creature) => {
@@ -220,7 +259,16 @@ export function createBrainPolicy(
         `Creature ${creature.id} genome has ${genome.length} weights, brain spec needs ${expectedWeights}`,
       );
     }
-    readSensors(world, creature, sensors);
-    return argmaxAction(forwardPass(spec, genome, sensors, scratch));
+    const memory = creature.memory;
+    if (memory.length !== memorySize) {
+      throw new RangeError(
+        `Creature ${creature.id} has ${memory.length} memory values, brain spec needs ${memorySize}`,
+      );
+    }
+    readSensors(world, creature, inputs);
+    inputs.set(memory, SENSOR_COUNT);
+    const outputs = forwardPass(spec, genome, inputs, scratch);
+    storeMemoryOutputs(outputs, memory);
+    return argmaxAction(outputs);
   };
 }

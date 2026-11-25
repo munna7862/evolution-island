@@ -94,15 +94,27 @@ describe('genome files', () => {
     ['too few weights', () => JSON.stringify({ ...validFile(), weights: [1, 2, 3] })],
     [
       'a non-numeric weight',
-      () => JSON.stringify({ ...validFile(), weights: ['x', ...new Array<number>(332).fill(0)] }),
+      () =>
+        JSON.stringify({
+          ...validFile(),
+          weights: ['x', ...new Array<number>(weightCount(SPEC) - 1).fill(0)],
+        }),
     ],
     [
       'a NaN weight (written as null)',
-      () => JSON.stringify({ ...validFile(), weights: [null, ...new Array<number>(332).fill(0)] }),
+      () =>
+        JSON.stringify({
+          ...validFile(),
+          weights: [null, ...new Array<number>(weightCount(SPEC) - 1).fill(0)],
+        }),
     ],
     [
       'a weight beyond float32 range',
-      () => JSON.stringify({ ...validFile(), weights: [1e300, ...new Array<number>(332).fill(0)] }),
+      () =>
+        JSON.stringify({
+          ...validFile(),
+          weights: [1e300, ...new Array<number>(weightCount(SPEC) - 1).fill(0)],
+        }),
     ],
   ])('rejects %s as malformed', (_label, makeText) => {
     expectReason(() => parseGenome(makeText()), 'malformed');

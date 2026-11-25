@@ -13,38 +13,51 @@ import {
   SENSOR_COUNT,
   SIM_VERSION,
   StateHasher,
+  storeMemoryOutputs,
   type BrainSpec,
   type DecisionPolicy,
+  type SimConfig,
 } from '../src/index.js';
 import { GOLDEN, goldenBrainGenome } from './golden-hashes.js';
 
 /**
- * The same steps as `createBrainPolicy` (sensors → forward pass → argmax), but every sensor
- * vector and raw output also goes into `hasher`, so the forward pass is pinned bit for bit.
+ * The same steps as `createBrainPolicy` (sensors and memory → forward pass → memory, argmax), but
+ * every input vector and raw output also goes into `hasher`, so the forward pass is pinned bit
+ * for bit.
  */
 function recordingBrainPolicy(
   spec: BrainSpec,
   genome: Float32Array,
   hasher: StateHasher,
 ): DecisionPolicy {
-  const sensors = new Float32Array(SENSOR_COUNT);
+  const inputs = new Float32Array(spec.inputs);
   const scratch = createBrainScratch(spec);
   return (world, creature) => {
-    readSensors(world, creature, sensors);
-    const outputs = forwardPass(spec, genome, sensors, scratch);
-    hasher.writeUint32(world.tickCount).writeUint32(creature.id).writeFloat32Array(sensors);
+    readSensors(world, creature, inputs);
+    inputs.set(creature.memory, SENSOR_COUNT);
+    const outputs = forwardPass(spec, genome, inputs, scratch);
+    storeMemoryOutputs(outputs, creature.memory);
+    hasher.writeUint32(world.tickCount).writeUint32(creature.id).writeFloat32Array(inputs);
     for (const value of outputs) hasher.writeFloat64(value);
     return argmaxAction(outputs);
   };
 }
 
+/** Memory off: the Sprint 3.4 brain (18 → 12 → 9), still pinned. */
+const NO_MEMORY_CONFIG: SimConfig = {
+  ...DEFAULT_CONFIG,
+  brain: { ...DEFAULT_CONFIG.brain, memoryNeurons: 0 },
+};
+
 function hashesAt(
   ticks: Readonly<Record<number, string>>,
   policy?: DecisionPolicy,
+  config: SimConfig = DEFAULT_CONFIG,
 ): Record<number, string> {
   const world = createWorld({
     preset: GOLDEN.preset,
     seed: GOLDEN.seed,
+    config,
     ...(policy === undefined ? {} : { policy }),
   });
   const targets = Object.keys(ticks)
@@ -71,14 +84,23 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     expect(hashesAt(GOLDEN.randomPolicy)).toEqual(GOLDEN.randomPolicy);
   });
 
-  it('reproduce the pinned world hashes with a fixed brain (sensors + forward pass)', () => {
+  it('reproduce the pinned world hashes with a fixed brain (sensors + memory + forward pass)', () => {
     const spec = brainSpecFromConfig(DEFAULT_CONFIG);
     const genome = goldenBrainGenome(spec);
     const policy = createBrainPolicy(spec, () => genome);
     expect(hashesAt(GOLDEN.brainPolicy, policy)).toEqual(GOLDEN.brainPolicy);
   });
 
-  it('reproduce every sensor vector and raw forward-pass output bit for bit', () => {
+  it('reproduce the pinned world hashes with memory switched off (18 → 12 → 9 brain)', () => {
+    const spec = brainSpecFromConfig(NO_MEMORY_CONFIG);
+    const genome = goldenBrainGenome(spec);
+    const policy = createBrainPolicy(spec, () => genome);
+    expect(hashesAt(GOLDEN.noMemoryPolicy, policy, NO_MEMORY_CONFIG)).toEqual(
+      GOLDEN.noMemoryPolicy,
+    );
+  });
+
+  it('reproduce every input vector and raw forward-pass output bit for bit', () => {
     const spec = brainSpecFromConfig(DEFAULT_CONFIG);
     const hasher = new StateHasher();
     const world = createWorld({

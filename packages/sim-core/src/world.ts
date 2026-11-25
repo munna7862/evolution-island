@@ -213,6 +213,7 @@ export class World implements ActionWorldContext {
       y,
       this.config.creature,
       genome,
+      this.config.brain.memoryNeurons,
     );
     this.nextCreatureId++;
     this.occupancy[idx] = creature.id;

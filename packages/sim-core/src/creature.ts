@@ -34,6 +34,12 @@ export interface Creature {
   readonly stats: CreatureStats;
   /** Brain weights (plan §2.4); `EMPTY_GENOME` when a non-brain policy drives the creature. */
   readonly genome: Float32Array;
+  /**
+   * Memory values (plan §2.3, Sprint 3.5), one per memory neuron (`config.brain.memoryNeurons`),
+   * each within −1..1 and 0 at spawn. The brain policy writes them in Phase A and reads them back
+   * as inputs on the next tick. Empty when memory is off.
+   */
+  readonly memory: Float32Array;
 }
 
 export function createCreature(
@@ -43,6 +49,7 @@ export function createCreature(
   y: number,
   config: CreatureConfig,
   genome: Float32Array = EMPTY_GENOME,
+  memoryNeurons = 0,
 ): Creature {
   return {
     id,
@@ -69,6 +76,7 @@ export function createCreature(
       callsMade: 0,
     },
     genome,
+    memory: new Float32Array(memoryNeurons),
   };
 }
 

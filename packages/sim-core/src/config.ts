@@ -96,6 +96,11 @@ export interface SensorConfig {
 export interface BrainConfig {
   /** Hidden-layer size of the fixed-topology MLP (plan §2.4). */
   readonly hiddenNeurons: number;
+  /**
+   * Memory neurons (plan §2.3, Sprint 3.5): this many extra outputs, squashed to −1..1, are fed
+   * back as as many extra inputs on the next tick. 0 = memory off.
+   */
+  readonly memoryNeurons: number;
 }
 
 /** Per-creature fitness weights (plan §2.5). */
@@ -304,6 +309,12 @@ export const DEFAULT_CONFIG: SimConfig = {
   },
   brain: {
     hiddenNeurons: 12,
+    // Sprint 3.5 A/B (50 held-out Small seeds, memory on vs off from scratch): tribe scores 1.11×
+    // on the normal map and 1.67× on a sparse-water map (better on 48 of 50 seeds), so memory is
+    // on. Zeroing the memory inputs of the evolved champions cuts their arena score to 0.60× /
+    // 0.34×: memory carries information (mostly a way to change direction when nothing in sight
+    // changes, i.e. to search). 0 switches it off.
+    memoryNeurons: 2,
   },
   evolution: {
     fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },

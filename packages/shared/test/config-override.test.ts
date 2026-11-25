@@ -100,6 +100,18 @@ describe('applyConfigOverride', () => {
     ).toBe(0.25);
   });
 
+  it('switches memory neurons (Sprint 3.5, on by default) off or on, a whole number', () => {
+    const off = applyConfigOverride({ brain: { memoryNeurons: 0 } });
+    expect(off.brain).toEqual({ ...DEFAULT_CONFIG.brain, memoryNeurons: 0 });
+    expect(hashConfig(off)).not.toBe(hashConfig(DEFAULT_CONFIG));
+    expect(hashConfig(applyConfigOverride({ brain: { memoryNeurons: 2 } }))).toBe(
+      hashConfig(DEFAULT_CONFIG),
+    );
+    expect(refusal({ brain: { memoryNeurons: 0.5 } })).toBe(
+      'brain.memoryNeurons must be a whole number ≥ 0',
+    );
+  });
+
   it('refuses unknown enum values, preset id changes and wrong array lengths', () => {
     expect(refusal({ evolution: { selection: 'roulette' } })).toBe(
       'evolution.selection must be one of truncation, tournament',
