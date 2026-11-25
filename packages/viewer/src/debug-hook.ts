@@ -1,4 +1,4 @@
-import type { DashboardState } from './dashboard.js';
+import type { DashboardState, FeedEvent } from './dashboard.js';
 import type { CreatureInspection, InspectTarget, ReplayStatus } from '@evolution-island/shared';
 import type { SimSpeed } from '@evolution-island/shared';
 import type { MapPresetId, Seed } from '@evolution-island/sim-core';
@@ -58,6 +58,15 @@ export interface EvolutionIslandDebugState {
   /** The inspected creature, live (Sprint 6.2), and the creature the camera follows. */
   readonly inspection: CreatureInspection | null;
   readonly following: number | null;
+  /** Events feed, newest first, and the family tree's levels (Sprint 6.3). */
+  readonly feed: readonly FeedEvent[];
+  readonly familyTree:
+    | readonly (readonly {
+        readonly generation: number;
+        readonly id: number;
+        readonly rank: number | null;
+      }[])[]
+    | null;
 }
 
 export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {

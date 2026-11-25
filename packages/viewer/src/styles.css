@@ -509,3 +509,61 @@ body {
 .dash-table tbody tr {
   cursor: pointer;
 }
+
+/* Sprint 6.3: events feed and family tree in the dashboard. */
+.dash-section summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.dash-feed {
+  list-style: none;
+  margin: 3px 0 0;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+  color: var(--text);
+}
+
+.dash-feed li {
+  padding: 1px 0;
+}
+
+.dash-feed .feed-gen {
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.dash-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.tree-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.tree-gen {
+  color: var(--muted);
+  width: 48px;
+}
+
+.tree-node {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--text);
+}
+
+.tree-node.is-champion {
+  background: rgba(56, 189, 248, 0.45);
+}
+
+.tree-node.is-hof {
+  outline: 1px dashed var(--muted);
+}

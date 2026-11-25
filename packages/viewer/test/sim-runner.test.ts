@@ -610,3 +610,39 @@ describe('inspection across generations (Sprint 6.2 review)', () => {
     expect(host.latestSnapshot().inspection).toBeNull();
   });
 });
+
+describe('family tree request (Sprint 6.3)', () => {
+  it('returns the champion lineage of the last finished generation, as Node computes it', () => {
+    const spec = brainSpecFromConfig(DEFAULT_CONFIG);
+    const start: EvolutionStart = {
+      generation: 7,
+      tribes: [0, 1].map((tribeId) => ({
+        tribeId,
+        alive: true,
+        genomes: [0.2, -0.3, 0.1].map((v) => new Float32Array(weightCount(spec)).fill(v)),
+        hallOfFame: [],
+      })),
+    };
+    const node = createEvolutionRun({ preset: 'small', seed: 42, start });
+    node.runGeneration();
+    const host = new MockRunnerHost();
+    const runner = new SimRunner(host);
+    send(runner, {
+      type: 'init',
+      runId: 2,
+      preset: 'small',
+      seed: 42,
+      speed: 1,
+      running: false,
+      pauseAtTick: null,
+      start,
+    });
+    send(runner, { type: 'requestLineage', runId: 2, requestId: 1, tribeId: 0, depth: 3 });
+    expect(host.messages.at(-1)).toMatchObject({ type: 'lineage', requestId: 1, tree: null });
+    send(runner, { type: 'step', runId: 2, ticks: node.world.tickCount });
+    send(runner, { type: 'requestLineage', runId: 2, requestId: 2, tribeId: 0, depth: 3 });
+    const reply = host.messages.at(-1) as Extract<WorkerToMainMessage, { type: 'lineage' }>;
+    expect(reply.tree).toEqual(node.championLineage(0, 3));
+    expect(reply.tree).toMatchObject({ generation: 7, rank: 0, parents: [] });
+  });
+});
