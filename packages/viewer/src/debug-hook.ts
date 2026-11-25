@@ -1,3 +1,4 @@
+import type { ReplayStatus } from '@evolution-island/shared';
 import type { SimSpeed } from '@evolution-island/shared';
 import type { MapPresetId, Seed } from '@evolution-island/sim-core';
 import type { CameraState } from './renderer/camera.js';
@@ -38,8 +39,13 @@ export interface EvolutionIslandDebugState {
   readonly rendererType: string;
   readonly overlaysVisible: boolean;
   readonly camera: CameraState;
-  /** `random`: random-policy creatures; `checkpoint`: a loaded run's champions, evolving on. */
-  readonly mode: 'random' | 'checkpoint';
+  /**
+   * `random`: random-policy creatures; `checkpoint`: a loaded run's champions, evolving on;
+   * `replay`: a replay file, checked against its recorded hashes (Sprint 5.2).
+   */
+  readonly mode: 'random' | 'checkpoint' | 'replay';
+  /** Progress of the replay being played, or null. */
+  readonly replay: ReplayStatus | null;
   readonly checkpoint: PlayingCheckpoint | null;
   /** Labels of the saved generations found in the loaded files. */
   readonly checkpointOptions: readonly string[];
@@ -52,6 +58,8 @@ export interface EvolutionIslandDebugHook extends EvolutionIslandDebugState {
   getState(): EvolutionIslandDebugState;
   pauseAtTick(targetTick: number | null): void;
   requestHash(): Promise<{ readonly tick: number; readonly worldHash: string }>;
+  /** The replay of what was played since the start (what "Export replay" saves). */
+  exportReplay(): Promise<string>;
 }
 
 declare global {

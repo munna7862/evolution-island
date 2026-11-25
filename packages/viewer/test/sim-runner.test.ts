@@ -1,7 +1,11 @@
-import type {
-  MainToWorkerMessage,
-  SimSnapshot,
-  WorkerToMainMessage,
+import {
+  parseReplay,
+  playReplay,
+  recordReplay,
+  serializeReplay,
+  type MainToWorkerMessage,
+  type SimSnapshot,
+  type WorkerToMainMessage,
 } from '@evolution-island/shared';
 import {
   brainSpecFromConfig,
@@ -377,6 +381,123 @@ describe('SimRunner', () => {
       send(runner, { type: 'step', runId: 4, ticks: 3 });
       expect(host.latestSnapshot().tick).toBe(3);
       expect(host.latestSnapshot().tribePopulations).toEqual([1, 0]);
+    });
+  });
+
+  describe('replays (Sprint 5.2)', () => {
+    const spec = brainSpecFromConfig(DEFAULT_CONFIG);
+    const checkpointStart = (): EvolutionStart => ({
+      generation: 12,
+      tribes: [0, 1].map((tribeId) => ({
+        tribeId,
+        alive: true,
+        genomes: [0.3, -0.2, 0.1].map((v) =>
+          new Float32Array(weightCount(spec)).fill(v * (tribeId + 1)),
+        ),
+        hallOfFame: [],
+      })),
+    });
+    const QUICK = {
+      ...DEFAULT_CONFIG,
+      presets: {
+        ...DEFAULT_CONFIG.presets,
+        small: { ...DEFAULT_CONFIG.presets.small, generationLength: 150 },
+      },
+    };
+    const replayText = (ticks: number) => {
+      const run = createEvolutionRun({ preset: 'small', seed: 6, config: QUICK });
+      return serializeReplay(
+        recordReplay({
+          preset: 'small',
+          seed: 6,
+          config: QUICK,
+          start: run.captureState(),
+          ticks,
+          hashEvery: 100,
+        }),
+      );
+    };
+
+    it('plays a replay, checks every hash and stops at its end', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 1,
+        preset: 'small',
+        seed: 6,
+        speed: 'max',
+        running: true,
+        pauseAtTick: null,
+        replay: replayText(420),
+      });
+      host.advanceBy(5000);
+      const status = host.latestSnapshot().replay!;
+      expect(status).toEqual({
+        played: 420,
+        ticks: 420,
+        checked: 5,
+        matched: 5,
+        total: 5,
+        mismatch: null,
+      });
+      expect(host.latestSnapshot().running).toBe(false);
+    });
+
+    it('stops at the first hash that differs and reports it', () => {
+      const text = replayText(420).replace(/"hash":"[0-9a-f]{16}"/, '"hash":"0000000000000000"');
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 1,
+        preset: 'small',
+        seed: 6,
+        speed: 'max',
+        running: true,
+        pauseAtTick: null,
+        replay: text,
+      });
+      host.advanceBy(5000);
+      const status = host.latestSnapshot().replay!;
+      expect(status.mismatch).toMatchObject({ tick: 100, expected: '0000000000000000' });
+      expect(status.played).toBe(100);
+    });
+
+    it('exports what a checkpoint run played, and the export plays back exactly', () => {
+      const host = new MockRunnerHost();
+      const runner = new SimRunner(host);
+      send(runner, {
+        type: 'init',
+        runId: 2,
+        preset: 'small',
+        seed: 42,
+        speed: 'max',
+        running: false,
+        pauseAtTick: null,
+        start: checkpointStart(),
+      });
+      send(runner, { type: 'step', runId: 2, ticks: 650 });
+      send(runner, { type: 'exportReplay', runId: 2, requestId: 7 });
+      const reply = host.messages.at(-1)!;
+      expect(reply).toMatchObject({ type: 'replayExport', requestId: 7, error: null });
+      const text = (reply as { text: string }).text;
+      const file = parseReplay(text);
+      expect(file.ticks).toBe(650);
+      expect(file.hashes.map((h) => h.tick)).toEqual([500, 650]);
+      expect(playReplay(file).mismatch).toBeNull();
+      // Random mode has no run to export.
+      send(runner, {
+        type: 'init',
+        runId: 3,
+        preset: 'small',
+        seed: 1,
+        speed: 1,
+        running: false,
+        pauseAtTick: null,
+      });
+      send(runner, { type: 'exportReplay', runId: 3, requestId: 8 });
+      expect(host.messages.at(-1)).toMatchObject({ type: 'replayExport', text: null });
     });
   });
 });

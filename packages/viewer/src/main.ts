@@ -1,8 +1,10 @@
 import {
   formatSpeed,
+  parseReplay,
   parseSeed,
   SIM_SPEEDS,
   type MainToWorkerMessage,
+  type ReplayStatus,
   type SimSnapshot,
   type SimSpeed,
   type TransferableMapData,
@@ -40,6 +42,11 @@ import {
 } from './run-loader.js';
 import { statusLine } from './status.js';
 import './styles.css';
+
+interface ExportRequestEntry {
+  readonly resolve: (text: string) => void;
+  readonly reject: (reason: Error) => void;
+}
 
 interface HashRequestEntry {
   readonly resolve: (result: { readonly tick: number; readonly worldHash: string }) => void;
@@ -154,6 +161,9 @@ async function boot(): Promise<void> {
   const hudTribesEl = requireEl('#hud-tribes', HTMLElement);
   const loadRunBtn = requireEl('#load-run-btn', HTMLButtonElement);
   const runInput = requireEl('#run-input', HTMLInputElement);
+  const loadReplayBtn = requireEl('#load-replay-btn', HTMLButtonElement);
+  const replayInput = requireEl('#replay-input', HTMLInputElement);
+  const exportReplayBtn = requireEl('#export-replay-btn', HTMLButtonElement);
   const checkpointField = requireEl('#checkpoint-field', HTMLElement);
   const checkpointSelect = requireEl('#checkpoint-select', HTMLSelectElement);
   const runField = requireEl('#run-field', HTMLElement);
@@ -195,6 +205,10 @@ async function boot(): Promise<void> {
   let shownCheckpoints: readonly FoundCheckpoint[] = [];
   let playingFound: FoundCheckpoint | null = null;
   let tribeChoice: number | null = null;
+  // Replays (Sprint 5.2): the name of the replay file playing (null if none) and export requests.
+  let replayName: string | null = null;
+  let nextExportRequestId = 1;
+  const pendingExports = new Map<number, ExportRequestEntry>();
   let playing: PlayingCheckpoint | null = null;
   let runMessage = '';
   let runMessageIsError = false;
@@ -362,7 +376,8 @@ async function boot(): Promise<void> {
       rendererType: mapView.getRendererType(),
       overlaysVisible: mapView.getOverlaysVisible(),
       camera: mapView.getCamera(),
-      mode: playing === null ? 'random' : 'checkpoint',
+      mode: replayName !== null ? 'replay' : playing === null ? 'random' : 'checkpoint',
+      replay: latestSnapshot.replay,
       checkpoint: playing,
       checkpointOptions: shownCheckpoints.map((c) => c.label),
       runMessage,
@@ -452,6 +467,12 @@ async function boot(): Promise<void> {
     get checkpoint() {
       return getState().checkpoint;
     },
+    get replay() {
+      return getState().replay;
+    },
+    exportReplay() {
+      return requestReplayExport();
+    },
     get checkpointOptions() {
       return getState().checkpointOptions;
     },
@@ -521,6 +542,7 @@ async function boot(): Promise<void> {
     if (msg.type === 'snapshot') {
       if (msg.snapshot.runId !== activeRunId) return;
       latestSnapshot = msg.snapshot;
+      if (msg.snapshot.replay !== null) showReplayStatus(msg.snapshot.replay);
       if (msg.snapshot.ackSeq >= lastControlSeq) {
         desiredRunning = msg.snapshot.running;
         desiredSpeed = msg.snapshot.speed;
@@ -538,6 +560,15 @@ async function boot(): Promise<void> {
       if (msg.snapshot.running) {
         ensureRafRunning();
       }
+      return;
+    }
+
+    if (msg.type === 'replayExport') {
+      const entry = pendingExports.get(msg.requestId);
+      if (entry === undefined) return;
+      pendingExports.delete(msg.requestId);
+      if (msg.text === null) entry.reject(new Error(msg.error ?? 'Nothing to export'));
+      else entry.resolve(msg.text);
       return;
     }
 
@@ -571,7 +602,14 @@ async function boot(): Promise<void> {
     showFatalError(errMsg);
   });
 
-  const startWorld = (preset: MapPresetId, seed: Seed, start?: EvolutionStart): void => {
+  const startWorld = (
+    preset: MapPresetId,
+    seed: Seed,
+    start?: EvolutionStart,
+    replayText?: string,
+  ): void => {
+    exportReplayBtn.hidden = start === undefined && replayText === undefined;
+    if (replayText === undefined) replayName = null;
     seedInput.value = String(seed);
     presetSelect.value = preset;
     syncUrlParams(preset, seed);
@@ -588,6 +626,51 @@ async function boot(): Promise<void> {
       running: desiredRunning,
       pauseAtTick: null,
       ...(start === undefined ? {} : { start }),
+      ...(replayText === undefined ? {} : { replay: replayText }),
+    });
+  };
+
+  /** Plays a replay file (Sprint 5.2): checked against its hashes, stopping at its end. */
+  const playReplayText = (name: string, text: string): void => {
+    let file;
+    try {
+      file = parseReplay(text);
+    } catch (error: unknown) {
+      setRunMessage(`Can't play ${name}: ${errorMessage(error)}`, true);
+      return;
+    }
+    playing = null;
+    playingFound = null;
+    replayName = name;
+    checkpointSelect.selectedIndex = -1;
+    setRunMessage(`Replay ${name}: tick 0 / ${file.ticks}`, false);
+    startWorld(file.preset, file.seed, undefined, text);
+  };
+
+  /** The run message while a replay plays: progress, or the first divergence. */
+  const showReplayStatus = (status: ReplayStatus): void => {
+    if (replayName === null) return;
+    if (status.mismatch !== null) {
+      const m = status.mismatch;
+      setRunMessage(
+        `Replay ${replayName} DIVERGED at tick ${m.tick}: expected ${m.expected}, got ${m.actual}`,
+        true,
+      );
+      return;
+    }
+    const done = status.played >= status.ticks ? ' · finished, every hash matched' : '';
+    setRunMessage(
+      `Replay ${replayName}: tick ${status.played} / ${status.ticks} · hashes ok ` +
+        `${status.matched} / ${status.total}${done}`,
+      false,
+    );
+  };
+
+  const requestReplayExport = (): Promise<string> => {
+    const requestId = nextExportRequestId++;
+    return new Promise((resolve, reject) => {
+      pendingExports.set(requestId, { resolve, reject });
+      postToWorker({ type: 'exportReplay', runId: activeRunId, requestId });
     });
   };
 
@@ -794,6 +877,43 @@ async function boot(): Promise<void> {
     }
   });
 
+  loadReplayBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    replayInput.click();
+  });
+
+  replayInput.addEventListener('change', () => {
+    const file = replayInput.files?.[0];
+    replayInput.value = '';
+    if (file === undefined) return;
+    file
+      .text()
+      .then((text) => {
+        playReplayText(file.name, text);
+      })
+      .catch((error: unknown) => {
+        setRunMessage(`Could not read ${file.name}: ${errorMessage(error)}`, true);
+      });
+  });
+
+  exportReplayBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    requestReplayExport()
+      .then((text) => {
+        const name = `${presetSelect.value}-${seedInput.value}-gen${latestSnapshot?.generation ?? 0}.replay.json`;
+        const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(url);
+        setRunMessage(`Saved ${name}`, false);
+      })
+      .catch((error: unknown) => {
+        setRunMessage(`Can't export a replay: ${errorMessage(error)}`, true);
+      });
+  });
+
   loadRunBtn.addEventListener('click', (event) => {
     blurMouseTarget(event);
     runInput.click();
@@ -841,7 +961,19 @@ async function boot(): Promise<void> {
     dropOverlay.hidden = true;
     if (event.dataTransfer === null) return;
     event.preventDefault();
-    loadRunSafely(sourcesFromDrop(event.dataTransfer));
+    const dropped = sourcesFromDrop(event.dataTransfer);
+    dropped
+      .then(async (sources) => {
+        const replay = sources.find((s) => s.path.endsWith('.replay.json'));
+        if (replay !== undefined && sources.length === 1) {
+          playReplayText(replay.path, await replay.text());
+          return;
+        }
+        loadRunSafely(Promise.resolve(sources));
+      })
+      .catch((error: unknown) => {
+        setRunMessage(`Could not read the dropped files: ${errorMessage(error)}`, true);
+      });
   });
 
   overlaysToggle.addEventListener('change', () => {

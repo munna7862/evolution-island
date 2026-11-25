@@ -19,7 +19,8 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:e2e": "pnpm --filter @evolution-island/viewer run test:e2e",
     "train": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/cli.js",
-    "analyze": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/analyze-cli.js"
+    "analyze": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/analyze-cli.js",
+    "replay": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/replay-cli.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
