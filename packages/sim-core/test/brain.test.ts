@@ -97,8 +97,12 @@ describe('brain spec and genome layout', () => {
     expect(() => {
       validateBrainSpec(V1);
     }).not.toThrow();
+    // Format 2 is NEAT (Phase 8); anything else is unknown.
     expect(() => {
       validateBrainSpec({ ...V1, formatVersion: 2 });
+    }).not.toThrow();
+    expect(() => {
+      validateBrainSpec({ ...V1, formatVersion: 3 });
     }).toThrow(RangeError);
     expect(() => {
       validateBrainSpec({ ...V1, hidden: 0 });

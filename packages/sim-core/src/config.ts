@@ -156,7 +156,28 @@ export interface SignalConfig {
   readonly callCost: number;
 }
 
+/**
+ * NEAT brains (plan §4 Phase 8): the topology evolves too. A genome starts with every input
+ * connected to every output; mutations add connections (feed-forward only) and split connections
+ * with new hidden nodes. Weight mutation uses `evolution.mutationRate / mutationSigma /
+ * weightClamp`; initial weights `evolution.initialWeightRange`. Tribes are the species: there is
+ * no speciation inside a tribe.
+ */
+export interface NeatConfig {
+  /** Chance per bred genome of one add-connection attempt. */
+  readonly addConnectionRate: number;
+  /** Chance per bred genome of splitting one enabled connection with a new hidden node. */
+  readonly addNodeRate: number;
+  /** Chance per connection of flipping it on or off. */
+  readonly toggleRate: number;
+  /** Caps: a genome never grows past these. */
+  readonly maxHiddenNodes: number;
+  readonly maxConnections: number;
+}
+
 export interface BrainConfig {
+  /** 'mlp': the fixed-topology MLP (plan §2.4); 'neat': evolving topology (Phase 8). */
+  readonly kind: 'mlp' | 'neat';
   /** Hidden-layer size of the fixed-topology MLP (plan §2.4). */
   readonly hiddenNeurons: number;
   /**
@@ -164,6 +185,7 @@ export interface BrainConfig {
    * back as as many extra inputs on the next tick. 0 = memory off.
    */
   readonly memoryNeurons: number;
+  readonly neat: NeatConfig;
 }
 
 /** Per-creature fitness weights (plan §2.5). */
@@ -423,6 +445,8 @@ export const DEFAULT_CONFIG: SimConfig = {
     callCost: 0.1,
   },
   brain: {
+    // The MLP stays the default unless the Phase 8 comparison shows NEAT learns better.
+    kind: 'mlp',
     hiddenNeurons: 12,
     // Sprint 3.5 A/B (50 held-out Small seeds, memory on vs off from scratch): tribe scores 1.11×
     // on the normal map and 1.67× on a sparse-water map (better on 48 of 50 seeds), so memory is
@@ -430,6 +454,14 @@ export const DEFAULT_CONFIG: SimConfig = {
     // 0.34×: memory carries information (mostly a way to change direction when nothing in sight
     // changes, i.e. to search). 0 switches it off.
     memoryNeurons: 2,
+    // Phase 8 first values (NEAT papers use ~0.05 / 0.03 per genome in larger populations).
+    neat: {
+      addConnectionRate: 0.1,
+      addNodeRate: 0.05,
+      toggleRate: 0.005,
+      maxHiddenNodes: 24,
+      maxConnections: 400,
+    },
   },
   evolution: {
     fitness: { ticksAlive: 1, foodEaten: 2, waterDrunk: 1, alliesHelped: 5, kills: 10 },

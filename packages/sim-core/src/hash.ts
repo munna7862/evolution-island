@@ -248,7 +248,13 @@ export function hashConfig(config: SimConfig): string {
     .writeFloat64(config.signals.callRadius)
     .writeFloat64(config.signals.callCost)
     .writeUint32(config.brain.hiddenNeurons)
-    .writeUint32(config.brain.memoryNeurons);
+    .writeUint32(config.brain.memoryNeurons)
+    .writeString(config.brain.kind)
+    .writeFloat64(config.brain.neat.addConnectionRate)
+    .writeFloat64(config.brain.neat.addNodeRate)
+    .writeFloat64(config.brain.neat.toggleRate)
+    .writeUint32(config.brain.neat.maxHiddenNodes)
+    .writeUint32(config.brain.neat.maxConnections);
 
   const e = config.evolution;
   hasher

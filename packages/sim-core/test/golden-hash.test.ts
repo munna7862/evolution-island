@@ -25,6 +25,7 @@ import {
   GOLDEN,
   GOLDEN_CLIMATE_EVENTS,
   goldenBrainGenome,
+  neatConfig,
 } from './golden-hashes.js';
 
 /**
@@ -182,5 +183,21 @@ describe('golden state hashes (see golden-hashes.ts before changing anything her
     // Both kinds happened, naturally as well as dropped by the spectator.
     expect([...seen].filter((k) => k.endsWith('flood')).length).toBeGreaterThan(1);
     expect([...seen].filter((k) => k.endsWith('drought')).length).toBeGreaterThan(1);
+  });
+
+  it('reproduce the pinned NEAT evolution-run hashes (Phase 8)', () => {
+    const run = createEvolutionRun({
+      preset: GOLDEN.preset,
+      seed: GOLDEN.seed,
+      config: neatConfig(),
+    });
+    const actual: Record<number, string> = {};
+    for (const generation of [2, 3] as const) {
+      while (run.generation < generation) run.runGeneration();
+      actual[generation] = run.hash();
+    }
+    expect(actual).toEqual(GOLDEN.neat);
+    // Structure evolved: some genome has hidden nodes by generation 3.
+    expect(run.world.creatures.some((c) => c.genome[0]! > 0)).toBe(true);
   });
 });

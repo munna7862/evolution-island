@@ -18,6 +18,7 @@ export class ConfigOverrideError extends Error {
 const ENUM_VALUES: Readonly<Record<string, readonly string[]>> = {
   'evolution.selection': ['truncation', 'tournament'],
   'evolution.extinction': ['respawn', 'battle-royale'],
+  'brain.kind': ['mlp', 'neat'],
 };
 
 /** Fields that must keep the base value. */
@@ -50,6 +51,8 @@ const INTEGER_FIELDS = new Set([
   'territory.updateInterval',
   'brain.hiddenNeurons',
   'brain.memoryNeurons',
+  'brain.neat.maxHiddenNodes',
+  'brain.neat.maxConnections',
   'evolution.tournamentSize',
   'evolution.eliteCount',
   'evolution.hallOfFameSize',

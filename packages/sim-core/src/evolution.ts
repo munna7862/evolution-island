@@ -13,7 +13,7 @@ import {
 } from './config.js';
 import type { Creature } from './creature.js';
 import { creatureFitness, tribeOutcome, tribeScore } from './fitness.js';
-import { crossoverPerNeuron, mutateGenome, randomGenome } from './genome.js';
+import { genomeOps, type GenomeOps } from './genome.js';
 import { StateHasher } from './hash.js';
 import type { RngState, RngStream, Seed } from './rng.js';
 import { createWorld, type TribeSpawn, type World } from './world.js';
@@ -85,8 +85,9 @@ export interface Parentage {
 
 /**
  * `count` genomes for the next generation from `candidates` (best first): the best `eliteCount`
- * copied unchanged, the rest bred from two parents (per-neuron crossover, or a copy of the first
- * parent when crossover is off) and mutated. No candidates → fresh random genomes.
+ * copied unchanged, the rest bred from two parents (crossover, or a copy of the first parent when
+ * crossover is off) and mutated. No candidates → fresh random genomes. `ops` are the brain's
+ * operators (Phase 8); omitted, they are made from `spec` and `candidates` (default NEAT rates).
  */
 export function breedGenomes(
   spec: BrainSpec,
@@ -96,11 +97,12 @@ export function breedGenomes(
   rng: RngStream,
   /** Filled with each genome's `Parentage`, in order (optional; draws are the same). */
   parentsOut?: Parentage[],
+  ops: GenomeOps = genomeOps(spec, evolution, DEFAULT_CONFIG.brain, candidates),
 ): Float32Array[] {
   const next: Float32Array[] = [];
   if (candidates.length === 0) {
     for (let i = 0; i < count; i++) {
-      next.push(randomGenome(spec, rng, evolution.initialWeightRange));
+      next.push(ops.random(rng));
       parentsOut?.push({ parents: [], fromHallOfFame: false });
     }
     return next;
@@ -110,25 +112,19 @@ export function breedGenomes(
     next.push(Float32Array.from(candidates[i]!));
     parentsOut?.push({ parents: [i], fromHallOfFame: false });
   }
-  const mutation = {
-    rate: evolution.mutationRate,
-    sigma: evolution.mutationSigma,
-    clamp: evolution.weightClamp,
-  };
   while (next.length < count) {
     const ia = pickParentIndex(candidates.length, evolution, rng);
     const a = candidates[ia]!;
     let child: Float32Array;
     if (evolution.crossover) {
       const ib = pickParentIndex(candidates.length, evolution, rng);
-      child = crossoverPerNeuron(spec, a, candidates[ib]!, rng);
+      child = ops.crossover(a, candidates[ib]!, ia <= ib, rng);
       parentsOut?.push({ parents: [ia, ib], fromHallOfFame: false });
     } else {
       child = Float32Array.from(a);
       parentsOut?.push({ parents: [ia], fromHallOfFame: false });
     }
-    mutateGenome(child, rng, mutation);
-    next.push(child);
+    next.push(ops.mutate(child, rng));
   }
   return next;
 }
@@ -148,6 +144,10 @@ export function respawnGenomes(
   evolution: EvolutionConfig,
   rng: RngStream,
   parentsOut?: Parentage[],
+  ops: GenomeOps = genomeOps(spec, evolution, DEFAULT_CONFIG.brain, [
+    ...members,
+    ...hallOfFame.map((e) => e.genome),
+  ]),
 ): Float32Array[] {
   if (members.length === 0) {
     const fromHof: Parentage[] = [];
@@ -158,18 +158,19 @@ export function respawnGenomes(
       evolution,
       rng,
       fromHof,
+      ops,
     );
     parentsOut?.push(...fromHof.map((p) => ({ ...p, fromHallOfFame: true })));
     return genomes;
   }
   const champion = hallOfFame[0];
   if (champion === undefined || count < 1) {
-    return breedGenomes(spec, members, count, evolution, rng, parentsOut);
+    return breedGenomes(spec, members, count, evolution, rng, parentsOut, ops);
   }
   parentsOut?.push({ parents: [0], fromHallOfFame: true });
   return [
     Float32Array.from(champion.genome),
-    ...breedGenomes(spec, members, count - 1, evolution, rng, parentsOut),
+    ...breedGenomes(spec, members, count - 1, evolution, rng, parentsOut, ops),
   ];
 }
 
@@ -498,12 +499,12 @@ export class EvolutionRun {
       history: [],
     }));
     const rng = this.world.rng.evolution;
-    const range = this.config.evolution.initialWeightRange;
+    const ops = genomeOps(this.spec, this.config.evolution, this.config.brain);
     this.beginGeneration(
       1,
       this.tribes.map((t) => ({
         tribeId: t.id,
-        genomes: Array.from({ length: t.size }, () => randomGenome(this.spec, rng, range)),
+        genomes: Array.from({ length: t.size }, () => ops.random(rng)),
       })),
     );
     this.recordBirths(1, () => null);
@@ -862,6 +863,12 @@ export class EvolutionRun {
     const rng = this.world.rng.evolution;
     const spawns: TribeSpawn[] = [];
     const parentageByTribe = new Map<number, Parentage[]>();
+    // One set of operators for all tribes: NEAT node ids come from every genome alive now
+    // (members and halls of fame, tribes in id order), which a resumed run has too.
+    const ops = genomeOps(this.spec, evo, this.config.brain, [
+      ...results.flatMap((r) => r.ranked.map((x) => x.genome)),
+      ...this.tribes.flatMap((t) => t.hallOfFame.map((e) => e.genome)),
+    ]);
     // Family tree (Sprint 6.3): this generation's ranks and fitness.
     for (const r of results) {
       r.ranked.forEach((x, rank) => {
@@ -882,8 +889,17 @@ export class EvolutionRun {
       spawns.push({
         tribeId: r.tribe.id,
         genomes: r.extinct
-          ? respawnGenomes(this.spec, r.tribe.hallOfFame, memberGenomes, size, evo, rng, parentage)
-          : breedGenomes(this.spec, memberGenomes, size, evo, rng, parentage),
+          ? respawnGenomes(
+              this.spec,
+              r.tribe.hallOfFame,
+              memberGenomes,
+              size,
+              evo,
+              rng,
+              parentage,
+              ops,
+            )
+          : breedGenomes(this.spec, memberGenomes, size, evo, rng, parentage, ops),
       });
     }
     this.beginGeneration(generation + 1, spawns);
