@@ -1,0 +1,85 @@
+{
+  "format": "evolution-island/checkpoint",
+  "fileVersion": 1,
+  "simVersion": 15,
+  "configHash": "72747152dad2bcd7",
+  "preset": "small",
+  "seed": 42,
+  "generation": 80,
+  "tribes": [
+    {
+      "tribeId": 0,
+      "alive": true,
+      "size": 25,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 10,
+          "benchmarkScore": 1218.1345274899763,
+          "file": "tribe-0-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 40,
+          "benchmarkScore": 1025.4469757139514,
+          "file": "tribe-0-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 20,
+          "benchmarkScore": 774.5618812979209,
+          "file": "tribe-0-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 30,
+          "benchmarkScore": 737.8143600532389,
+          "file": "tribe-0-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 50,
+          "benchmarkScore": 715.4735200002864,
+          "file": "tribe-0-hof-5.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 1,
+      "alive": true,
+      "size": 25,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 70,
+          "benchmarkScore": 2750.5207284635853,
+          "file": "tribe-1-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 60,
+          "benchmarkScore": 2564.695519887115,
+          "file": "tribe-1-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 40,
+          "benchmarkScore": 2221.621116582794,
+          "file": "tribe-1-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 80,
+          "benchmarkScore": 2155.933240639805,
+          "file": "tribe-1-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 30,
+          "benchmarkScore": 1800.1844821915706,
+          "file": "tribe-1-hof-5.genome.json"
+        }
+      ]
+    }
+  ]
+}

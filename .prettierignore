@@ -10,3 +10,6 @@ pnpm-lock.yaml
 
 # Local tool state
 .claude/
+
+# Featured runs: written by `pnpm featured` (Phase 10)
+packages/viewer/public/runs/

@@ -21,7 +21,8 @@
     "train": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/cli.js",
     "analyze": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/analyze-cli.js",
     "replay": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/replay-cli.js",
-    "bench": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/bench-cli.js"
+    "bench": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/bench-cli.js",
+    "featured": "pnpm --filter \"@evolution-island/trainer...\" run build && node packages/trainer/dist/featured-cli.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

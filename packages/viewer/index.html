@@ -106,9 +106,27 @@
           </label>
 
           <button id="reset-view-btn" type="button" class="btn">Reset View</button>
+          <button
+            id="copy-link-btn"
+            type="button"
+            class="btn"
+            title="Copy a link to this map (preset, seed and simulation version) or trained run"
+          >
+            Copy link
+          </button>
         </form>
 
         <div class="run-controls" role="group" aria-label="Trained runs">
+          <label
+            id="featured-field"
+            class="field"
+            title="Runs trained in advance and published with this site"
+          >
+            <span>Trained</span>
+            <select id="featured-select" name="featured" disabled>
+              <option value="">Loading trained runs…</option>
+            </select>
+          </label>
           <button
             id="load-run-btn"
             type="button"

@@ -582,3 +582,8 @@ body {
   color: var(--muted);
   min-height: 1em;
 }
+
+/* Phase 10: a fixed width, so filling the menu after load never re-wraps the toolbar. */
+#featured-select {
+  width: 15em;
+}
