@@ -227,7 +227,9 @@ describe('checkpointStart (what the viewer plays)', () => {
     );
     expect(() => {
       assertCheckpointCompatible({ ...checkpoint, configHash: '0123456789abcdef' }, EXPECTED);
-    }).toThrow(/other settings \(config 0123456789abcdef.*config\.ts changed.*pnpm train/s);
+    }).toThrow(
+      /other settings \(config 0123456789abcdef.*--config.*NEAT.*config\.ts changed.*default config.*pnpm train/s,
+    );
     const missing = genomes();
     missing.delete(hallOfFameFileName(0, 2));
     expectReason(() => checkpointStart(checkpoint, missing, EXPECTED), 'missing-file');

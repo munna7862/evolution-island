@@ -32,3 +32,6 @@ against v1. ✅ Benchmark-arena comparison NEAT vs MLP over 3 seeds, written up 
    acyclic.
 4. **Breeding goes through `GenomeOps`** (random, crossover, mutate) for both brain kinds; the MLP
    operators draw exactly as before (state hashes identical to `main`).
+5. **The MLP stays the default** (`docs/neat-vs-mlp.md`): no clear winner over 3 seeds. NEAT runs
+   train and benchmark in the trainer. The viewer plays default-config runs only, so watching a
+   NEAT run there is a follow-up.

@@ -68,3 +68,21 @@ As designed.
 **Surprises / learnings**
 - NEAT's minimal start learns simple behaviour sooner, but its champions stayed nearly linear; the plain toggle rate switched off about a quarter of the connections.
 - The first training-speed numbers (3× slower) were mostly machine load. Measuring creature-ticks per CPU second, with the two brains alternating, gave about 1.2–1.5×.
+
+## Reviews (2026-11-26)
+
+Two review passes in this session.
+
+**Pass 1** — one fix:
+- **The viewer's refusal named the wrong cause.** The viewer plays runs made with the default config only. A NEAT run folder, or any run trained with `pnpm train --config`, was refused because "a balance value in config.ts changed since". The message now names `--config` (for example NEAT brains) as well as a changed default, and says the viewer plays default-config runs. Its test checks the new wording.
+
+Checked and fine:
+- No other code assumes a fixed genome length: the inspector, run files, replays, analysis, the arena and validation all dispatch on the brain format.
+- The NEAT compile cache is safe, because NEAT genomes are never changed in place: mutation returns a new array.
+
+**Pass 2** — no defects:
+- **Determinism:** the ready list is sorted on every step, the registry follows Map insertion order, weights round to float32 on encode as the MLP's do, and a coin is drawn only per matching gene.
+- **Breeding operators:** `breedGenomes` and `respawnGenomes` build default operators only when a caller passes none; `EvolutionRun` always passes the run's own.
+- **Hall-of-fame respawns:** these candidates are ordered best first, so "fitter parent" by index holds.
+
+**Known limitation (follow-up, not done):** the viewer can't play NEAT runs, because it plays default-config runs only. Watching them needs the worker to take a run's stored config, which is the same limit as for any `--config` run.
