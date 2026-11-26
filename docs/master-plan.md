@@ -700,3 +700,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 - Spectator events (drought, flood, winter, food zone) come from viewer buttons. They are recorded in replays at their tick and played back between ticks. Replays with events reproduce the same hash in Node, Chromium, Firefox and WebKit.
 - The benchmark arena runs without natural climate (a fixed yardstick).
 - `simVersion` 14: terrain, climate state and the climate stream are in the world hash.
+
+**2026-11-26 — Sprint 8.1 (NEAT brains)** — Phase 8 done
+- NEAT brains behind `brain.kind` ("mlp" default, "neat"): brain format 2 in the same flat genome arrays; historical markings by split, rebuilt from living genomes (no run state); tribes are the species. `simVersion` 15 (config hash only; the MLP plays exactly as before).
+- 3-seed comparison (`docs/neat-vs-mlp.md`): no clear winner — NEAT learns sooner (ahead at generations 20–30), the MLP ends higher (late mean 1.21×, ahead on 2 of 3 seeds). The plan's "replace the MLP" is not taken: the MLP stays the default.

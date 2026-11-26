@@ -5,6 +5,7 @@ import {
   randomActionPolicy,
   weightCount,
   type BrainSpec,
+  type SimConfig,
   type World,
 } from '../src/index.js';
 import { makeMiniMap } from './mini-map.js';
@@ -20,15 +21,15 @@ import { makeMiniMap } from './mini-map.js';
  * `simVersion` and the hashes below in the same commit. Never update the hashes alone.
  */
 export const GOLDEN = {
-  simVersion: 14,
+  simVersion: 15,
   preset: 'small',
   seed: 42,
   mapHash: 'be9215703a745890',
   /** `world.hash()` after N ticks with the default random policy: tick rules only. */
   randomPolicy: {
-    0: '4f6e1990d43256eb',
-    100: 'ad17350358b3939b',
-    600: '1468dd8a948c8f67',
+    0: '0170372038bb4b74',
+    100: '9c188d2841dca6d1',
+    600: '510119fee0f56d47',
   },
   /**
    * `world.hash()` after N ticks with every creature driven by `goldenBrainGenome` of the default
@@ -37,8 +38,8 @@ export const GOLDEN = {
    * creatures have died by tick 600, so deaths are covered too.
    */
   brainPolicy: {
-    100: 'a64ced87f66abd97',
-    600: 'b00cdb46c652b539',
+    100: '604ce3317abb69eb',
+    600: '738c70638de97d5e',
   },
   /**
    * Running digest of every input vector (sensors + memory) and every raw forward-pass output
@@ -54,8 +55,8 @@ export const GOLDEN = {
    * 18 → 12 → 9, 333 weights). 25 of the 50 creatures have died by tick 600.
    */
   noMemoryPolicy: {
-    100: '284c149c0f75eb05',
-    600: '2ec5e76cb8b75f80',
+    100: '1293b4560b0c8d09',
+    600: '0758f57e9cf36fe1',
   },
   /**
    * Like `brainPolicy` with signals on (`signals.enabled`, Sprint 4.3) and the 432-weight
@@ -63,8 +64,8 @@ export const GOLDEN = {
    * "loudest ally call" sensors. 3,287 creature-ticks of calling up to tick 600; 24 alive then.
    */
   signalsPolicy: {
-    100: 'ff4d845177650871',
-    600: '678f0f3fadeb6ab0',
+    100: '634f9889f93e2d9f',
+    600: '945802cc753ba4f1',
   },
   /**
    * `run.hash()` of `createEvolutionRun` (default config) when generation N starts: adds random
@@ -72,9 +73,9 @@ export const GOLDEN = {
    * (generation 1) and the hall of fame.
    */
   evolution: {
-    2: '9e27bcd97764c435',
-    3: '63b223a17f143ce1',
-    4: '1b792f1c6a99fcf0',
+    2: '295dbb7e82ab0732',
+    3: '03d4ba7698642ac0',
+    4: 'ba389d8bb1fe4ef1',
   },
   /**
    * `world.hash()` of `brawlWorld()` (a 7×7 grass block packed with 3 tribes, random policy,
@@ -83,8 +84,8 @@ export const GOLDEN = {
    * 42.9 / 40.8 / 16.3 %.
    */
   brawl: {
-    20: 'c8ac08a95a1820eb',
-    60: 'ef6f8a16920ab148',
+    20: '647ef6d8cce277a5',
+    60: '5048fd89ab643ac4',
   },
   /**
    * `world.hash()` of `climateWorld()` after N ticks (Sprint 7.2): frequent natural droughts and
@@ -92,8 +93,17 @@ export const GOLDEN = {
    * a flood, a drought and a winter — applied between ticks as replays apply them.
    */
   climate: {
-    250: '45d279c73a494b11',
-    800: '8208773b8bf7a239',
+    250: 'a1ac615b90e46e46',
+    800: '925911cb16053015',
+  },
+  /**
+   * `run.hash()` of `createEvolutionRun` with NEAT brains (`neatConfig()`, Phase 8) when
+   * generation N starts: adds NEAT's initial genomes, compile and forward pass, crossover and
+   * structural mutation (raised rates, so hidden nodes and new connections appear by generation 3).
+   */
+  neat: {
+    2: 'bd19afc7a3b5d430',
+    3: '54e852048dec7c9e',
   },
 } as const;
 
@@ -130,6 +140,18 @@ export function brawlWorld(): World {
     if (i % 5 === 0) creature.energy = 30;
   }
   return world;
+}
+
+/** The `neat` scenario's config: NEAT brains with frequent structural mutations. */
+export function neatConfig(): SimConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    brain: {
+      ...DEFAULT_CONFIG.brain,
+      kind: 'neat',
+      neat: { ...DEFAULT_CONFIG.brain.neat, addConnectionRate: 0.5, addNodeRate: 0.3 },
+    },
+  };
 }
 
 /** Spectator events of the `climate` scenario: applied after `tick` ticks. */

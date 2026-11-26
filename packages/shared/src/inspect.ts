@@ -1,9 +1,8 @@
 import {
   Action,
+  brainActivations,
   brainSpecFromConfig,
-  createBrainScratch,
   creatureFitness,
-  forwardPass,
   memoryNeuronCount,
   readCallSensors,
   readSensors,
@@ -90,9 +89,9 @@ export function inspectCreature(
       readCallSensors(world, creature, inputs, SENSOR_COUNT + memory);
       names.push('heard call', 'call dx', 'call dy');
     }
-    const scratch = createBrainScratch(spec);
-    const raw = forwardPass(spec, creature.genome, inputs, scratch);
-    hidden = Array.from(scratch.hidden);
+    const run = brainActivations(spec, creature.genome, inputs);
+    hidden = run.hidden;
+    const raw = run.outputs;
     const outputNames = [...ACTION_NAMES];
     for (let k = 0; k < memory; k++) outputNames.push(`memory ${k + 1}`);
     if (signals) outputNames.push('call');

@@ -16,8 +16,8 @@ import {
  * spectator events reproduces the same state hash"). Re-recorded only with a SIM_VERSION bump.
  */
 const PINNED = {
-  simVersion: 14,
-  finalHash: '960d4c1ede410aa6',
+  simVersion: 15,
+  finalHash: '6c0d069af8a296e0',
 } as const;
 
 const EVENTS: readonly ReplayEvent[] = [

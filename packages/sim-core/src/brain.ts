@@ -3,6 +3,13 @@ import type { SignalConfig, SimConfig } from './config.js';
 import type { Creature } from './creature.js';
 import { CALL_SENSOR_COUNT, readCallSensors, readSensors, SENSOR_COUNT } from './sensors.js';
 import type { DecisionPolicy } from './world.js';
+import {
+  compileNeat,
+  createNeatScratch,
+  NEAT_FORMAT_VERSION,
+  neatForward,
+  validateNeatGenome,
+} from './neat.js';
 
 /**
  * Fixed-topology MLP brain (plan §2.4): inputs → one softsign hidden layer → linear outputs.
@@ -23,8 +30,13 @@ import type { DecisionPolicy } from './world.js';
  * gives 383 weights.
  */
 
-/** Bump when the network layout or activation changes (e.g. NEAT would be 2). */
+/** Brain format of the MLP. NEAT genomes are format 2 (`NEAT_FORMAT_VERSION`, Phase 8). */
 export const BRAIN_FORMAT_VERSION = 1;
+
+/** Whether a spec is a NEAT brain (its `hidden` is then the cap on hidden nodes). */
+export function isNeatSpec(spec: BrainSpec): boolean {
+  return spec.formatVersion === NEAT_FORMAT_VERSION;
+}
 
 export interface BrainSpec {
   readonly formatVersion: number;
@@ -61,10 +73,11 @@ export function brainSpecFromConfig(config: SimConfig): BrainSpec {
     throw new RangeError(`brain.memoryNeurons must be a whole number ≥ 0, got ${memory}`);
   }
   const signals = config.signals.enabled;
+  const neat = config.brain.kind === 'neat';
   return {
-    formatVersion: BRAIN_FORMAT_VERSION,
+    formatVersion: neat ? NEAT_FORMAT_VERSION : BRAIN_FORMAT_VERSION,
     inputs: SENSOR_COUNT + memory + (signals ? CALL_SENSOR_COUNT : 0),
-    hidden: config.brain.hiddenNeurons,
+    hidden: neat ? config.brain.neat.maxHiddenNodes : config.brain.hiddenNeurons,
     outputs: ACTION_COUNT + memory + (signals ? CALL_OUTPUT_COUNT : 0),
   };
 }
@@ -98,9 +111,10 @@ function isPositiveInt(value: number): boolean {
 }
 
 export function validateBrainSpec(spec: BrainSpec): void {
-  if (spec.formatVersion !== BRAIN_FORMAT_VERSION) {
+  if (spec.formatVersion !== BRAIN_FORMAT_VERSION && spec.formatVersion !== NEAT_FORMAT_VERSION) {
     throw new RangeError(
-      `Unsupported brain formatVersion ${spec.formatVersion} (expected ${BRAIN_FORMAT_VERSION})`,
+      `Unsupported brain formatVersion ${spec.formatVersion} (expected ${BRAIN_FORMAT_VERSION} or ` +
+        `${NEAT_FORMAT_VERSION})`,
     );
   }
   if (!isPositiveInt(spec.inputs) || !isPositiveInt(spec.hidden) || !isPositiveInt(spec.outputs)) {
@@ -119,7 +133,9 @@ export function sameBrainSpec(a: BrainSpec, b: BrainSpec): boolean {
   );
 }
 
+/** Weights of an MLP genome (NEAT genomes have no fixed length). */
 export function weightCount(spec: BrainSpec): number {
+  if (isNeatSpec(spec)) throw new RangeError('A NEAT brain has no fixed weight count');
   return spec.hidden * spec.inputs + (spec.hidden + 1) * spec.outputs;
 }
 
@@ -144,8 +160,15 @@ export function createZeroGenome(spec: BrainSpec): Float32Array {
   return new Float32Array(weightCount(spec));
 }
 
-/** Throws unless `weights` has exactly the spec's weight count and every weight is finite. */
+/**
+ * Throws unless `weights` is a genome of `spec`: for the MLP exactly the spec's weight count,
+ * every weight finite; for NEAT a well-formed genome (`validateNeatGenome`).
+ */
 export function validateGenome(spec: BrainSpec, weights: Float32Array): void {
+  if (isNeatSpec(spec)) {
+    validateNeatGenome(spec, weights);
+    return;
+  }
   const expected = weightCount(spec);
   if (weights.length !== expected) {
     throw new RangeError(`Genome has ${weights.length} weights, brain spec needs ${expected}`);
@@ -269,17 +292,11 @@ export function createBrainPolicy(
   const callOutput = ACTION_COUNT + memorySize;
   const callThreshold = signals?.callThreshold ?? 0;
 
-  const expectedWeights = weightCount(spec);
+  const run = brainRunner(spec);
   const inputs = new Float32Array(spec.inputs);
-  const scratch = createBrainScratch(spec);
 
   return (world, creature) => {
     const genome = genomeFor(creature);
-    if (genome.length !== expectedWeights) {
-      throw new RangeError(
-        `Creature ${creature.id} genome has ${genome.length} weights, brain spec needs ${expectedWeights}`,
-      );
-    }
     const memory = creature.memory;
     if (memory.length !== memorySize) {
       throw new RangeError(
@@ -289,11 +306,60 @@ export function createBrainPolicy(
     readSensors(world, creature, inputs);
     inputs.set(memory, SENSOR_COUNT);
     if (hasSignals) readCallSensors(world, creature, inputs, callInputs);
-    const outputs = forwardPass(spec, genome, inputs, scratch);
+    const outputs = run(genome, inputs, creature.id);
     storeMemoryOutputs(outputs, memory);
     if (hasSignals) creature.nextCall = callValue(outputs[callOutput]!, callThreshold);
     return argmaxAction(outputs);
   };
+}
+
+/**
+ * Runs genomes of `spec` (MLP or NEAT) on inputs, reusing one scratch: returns the outputs, valid
+ * until the next call. Checks each genome (MLP: its length; NEAT: compiled once per genome).
+ */
+function brainRunner(
+  spec: BrainSpec,
+): (genome: Float32Array, inputs: ArrayLike<number>, creatureId: number) => Float64Array {
+  if (isNeatSpec(spec)) {
+    const values = createNeatScratch(spec);
+    const outputs = new Float64Array(spec.outputs);
+    return (genome, inputs) => neatForward(compileNeat(spec, genome), inputs, values, outputs);
+  }
+  const expected = weightCount(spec);
+  const scratch = createBrainScratch(spec);
+  return (genome, inputs, creatureId) => {
+    if (genome.length !== expected) {
+      throw new RangeError(
+        `Creature ${creatureId} genome has ${genome.length} weights, brain spec needs ${expected}`,
+      );
+    }
+    return forwardPass(spec, genome, inputs, scratch);
+  };
+}
+
+/**
+ * One evaluation for the inspector (Sprint 6.2): the hidden activations (MLP: the hidden layer;
+ * NEAT: the genome's hidden nodes in genome order) and the raw outputs.
+ */
+export function brainActivations(
+  spec: BrainSpec,
+  genome: Float32Array,
+  inputs: ArrayLike<number>,
+): { readonly hidden: number[]; readonly outputs: number[] } {
+  if (isNeatSpec(spec)) {
+    const net = compileNeat(spec, genome);
+    const values = createNeatScratch(spec);
+    const outputs = neatForward(net, inputs, values, new Float64Array(spec.outputs));
+    const first = spec.inputs + spec.outputs;
+    return {
+      hidden: Array.from(values.subarray(first, first + net.hiddenCount)),
+      outputs: Array.from(outputs),
+    };
+  }
+  validateGenome(spec, genome);
+  const scratch = createBrainScratch(spec);
+  const outputs = forwardPass(spec, genome, inputs, scratch);
+  return { hidden: Array.from(scratch.hidden), outputs: Array.from(outputs) };
 }
 
 /** `createBrainPolicy` for a config's brain (memory and signals as the config says). */

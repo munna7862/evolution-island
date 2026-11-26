@@ -18,6 +18,9 @@ import {
   type BenchmarkArena,
   type MapPresetId,
   brainSpecFromConfig,
+  decodeNeat,
+  encodeNeat,
+  isNeatSpec,
   inputWeightIndex,
   memoryNeuronCount,
   SENSOR_COUNT,
@@ -71,6 +74,12 @@ export function muteGenome(
 ): Float32Array {
   const spec = brainSpecFromConfig(config);
   const [first, end] = mutedInputRange(config, mute);
+  if (isNeatSpec(spec)) {
+    // NEAT (Phase 8): zero every connection out of a muted input.
+    const g = decodeNeat(genome);
+    for (const c of g.connections) if (c.from >= first && c.from < end) c.weight = 0;
+    return encodeNeat(g);
+  }
   const muted = Float32Array.from(genome);
   for (let h = 0; h < spec.hidden; h++) {
     for (let i = first; i < end; i++) muted[inputWeightIndex(spec, h, i)] = 0;

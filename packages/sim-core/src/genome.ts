@@ -1,5 +1,6 @@
 import {
   inputWeightIndex,
+  isNeatSpec,
   outputBiasIndex,
   outputWeightIndex,
   validateBrainSpec,
@@ -7,6 +8,8 @@ import {
   weightCount,
 } from './brain.js';
 import type { BrainSpec } from './brain.js';
+import type { BrainConfig, EvolutionConfig } from './config.js';
+import { crossoverNeat, mutateNeat, NeatRegistry, randomNeatGenome } from './neat.js';
 import type { RngStream } from './rng.js';
 
 /**
@@ -120,4 +123,52 @@ export function mutateGenome(genome: Float32Array, rng: RngStream, m: MutationSe
     }
     genome[i] = Math.max(-m.clamp, Math.min(m.clamp, w));
   }
+}
+
+/**
+ * The genetic operators of a brain kind (Phase 8), so breeding is the same for the MLP and NEAT.
+ * Each draws only from the stream it is given. `mutate` may return a new array (NEAT genomes
+ * change length); the MLP's mutates in place and returns it.
+ */
+export interface GenomeOps {
+  random(rng: RngStream): Float32Array;
+  /** `aIsFitter`: `a` ranked above `b` (NEAT keeps the fitter parent's structure). */
+  crossover(a: Float32Array, b: Float32Array, aIsFitter: boolean, rng: RngStream): Float32Array;
+  mutate(genome: Float32Array, rng: RngStream): Float32Array;
+}
+
+/**
+ * Operators for `spec`'s brain. NEAT needs the genomes alive at breeding (`existing`: members
+ * and halls of fame), so a split already in the run gets its node id (`NeatRegistry`).
+ */
+export function genomeOps(
+  spec: BrainSpec,
+  evolution: EvolutionConfig,
+  brain: BrainConfig,
+  existing: readonly Float32Array[] = [],
+): GenomeOps {
+  const weights = {
+    rate: evolution.mutationRate,
+    sigma: evolution.mutationSigma,
+    clamp: evolution.weightClamp,
+  };
+  const range = evolution.initialWeightRange;
+  if (!isNeatSpec(spec)) {
+    return {
+      random: (rng) => randomGenome(spec, rng, range),
+      crossover: (a, b, _aIsFitter, rng) => crossoverPerNeuron(spec, a, b, rng),
+      mutate: (genome, rng) => {
+        mutateGenome(genome, rng, weights);
+        return genome;
+      },
+    };
+  }
+  const registry = new NeatRegistry(spec, existing);
+  const mutation = { ...weights, initialWeightRange: range, neat: brain.neat };
+  return {
+    random: (rng) => randomNeatGenome(spec, rng, range),
+    crossover: (a, b, aIsFitter, rng) =>
+      aIsFitter ? crossoverNeat(a, b, rng) : crossoverNeat(b, a, rng),
+    mutate: (genome, rng) => mutateNeat(spec, genome, rng, mutation, registry, gaussian),
+  };
 }

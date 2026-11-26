@@ -35,5 +35,7 @@
  * 14 = Sprint 7.2: climate (`climate.enabled`, on by default): winters slow regrowth, droughts and
  *     floods change terrain (and the water field) for a while, a food zone regrows faster and
  *     wanders; spectator events; a `climate` RNG stream; terrain and climate in the world hash.
+ * 15 = Phase 8: NEAT brains (`brain.kind` "neat", brain format 2; the MLP stays the default and
+ *     plays exactly as in version 14). The brain kind and NEAT settings are in the config hash.
  */
-export const SIM_VERSION = 14;
+export const SIM_VERSION = 15;

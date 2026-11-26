@@ -20,6 +20,7 @@ export {
   type ExtinctionMode,
   type FitnessWeights,
   type ClimateConfig,
+  type NeatConfig,
   type FoodConfig,
   type MapGenConfig,
   type MapPreset,
@@ -105,7 +106,9 @@ export {
   createBrainPolicy,
   createBrainScratch,
   createZeroGenome,
+  brainActivations,
   forwardPass,
+  isNeatSpec,
   inputWeightIndex,
   memoryNeuronCount,
   outputBiasIndex,
@@ -122,6 +125,8 @@ export {
 export { creatureFitness, tribeOutcome, tribeScore, type TribeOutcome } from './fitness.js';
 export {
   crossoverPerNeuron,
+  genomeOps,
+  type GenomeOps,
   gaussian,
   migrateGenome,
   mutateGenome,
@@ -163,3 +168,18 @@ export {
   type TribeStart,
   type TribeState,
 } from './evolution.js';
+export {
+  compileNeat,
+  crossoverNeat,
+  decodeNeat,
+  encodeNeat,
+  mutateNeat,
+  NEAT_FORMAT_VERSION,
+  NeatRegistry,
+  randomNeatGenome,
+  validateNeatGenome,
+  type NeatConnection,
+  type NeatGenome,
+  type NeatMutation,
+  type NeatNode,
+} from './neat.js';

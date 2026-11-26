@@ -351,8 +351,9 @@ export function assertCheckpointCompatible(
     throw new RunFileError(
       'config-hash-mismatch',
       `the run was trained with other settings (config ${checkpoint.configHash}; this build's ` +
-        `default config is ${expected.configHash}): a balance value in config.ts changed since. ` +
-        RETRAIN_HINT,
+        `default config is ${expected.configHash}): it was trained with pnpm train --config (for ` +
+        `example NEAT brains), or a value in config.ts changed since. The viewer plays runs made ` +
+        `with the default config. ${RETRAIN_HINT}`,
     );
   }
 }
