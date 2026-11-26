@@ -85,6 +85,7 @@ interface InitialParams {
   /** Phase 10 share links: the simVersion the link was made with, and a featured run. */
   readonly linkVersion: number | null;
   readonly run: string | null;
+  readonly generation: number | null;
 }
 
 interface HudTribeNode {
@@ -127,12 +128,22 @@ function readInitialParams(): InitialParams {
     speed: parseSpeedParam(params.get('speed')),
     linkVersion: share.simVersion,
     run: share.run,
+    generation: share.generation,
   };
 }
 
 /** Keeps the address bar a shareable link of what plays (Phase 10). */
-function syncUrlParams(preset: MapPresetId, seed: Seed, run: string | null): void {
-  window.history.replaceState(null, '', shareUrl(window.location.href, { preset, seed, run }));
+function syncUrlParams(
+  preset: MapPresetId,
+  seed: Seed,
+  run: string | null,
+  generation: number | null,
+): void {
+  window.history.replaceState(
+    null,
+    '',
+    shareUrl(window.location.href, { preset, seed, run, generation }),
+  );
 }
 
 function renderLegend(legendEl: HTMLElement): void {
@@ -1064,7 +1075,12 @@ async function boot(): Promise<void> {
     if (replayText === undefined) replayName = null;
     seedInput.value = String(seed);
     presetSelect.value = preset;
-    syncUrlParams(preset, seed, featuredRun);
+    syncUrlParams(
+      preset,
+      seed,
+      featuredRun,
+      start === undefined ? null : (playing?.generation ?? null),
+    );
 
     activeRunId++;
     armedEvent = null; // a placement never carries over to another world
@@ -1183,9 +1199,19 @@ async function boot(): Promise<void> {
   const loadRunSources = async (
     sources: readonly RunFileSource[],
     featured: string | null = null,
+    generation: number | null = null,
   ): Promise<void> => {
     const scan = await scanRunFiles(sources);
-    const first = defaultCheckpoint(scan);
+    const latest = defaultCheckpoint(scan);
+    // A link's generation (Phase 10), if the run has it; else the latest.
+    const first =
+      (latest === null
+        ? undefined
+        : scan.checkpoints.find(
+            (c) =>
+              runName(c.checkpoint) === runName(latest.checkpoint) &&
+              c.checkpoint.generation === generation,
+          )) ?? latest;
     if (first === null) {
       const why = scan.problems[0] ?? 'no checkpoint.json among the files (pick a run folder)';
       setRunMessage(`No saved generation found: ${why}`, true);
@@ -1245,9 +1271,10 @@ async function boot(): Promise<void> {
   const loadRunSafely = (
     sources: Promise<readonly RunFileSource[]>,
     featured: string | null = null,
+    generation: number | null = null,
   ): void => {
     sources
-      .then((list) => loadRunSources(list, featured))
+      .then((list) => loadRunSources(list, featured, generation))
       .catch((error: unknown) => {
         setRunMessage(`Could not read the run: ${errorMessage(error)}`, true);
       });
@@ -1490,10 +1517,14 @@ async function boot(): Promise<void> {
   });
 
   /** Plays a featured run by name (menu or `?run=` link); false if the site has no such run. */
-  const playFeatured = (name: string): boolean => {
+  const playFeatured = (name: string, generation: number | null = null): boolean => {
     const run = featuredRuns?.runs.find((r) => r.name === name);
     if (run === undefined) return false;
-    loadRunSafely(Promise.resolve(featuredSources(run, featuredBase, fetchTextOrThrow)), name);
+    loadRunSafely(
+      Promise.resolve(featuredSources(run, featuredBase, fetchTextOrThrow)),
+      name,
+      generation,
+    );
     return true;
   };
 
@@ -1541,7 +1572,7 @@ async function boot(): Promise<void> {
     placeholder.textContent =
       manifest === null ? 'No trained runs here' : 'Trained runs are outdated';
   }
-  if (initial.run !== null && !playFeatured(initial.run)) {
+  if (initial.run !== null && !playFeatured(initial.run, initial.generation)) {
     setRunMessage(`This site has no trained run "${initial.run}"`, true);
   }
 }

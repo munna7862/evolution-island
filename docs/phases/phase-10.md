@@ -23,5 +23,5 @@
 
 1. **Featured runs are static files next to the site** (`packages/viewer/public/runs`). `pnpm featured` copies the first, last and three in-between checkpoints of each run, with only their hall-of-fame genomes (about 1 MB for two runs), and writes a manifest. The viewer fetches files only when a checkpoint plays.
 2. **A test fails when they go stale.** `published-runs.test.ts` requires this build's simVersion and default config, and loads every published generation. After a rules or config change, retrain and run `pnpm featured` again.
-3. **Links describe what plays.** The address bar always holds preset, seed and `v` (plus `run` for a featured run), so copying it shares the view. A link from another simVersion still opens, with a note that the world may differ.
+3. **Links describe what plays.** The address bar always holds preset, seed and `v` (plus `run` and `gen` for a featured run's saved generation), so copying it shares the view. The tribe filter is not in the link. A link from another simVersion still opens, with a note that the world may differ.
 4. **GitHub Pages via Actions** (`.github/workflows/pages.yml`): every push to `main` builds the viewer and deploys it. The build uses relative URLs (`base: './'`), so the site works under `/<repo>/`.

@@ -19,7 +19,7 @@ Plan §4 Phase 10:
   - `viewer/featured.ts`: fetches the manifest and run files from `runs/` next to the page.
 - **Viewer:**
   - A **Trained** menu, there from the start (disabled while loading, fixed width), so the toolbar never shifts the map. It says when the site has no runs or they are outdated.
-  - `?run=<name>` plays a featured run; **Copy link** copies the address.
+  - `?run=<name>&gen=<generation>` plays a featured run at a saved generation (the latest without `gen`); **Copy link** copies the address.
   - `share-link.ts`: the address bar always carries preset, seed, `v` and `run`. A link from another simVersion opens with a note.
 - **Site:**
   - `vite.config.ts` has `base: './'`.
@@ -48,3 +48,19 @@ As designed.
 **Verification:**
 - `pnpm lint`, `pnpm typecheck`, `pnpm test` (460 in 61 files) and `pnpm build` pass locally.
 - `pnpm test:e2e` passes (18, with 2 perf tests skipped). The built site's asset URLs are relative.
+
+## Reviews (2026-11-26)
+
+Two review passes in this session.
+
+**Pass 1** — one fix:
+- **A copied link lost the generation.** Copying a link while watching an earlier generation of a featured run reopened the latest one. Links now carry `gen`, and opening one plays that generation.
+- The e2e test now covers the latest generation, an earlier generation, and leaving the run (`run` and `gen` dropped). The unit test covers reading and writing `gen`.
+
+**Pass 2** — one fix:
+- **README overpromised.** It said Copy link shares "exactly what you see", but the tribe filter isn't in the link. It now says the link shares the map, or the trained run and generation.
+
+Checked and fine:
+- **Pages workflow:** it builds the viewer with its workspace dependencies (`viewer...`), and its permissions are exactly `pages: write` and `id-token: write`.
+- **Fetching:** featured files are fetched only from `runs/` on the site itself, and the manifest refuses `..`, absolute and backslash paths.
+- **Paths:** the built site uses relative asset URLs.

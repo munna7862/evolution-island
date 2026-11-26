@@ -2,7 +2,7 @@
 
 A browser simulation where tribes of small AI creatures start knowing nothing and, through neuroevolution, learn to find food and water, hold territory, help their tribe and fight rivals. No strategy is hand-coded. You watch them evolve.
 
-**Watch it:** https://munna7862.github.io/evolution-island/ — pick a run under **Trained** to see champions trained in advance, or generate any map from a seed. **Copy link** shares exactly what you see.
+**Watch it:** https://munna7862.github.io/evolution-island/ — pick a run under **Trained** to see champions trained in advance, or generate any map from a seed. **Copy link** shares the map, or the trained run and generation, you are watching.
 
 ## What's inside
 
@@ -36,7 +36,7 @@ Load the run folder in the viewer with **Load run…** (or drop it on the map) t
 
 ## Share links
 
-`?preset=large&seed=1234&v=15` opens the same map on any machine running simulation version 15 (`&run=medium-42` opens a featured run). A link made by another version still opens, with a note that the world may differ.
+`?preset=large&seed=1234&v=15` opens the same map on any machine running simulation version 15 (`&run=medium-42&gen=150` opens a featured run at a saved generation). A link made by another version still opens, with a note that the world may differ.
 
 ## Docs
 

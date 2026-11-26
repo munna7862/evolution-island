@@ -20,6 +20,7 @@ test.describe('Publishing (Phase 10)', () => {
     const link = new URL(page.url());
     expect(link.searchParams.get('run')).toBe(name);
     expect(link.searchParams.get('v')).toBe(String(SIM_VERSION));
+    expect(link.searchParams.get('gen')).toBe(String(state.checkpoint!.generation));
 
     // Opening the link plays the same run and generation.
     await page.goto(link.toString());
@@ -27,6 +28,22 @@ test.describe('Publishing (Phase 10)', () => {
     await expect
       .poll(() => page.evaluate(() => window.__ei!.checkpoint?.generation))
       .toBe(state.checkpoint!.generation);
+
+    // An earlier generation: the link follows, and opening it plays that generation.
+    await page.selectOption('#checkpoint-select', { index: 0 });
+    await expect.poll(() => page.evaluate(() => window.__ei!.checkpoint?.generation)).toBe(1);
+    const earlier = new URL(page.url());
+    expect(earlier.searchParams.get('gen')).toBe('1');
+    await page.goto(earlier.toString());
+    await expect.poll(() => page.evaluate(() => window.__ei?.featuredRun ?? null)).toBe(name);
+    await expect.poll(() => page.evaluate(() => window.__ei!.checkpoint?.generation)).toBe(1);
+
+    // Generating a map leaves the featured run: the link drops run and gen.
+    await page.click('#generate-btn');
+    await expect.poll(() => page.evaluate(() => window.__ei!.mode)).toBe('random');
+    const plain = new URL(page.url());
+    expect(plain.searchParams.has('run')).toBe(false);
+    expect(plain.searchParams.has('gen')).toBe(false);
   });
 
   test('a seed link makes the same map as Node does, and says when it was made by other rules', async ({
