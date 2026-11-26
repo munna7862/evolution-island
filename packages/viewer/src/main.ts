@@ -1,7 +1,9 @@
 import {
+  featuredRunsPlayable,
   formatSpeed,
   parseReplay,
   type CreatureInspection,
+  type FeaturedRunsManifest,
   type InspectTarget,
   parseSeed,
   SIM_SPEEDS,
@@ -35,6 +37,13 @@ import { climateAt, climateSummary } from './renderer/climate-overlay.js';
 import { MapView } from './renderer/map-view.js';
 import { BIOME_LEGEND, BIOME_NAMES, tribeHex, tribeName } from './renderer/palette.js';
 import { sourcesFromDrop, sourcesFromFileList } from './run-drop.js';
+import {
+  featuredBaseUrl,
+  featuredSources,
+  fetchFeaturedRuns,
+  fetchTextOrThrow,
+} from './featured.js';
+import { readShareParams, shareUrl, versionNotice } from './share-link.js';
 import {
   checkpointsOfRun,
   defaultCheckpoint,
@@ -73,6 +82,10 @@ interface InitialParams {
   readonly seed: Seed;
   readonly running: boolean;
   readonly speed: SimSpeed;
+  /** Phase 10 share links: the simVersion the link was made with, and a featured run. */
+  readonly linkVersion: number | null;
+  readonly run: string | null;
+  readonly generation: number | null;
 }
 
 interface HudTribeNode {
@@ -106,22 +119,31 @@ function parseSpeedParam(raw: string | null): SimSpeed {
 
 function readInitialParams(): InitialParams {
   const params = new URLSearchParams(window.location.search);
-  const rawPreset = params.get('preset');
-  const rawSeed = params.get('seed');
+  const share = readShareParams(window.location.search);
   const paused = params.get('paused');
   return {
-    preset: isMapPresetId(rawPreset) ? rawPreset : 'medium',
-    seed: rawSeed !== null ? parseSeed(rawSeed, 42) : 42,
+    preset: share.preset ?? 'medium',
+    seed: share.seed ?? 42,
     running: paused !== '1' && paused !== 'true',
     speed: parseSpeedParam(params.get('speed')),
+    linkVersion: share.simVersion,
+    run: share.run,
+    generation: share.generation,
   };
 }
 
-function syncUrlParams(preset: MapPresetId, seed: Seed): void {
-  const url = new URL(window.location.href);
-  url.searchParams.set('preset', preset);
-  url.searchParams.set('seed', String(seed));
-  window.history.replaceState(null, '', url);
+/** Keeps the address bar a shareable link of what plays (Phase 10). */
+function syncUrlParams(
+  preset: MapPresetId,
+  seed: Seed,
+  run: string | null,
+  generation: number | null,
+): void {
+  window.history.replaceState(
+    null,
+    '',
+    shareUrl(window.location.href, { preset, seed, run, generation }),
+  );
 }
 
 function renderLegend(legendEl: HTMLElement): void {
@@ -218,6 +240,8 @@ async function boot(): Promise<void> {
   const tribeField = requireEl('#tribe-field', HTMLElement);
   const tribeSelect = requireEl('#tribe-select', HTMLSelectElement);
   const runInfoEl = requireEl('#run-info', HTMLElement);
+  const featuredSelect = requireEl('#featured-select', HTMLSelectElement);
+  const copyLinkBtn = requireEl('#copy-link-btn', HTMLButtonElement);
   const dropOverlay = requireEl('#drop-overlay', HTMLElement);
 
   statusBadge.textContent = statusLine();
@@ -246,6 +270,10 @@ async function boot(): Promise<void> {
     configHash: hashConfig(DEFAULT_CONFIG),
   };
   let runSources: readonly RunFileSource[] = [];
+  // Featured runs published with the site (Phase 10), and the one playing (null: none).
+  const featuredBase = featuredBaseUrl(document.baseURI);
+  let featuredRuns: FeaturedRunsManifest | null = null;
+  let featuredRun: string | null = null;
   let runCheckpoints: readonly FoundCheckpoint[] = [];
   // Run browser (Sprint 5.1): the generations of the chosen run, the checkpoint playing, and the
   // tribe filter (null = every tribe).
@@ -742,6 +770,8 @@ async function boot(): Promise<void> {
       inspection: latestInspection,
       climate: latestSnapshot.climate,
       armedEvent,
+      featuredRuns: featuredRuns?.runs.map((r) => r.name) ?? [],
+      featuredRun,
       feed: dashboard.feed(),
       familyTree:
         latestTree === null
@@ -852,6 +882,12 @@ async function boot(): Promise<void> {
     },
     get climate() {
       return getState().climate;
+    },
+    get featuredRuns() {
+      return getState().featuredRuns;
+    },
+    get featuredRun() {
+      return getState().featuredRun;
     },
     get armedEvent() {
       return getState().armedEvent;
@@ -1039,7 +1075,12 @@ async function boot(): Promise<void> {
     if (replayText === undefined) replayName = null;
     seedInput.value = String(seed);
     presetSelect.value = preset;
-    syncUrlParams(preset, seed);
+    syncUrlParams(
+      preset,
+      seed,
+      featuredRun,
+      start === undefined ? null : (playing?.generation ?? null),
+    );
 
     activeRunId++;
     armedEvent = null; // a placement never carries over to another world
@@ -1069,6 +1110,8 @@ async function boot(): Promise<void> {
     }
     playing = null;
     playingFound = null;
+    featuredRun = null;
+    featuredSelect.value = '';
     replayName = name;
     checkpointSelect.selectedIndex = -1;
     setRunMessage(`Replay ${name}: tick 0 / ${file.ticks}`, false);
@@ -1112,6 +1155,8 @@ async function boot(): Promise<void> {
   /** Random-policy world on a generated map (the default mode). */
   const generateAndRun = (preset: MapPresetId, rawSeed: string | Seed): void => {
     const seed = typeof rawSeed === 'number' ? rawSeed : parseSeed(rawSeed, 42);
+    featuredRun = null;
+    featuredSelect.value = '';
     if (playing !== null) {
       playing = null;
       playingFound = null;
@@ -1147,10 +1192,26 @@ async function boot(): Promise<void> {
     startWorld(preset, seed, start);
   };
 
-  /** New files picked or dropped: list their checkpoints and play the latest. */
-  const loadRunSources = async (sources: readonly RunFileSource[]): Promise<void> => {
+  /**
+   * New files picked or dropped, or a featured run (`featured`: its name, Phase 10): list their
+   * checkpoints and play the latest.
+   */
+  const loadRunSources = async (
+    sources: readonly RunFileSource[],
+    featured: string | null = null,
+    generation: number | null = null,
+  ): Promise<void> => {
     const scan = await scanRunFiles(sources);
-    const first = defaultCheckpoint(scan);
+    const latest = defaultCheckpoint(scan);
+    // A link's generation (Phase 10), if the run has it; else the latest.
+    const first =
+      (latest === null
+        ? undefined
+        : scan.checkpoints.find(
+            (c) =>
+              runName(c.checkpoint) === runName(latest.checkpoint) &&
+              c.checkpoint.generation === generation,
+          )) ?? latest;
     if (first === null) {
       const why = scan.problems[0] ?? 'no checkpoint.json among the files (pick a run folder)';
       setRunMessage(`No saved generation found: ${why}`, true);
@@ -1158,6 +1219,8 @@ async function boot(): Promise<void> {
     }
     runSources = sources;
     runCheckpoints = scan.checkpoints;
+    featuredRun = featured;
+    featuredSelect.value = featured ?? '';
     runSelect.replaceChildren(
       ...runNames(runCheckpoints).map((name) => {
         const option = document.createElement('option');
@@ -1205,9 +1268,13 @@ async function boot(): Promise<void> {
     tribeField.hidden = false;
   };
 
-  const loadRunSafely = (sources: Promise<readonly RunFileSource[]>): void => {
+  const loadRunSafely = (
+    sources: Promise<readonly RunFileSource[]>,
+    featured: string | null = null,
+    generation: number | null = null,
+  ): void => {
     sources
-      .then((list) => loadRunSources(list))
+      .then((list) => loadRunSources(list, featured, generation))
       .catch((error: unknown) => {
         setRunMessage(`Could not read the run: ${errorMessage(error)}`, true);
       });
@@ -1449,9 +1516,65 @@ async function boot(): Promise<void> {
     mapView.destroy();
   });
 
+  /** Plays a featured run by name (menu or `?run=` link); false if the site has no such run. */
+  const playFeatured = (name: string, generation: number | null = null): boolean => {
+    const run = featuredRuns?.runs.find((r) => r.name === name);
+    if (run === undefined) return false;
+    loadRunSafely(
+      Promise.resolve(featuredSources(run, featuredBase, fetchTextOrThrow)),
+      name,
+      generation,
+    );
+    return true;
+  };
+
+  featuredSelect.addEventListener('change', () => {
+    featuredSelect.blur();
+    if (featuredSelect.value !== '') playFeatured(featuredSelect.value);
+  });
+
+  copyLinkBtn.addEventListener('click', (event) => {
+    blurMouseTarget(event);
+    const link = window.location.href;
+    navigator.clipboard
+      .writeText(link)
+      .then(() => {
+        setRunMessage(`Link copied: ${link}`, false);
+      })
+      .catch(() => {
+        setRunMessage(`Copy this link: ${link}`, false);
+      });
+  });
+
   updatePlaybackUi();
   generateAndRun(initial.preset, initial.seed);
+  const notice = versionNotice(initial.linkVersion);
+  if (notice !== null) setRunMessage(notice, true);
   await initialReadyPromise;
+
+  // Featured runs (Phase 10): listed if the site has them and this build can play them. The menu
+  // is there from the start (disabled while loading), so the toolbar never shifts the map.
+  const manifest = await fetchFeaturedRuns(featuredBase, fetchTextOrThrow);
+  const placeholder = featuredSelect.options[0]!;
+  if (manifest !== null && featuredRunsPlayable(manifest, expectedCheckpoint)) {
+    featuredRuns = manifest;
+    placeholder.textContent = 'Watch a trained run…';
+    featuredSelect.disabled = false;
+    featuredSelect.append(
+      ...manifest.runs.map((run) => {
+        const option = document.createElement('option');
+        option.value = run.name;
+        option.textContent = run.title;
+        return option;
+      }),
+    );
+  } else {
+    placeholder.textContent =
+      manifest === null ? 'No trained runs here' : 'Trained runs are outdated';
+  }
+  if (initial.run !== null && !playFeatured(initial.run, initial.generation)) {
+    setRunMessage(`This site has no trained run "${initial.run}"`, true);
+  }
 }
 
 boot().catch((error: unknown) => {

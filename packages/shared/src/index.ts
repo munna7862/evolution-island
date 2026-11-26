@@ -108,3 +108,15 @@ export {
   type CreatureInspection,
   type InspectedValue,
 } from './inspect.js';
+export {
+  FEATURED_RUNS_FILE,
+  FEATURED_RUNS_FILE_VERSION,
+  FEATURED_RUNS_FORMAT,
+  FeaturedRunsError,
+  featuredRunsPlayable,
+  parseFeaturedRuns,
+  pickFeaturedGenerations,
+  serializeFeaturedRuns,
+  type FeaturedRun,
+  type FeaturedRunsManifest,
+} from './featured-runs.js';

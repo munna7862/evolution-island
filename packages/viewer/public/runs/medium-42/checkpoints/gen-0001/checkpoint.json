@@ -1,0 +1,63 @@
+{
+  "format": "evolution-island/checkpoint",
+  "fileVersion": 1,
+  "simVersion": 15,
+  "configHash": "72747152dad2bcd7",
+  "preset": "medium",
+  "seed": 42,
+  "generation": 1,
+  "tribes": [
+    {
+      "tribeId": 0,
+      "alive": true,
+      "size": 55,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 1,
+          "benchmarkScore": 541.9575014201046,
+          "file": "tribe-0-hof-1.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 1,
+      "alive": true,
+      "size": 41,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 1,
+          "benchmarkScore": 503.55927997060303,
+          "file": "tribe-1-hof-1.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 2,
+      "alive": true,
+      "size": 46,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 1,
+          "benchmarkScore": 1032.3127183228537,
+          "file": "tribe-2-hof-1.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 3,
+      "alive": true,
+      "size": 58,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 1,
+          "benchmarkScore": 623.94136,
+          "file": "tribe-3-hof-1.genome.json"
+        }
+      ]
+    }
+  ]
+}

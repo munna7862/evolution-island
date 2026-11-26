@@ -1,0 +1,159 @@
+{
+  "format": "evolution-island/checkpoint",
+  "fileVersion": 1,
+  "simVersion": 15,
+  "configHash": "72747152dad2bcd7",
+  "preset": "medium",
+  "seed": 42,
+  "generation": 150,
+  "tribes": [
+    {
+      "tribeId": 0,
+      "alive": true,
+      "size": 100,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 140,
+          "benchmarkScore": 3392.292441890284,
+          "file": "tribe-0-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 110,
+          "benchmarkScore": 2776.3202576269173,
+          "file": "tribe-0-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 130,
+          "benchmarkScore": 2668.9726936462557,
+          "file": "tribe-0-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 70,
+          "benchmarkScore": 2378.3056424463143,
+          "file": "tribe-0-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 150,
+          "benchmarkScore": 2353.9714450554907,
+          "file": "tribe-0-hof-5.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 1,
+      "alive": true,
+      "size": 25,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 130,
+          "benchmarkScore": 2180.9338038122823,
+          "file": "tribe-1-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 140,
+          "benchmarkScore": 2004.9255418220782,
+          "file": "tribe-1-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 150,
+          "benchmarkScore": 1922.3188190241701,
+          "file": "tribe-1-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 100,
+          "benchmarkScore": 1833.4500505192052,
+          "file": "tribe-1-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 90,
+          "benchmarkScore": 1736.9642581216985,
+          "file": "tribe-1-hof-5.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 2,
+      "alive": true,
+      "size": 50,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 150,
+          "benchmarkScore": 3004.0681730314827,
+          "file": "tribe-2-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 90,
+          "benchmarkScore": 2770.444088475784,
+          "file": "tribe-2-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 80,
+          "benchmarkScore": 2508.1985975125444,
+          "file": "tribe-2-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 70,
+          "benchmarkScore": 2452.8538198289384,
+          "file": "tribe-2-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 130,
+          "benchmarkScore": 2378.668621643813,
+          "file": "tribe-2-hof-5.genome.json"
+        }
+      ]
+    },
+    {
+      "tribeId": 3,
+      "alive": true,
+      "size": 25,
+      "hallOfFame": [
+        {
+          "rank": 1,
+          "generation": 130,
+          "benchmarkScore": 2034.119742797778,
+          "file": "tribe-3-hof-1.genome.json"
+        },
+        {
+          "rank": 2,
+          "generation": 150,
+          "benchmarkScore": 1727.0438403680857,
+          "file": "tribe-3-hof-2.genome.json"
+        },
+        {
+          "rank": 3,
+          "generation": 140,
+          "benchmarkScore": 1524.9643031107873,
+          "file": "tribe-3-hof-3.genome.json"
+        },
+        {
+          "rank": 4,
+          "generation": 120,
+          "benchmarkScore": 1422.2232024429468,
+          "file": "tribe-3-hof-4.genome.json"
+        },
+        {
+          "rank": 5,
+          "generation": 100,
+          "benchmarkScore": 968.4162812336418,
+          "file": "tribe-3-hof-5.genome.json"
+        }
+      ]
+    }
+  ]
+}

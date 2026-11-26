@@ -704,3 +704,7 @@ Most should be settled before/during Phase 1; later ones say when. Defaults are 
 **2026-11-26 — Sprint 8.1 (NEAT brains)** — Phase 8 done
 - NEAT brains behind `brain.kind` ("mlp" default, "neat"): brain format 2 in the same flat genome arrays; historical markings by split, rebuilt from living genomes (no run state); tribes are the species. `simVersion` 15 (config hash only; the MLP plays exactly as before).
 - 3-seed comparison (`docs/neat-vs-mlp.md`): no clear winner — NEAT learns sooner (ahead at generations 20–30), the MLP ends higher (late mean 1.21×, ahead on 2 of 3 seeds). The plan's "replace the MLP" is not taken: the MLP stays the default.
+
+**2026-11-26 — Phase 10 (publish)** — Phase 9 (LLM chiefs) skipped for now at the user's request
+- The viewer is a static site (relative URLs), deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`. Featured runs (Medium and Small, seed 42) are published next to it with `pnpm featured`; a test fails when they go stale.
+- Share links: the address bar always holds `preset`, `seed` and `v` (+ `run` for a featured run); **Copy link**; links from another simVersion open with a note. A seed link's map hash in the browser equals Node's (e2e).

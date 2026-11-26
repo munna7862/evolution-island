@@ -13,6 +13,8 @@ test-results/
 
 # Trainer output (large; publish selected runs separately)
 runs/
+# ...except the featured runs published with the viewer (`pnpm featured`, Phase 10)
+!packages/viewer/public/runs/
 
 # Logs and local env
 *.log

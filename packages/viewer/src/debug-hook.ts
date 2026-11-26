@@ -66,6 +66,9 @@ export interface EvolutionIslandDebugState {
   /** Climate now and the world event waiting for a map click (Sprint 7.2). */
   readonly climate: ClimateStatus | null;
   readonly armedEvent: string | null;
+  /** Featured runs the site lists, and the one playing (Phase 10). */
+  readonly featuredRuns: readonly string[];
+  readonly featuredRun: string | null;
   /** Events feed, newest first, and the family tree's levels (Sprint 6.3). */
   readonly feed: readonly FeedEvent[];
   readonly familyTree:
